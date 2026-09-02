@@ -1,0 +1,19 @@
+# MkDocs 建置輸出
+site/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 編輯器與作業系統
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# 環境與密鑰
+.env
+*.env
