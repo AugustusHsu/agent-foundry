@@ -17,7 +17,7 @@
 - **形式**：互動卡（ask_user_questions，human_only）單選＋自由輸入。選項含使用者自帶題目（最優先）與 CEO 三提案：A. 看板日報小工具、B. foundry-lint 文件檢查器、C. Foundry 文件站。
 - **為何需要使用者**：試跑產出應是使用者真的想要的東西；MYL-6 明文禁止 agent 自行挑題開跑。
 - **證據**：MYL-6 互動卡 `ask:MYL-6:pilot-topic:v1`（2026-09-02 由 CEO 發出）。
-- **結果**：（待使用者回覆）
+- **結果**：使用者於 2026-09-02 選定 **CEO 提案 B：foundry-lint 文件檢查器**——一個檢查 BRD／PRD／HLD 等文件是否符合 foundry-protocol 模板必備章節的小 CLI。互動卡 `ask:MYL-6:pilot-topic:v1` 已 answered。
 
 ---
 
