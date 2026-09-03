@@ -1,6 +1,6 @@
 ---
 name: foundry-init
-description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6.1）。凡是要在一個尚未導入 Foundry 的專案（無 `.foundry/config.yml`）建立整套骨架——選定平台、產生設定檔、複製 protocol／templates、建平台側結構（labels／milestones／project views）、設定關卡——照本文五步執行。已在開發中、要漸進導入的既有專案不走本文，走 foundry-adopt（S5）。
+description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6.1）。凡是要在一個尚未導入 Foundry 的專案（無 `.foundry/config.yml`）建立整套骨架——選定平台、產生設定檔、複製 protocol／templates、建平台側結構（labels／milestones／project views）、設定關卡——照本文五步執行。已在開發中、要漸進導入的既有專案不走本文，走 foundry-adopt。
 ---
 
 # foundry-init：新專案初始化導入
