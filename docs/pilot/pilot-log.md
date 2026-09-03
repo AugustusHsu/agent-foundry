@@ -59,7 +59,15 @@
 - **證據**：MYL-19 確認卡 `confirmation:MYL-19:delivery:1451c4f`（2026-09-03T01:30 核可）。
 - **結果**：核可。Developer 據此把 `feat/MYL-19-foundry-lint` 合入本地 main 並刪除分支——此舉發生在 MYL-20 正式審查之前，觸發卡點 #3（見下）。其後的審查（MYL-20）與測試（MYL-21）均為 agent 對 agent 交接，無新增使用者決策點。
 
-> 實作→審查→測試段（MYL-19～21）共新增 1 個使用者決策點。整段 Pilot 的使用者決策點合計 6 個：選題 1、需求 3（含四項取捨合併為一卡）、設計 1、實作 1。
+### 決策點 #7：規範修正後的 skill 重新匯入（使用者專屬動作）
+
+- **時機**：結案收尾階段（MYL-6），規範修正回寫 repo 之後。
+- **形式**：確認卡（request_confirmation），由 Scrum Master 發出。
+- **為何需要使用者**：Paperclip 平台不變式禁止 agent 寫入公司層 skill（見卡點 #5），`foundry-protocol` 的重新匯入只有使用者能執行。
+- **證據**：MYL-6 確認卡 `confirmation:MYL-6:skill-reimport:<commit>`（發卡當下記錄，結果待回覆）。
+- **結果**：待回覆。使用者執行匯入並核可後，MYL-6 依五項驗收標準結案。
+
+> 實作→審查→測試段（MYL-19～21）共新增 1 個使用者決策點，結案收尾段新增 1 個。整段 Pilot 的使用者決策／動作點合計 7 個：選題 1、需求 3（含四項取捨合併為一卡）、設計 1、實作 1、收尾 1。
 
 ---
 
@@ -93,3 +101,11 @@
 - **為什麼卡**：protocol 要求寫明「解除者」，但 Paperclip 平台限制 `unblockDescriptor.owner` 只能是 agent 自己；規範沒有提示這條平台限制與正確做法，直覺填法必踩。
 - **規範怎麼改（提案，尚未執行）**：第 2 節 `blocked` 補平台限制註記——指望其他 agent 解鎖時，把對方的工單掛進 `blockedByIssueIds` 作一級 blocker，owner 欄位一律填自己，收尾動作寫在 `action`；「解除者是誰」寫在留言即可。
 - **狀態**：✅ 已修正——對應條款已回寫 `skills/foundry-protocol/SKILL.md`（本批次 commit），重新匯入 Paperclip 的證據見 MYL-6 結案留言。
+
+### 卡點 #5：agent 無權把修正後的 skill 重新匯入 Paperclip（`skill_actor_restricted`）
+
+- **卡在哪**：MYL-6 驗收標準 4 要求「規範修正已回寫 repo **並重新匯入 Paperclip**」。回寫 repo 完成後，Scrum Master 嘗試以 API 更新公司 skill（`PATCH …/skills/{id}/files` 與 `POST …/skills/import` 各試一次），皆回 403 `skill_actor_restricted`（`reason: platform_invariant`）。
+- **為什麼卡**：Paperclip 平台不變式規定公司層 skill 的寫入只有使用者主體能做，agent 一律不行；但工單 AC 把「重新匯入」寫成 agent 的交付項，寫 AC 時沒人知道這條平台邊界。
+- **當下處置**：停止重試，發確認卡（`confirmation:MYL-6:skill-reimport:<commit>`）請使用者在 Paperclip 介面對 `foundry-protocol` skill 執行重新匯入，MYL-6 轉 `in_review` 等卡。
+- **規範怎麼改**：第 4 節 HITL 閘門新增第 6 條「平台權限之外的動作」——只有使用者能執行的操作（skill 匯入／更新、公司設定變更）一律發卡請使用者執行，不空轉重試；開 AC 時不得把此類動作寫成 agent 交付項。
+- **狀態**：✅ 規範已修正（本 commit）；匯入動作本身待使用者執行，見 MYL-6 確認卡。
