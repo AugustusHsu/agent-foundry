@@ -119,6 +119,7 @@ nav:
   - 4. 我要在哪幾個點做決定？: 04-decision-points.md
   - 5. 故障排除: 05-troubleshooting.md
   - 6. 團隊是怎麼編制的？: 06-org-structure.md
+  - 7. 團隊有哪些固定 workflow？: 07-workflows.md
 
 plugins:
   - search:
