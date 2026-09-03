@@ -12,7 +12,7 @@ description: Foundry 第 2 層角色 skill：Scrum Master。凡是要把設計�
 從設計文件（HLD／LLD）拆出工單時，每張單都要通過：
 
 1. **單一交付物**：一張單的 Outputs 指向一組可以一次驗收的東西。「做登入＋做註冊＋順便改樣式」是三張單。
-2. **可獨立驗收**：這張單的 AC 不需要等別張單做完才能驗——需要等的部分，就是依賴，拆出去掛 `blockedByIssueIds`。
+2. **可獨立驗收**：這張單的 AC 不需要等別張單做完才能驗——需要等的部分，就是依賴，拆出去掛 `blocked_by` 關聯。
 3. **Developer 不需再做設計決策**：工單引用的 LLD 已寫到可動工程度。拆單時發現設計不夠細，退回 Tech Lead 補寫，不要自己在工單裡補設計。
 4. **附設計文件路徑**：工單 Inputs 含對應 HLD／LLD 的 repo 路徑，逐項確認打得開。
 
@@ -20,7 +20,7 @@ description: Foundry 第 2 層角色 skill：Scrum Master。凡是要把設計�
 
 ## 依賴管理
 
-- 硬依賴一律用 `blockedByIssueIds` 表達；工單內文的「等 MYL-x 做完」文字描述不算數。
+- 硬依賴一律用 `foundry-platform` 的 `link_issues`／`blocked_by` 關聯表達（平台欄位見對應 adapter）；工單內文的「等 MYL-x 做完」文字描述不算數。
 - 每次開完一批單，畫出依賴鏈檢查：沒有環、沒有「Developer 要自己猜的隱藏前置」、可平行的單沒有被串成假直鏈。
 - 模組前綴與命名慣例由你登記維護，開單時套用，避免同模組出現兩套叫法。
 

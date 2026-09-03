@@ -1,6 +1,6 @@
 # `.foundry/config.yml` schema
 
-依 MYL-9 HLD §2.3 定案。本檔是專案層 Foundry 設定的唯一 schema 權威；範例見 `config.example.yml`。檔案位置固定：專案根目錄 `.foundry/config.yml`，進版控。
+依 MYL-9 HLD §2.3 定案（repo 歸檔本：`docs/features/cross-platform/HLD.md`，下文所有「HLD §x」均指該檔）。本檔是專案層 Foundry 設定的唯一 schema 權威；範例見 `config.example.yml`。檔案位置固定：專案根目錄 `.foundry/config.yml`，進版控。
 
 寫入者：`foundry-init`（S4）首次產生；`foundry-gates`（S3）經使用者確認後改 `gates` 段。**agent 不得未經對應 workflow 或使用者指示直接改本檔**——gates 與 push 的值都是使用者裁定的授權邊界。
 
@@ -9,7 +9,7 @@
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
 | `foundry` | 整數 | ✅ | schema 版本，目前固定 `1`。讀取者遇到不認得的版本應停下報錯，不得猜著解析。 |
-| `platform` | 枚舉 | ✅ | `github`｜`local-md`。決定載入哪份 adapter 對照文檔（`adapters/<值>.md`）。未來新增平台（如 `gitlab`）時在此補枚舉值。 |
+| `platform` | 枚舉 | ✅ | `github`｜`local-md`｜`paperclip`。決定載入哪份 adapter 對照文檔（`adapters/<值>.md`）。未來新增平台（如 `gitlab`）時在此補枚舉值。 |
 | `platform_options` | 物件 | ─ | adapter 專屬選項，鍵為平台名。省略時各 adapter 用下述預設值。 |
 | `gates` | 物件 | ✅ | 三個抽象關卡的核可設定（HLD §4）。 |
 | `push` | 物件 | ✅ | push 權限設定（HLD §5）。 |
@@ -23,6 +23,8 @@
 | `platform_options.github.project_title` | 字串 | `Foundry` | GitHub ProjectV2 的標題，adapter 據此查 project 編號。 |
 | `platform_options.github.project_owner` | 字串 | `@me` | project 擁有者（org 專案填 org 名）。 |
 | `platform_options.local-md.id_prefix` | 字串 | `FND` | 工單編號前綴（`<前綴>-<序號>`）。設定後不得變更——已發出的 issue_ref 會失效。 |
+| `platform_options.paperclip.company_id` | 字串 | `${PAPERCLIP_COMPANY_ID}` | 公司 UUID。省略時取執行環境的同名環境變數；label 是公司層資源，adapter 據此查建。 |
+| `platform_options.paperclip.project_id` | 字串 | ─ | 專案 UUID。省略時 `create_issue` 需由呼叫端指定，`list_issues` 不做專案過濾。 |
 
 ## `gates`
 

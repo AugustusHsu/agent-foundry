@@ -5,12 +5,12 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 
 # foundry-platform：平台 adapter 介面
 
-依 MYL-9 HLD §2 制定。執行層（工單／進度／里程碑／看板）的所有操作收斂成 **8 個抽象動詞**；每個支援的平台有一份對照文檔（`adapters/<name>.md`）把動詞翻成具體指令。流程規範（foundry-protocol）只引用抽象動詞，不綁定平台——新增平台時只需新增一份對照文檔，介面與流程都不動。
+依 MYL-9 HLD §2 制定（repo 歸檔本：`docs/features/cross-platform/HLD.md`，下同）。執行層（工單／進度／里程碑／看板）的所有操作收斂成 **8 個抽象動詞**；每個支援的平台有一份對照文檔（`adapters/<name>.md`）把動詞翻成具體指令。流程規範（foundry-protocol）只引用抽象動詞，不綁定平台——新增平台時只需新增一份對照文檔，介面與流程都不動。
 
 ## 1. 使用方式
 
 1. 讀專案根目錄的 `.foundry/config.yml`（schema 見 `config-schema.md`），取得 `platform` 欄位。
-2. 依值載入對照文檔：`github` → `adapters/github.md`；`local-md` → `adapters/local-md.md`。
+2. 依值載入對照文檔：`github` → `adapters/github.md`；`local-md` → `adapters/local-md.md`；`paperclip` → `adapters/paperclip.md`。
 3. 要做的操作對應到下方哪個動詞，就照對照文檔中該動詞的指令執行。
 4. 對照文檔沒有涵蓋的平台寫入操作，一律不做——需要新操作時先開單擴充介面，不得私下直呼平台指令繞過。
 5. 找不到 `.foundry/config.yml` 時視為專案尚未導入 Foundry：停下，走 `foundry-init`（新專案）或 `foundry-adopt`（既有開發中專案），不得自行猜測平台。
@@ -19,8 +19,9 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 
 所有動詞共用下列定義；兩份 adapter 都必須遵守，不得各自另創。
 
-- **issue_ref**：平台無關的工單參照。github＝issue 編號（`#12`）；local-md＝檔名主幹（`FND-12`）。
-- **status**：六態，與 foundry-protocol 第 2 節一一對應：`todo`｜`in_progress`｜`in_review`｜`blocked`｜`done`｜`cancelled`。
+- **issue_ref**：平台無關的工單參照。github＝issue 編號（`#12`）；local-md＝檔名主幹（`FND-12`）；paperclip＝`identifier`（`MYL-12`，API 參數另需 UUID，對照見該 adapter 附錄 A）。
+- **status**：六態，與 foundry-protocol 第 2 節一一對應：`todo`｜`in_progress`｜`in_review`｜`blocked`｜`done`｜`cancelled`。平台自身的狀態集比六態多時（如 paperclip 多一個 `backlog`），由 adapter 明定映射規則，**六態之外的值不得由 Foundry 流程寫入**。
+- **依賴**：工單間的硬依賴一律用 `link_issues` 的 `blocked_by` 關聯表達，不用工單內文的文字描述代替（foundry-protocol 第 2 節）。各平台的承載欄位由 adapter 定義（github＝`Blocked-by:` 留言慣例＋`blocked` label；local-md＝frontmatter `blocked_by`；paperclip＝`blockedByIssueIds`）。
 - **標準 label 集**（`init_structure` 建立，命名空間固定）：
   - `type:brd`、`type:prd`、`type:hld`、`type:lld`、`type:impl`、`type:review`、`type:test`、`type:docs`
   - `role:product-analyst`、`role:scrum-master`、`role:tech-lead`、`role:developer`、`role:code-reviewer`、`role:qa`
@@ -93,6 +94,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 - 本文與兩份對照文檔皆為純 markdown＋YAML frontmatter，任何 agent runtime（Claude Code、Codex 等）或人類皆可直接閱讀照做，不依賴特定 runtime 專屬功能。
 - 對照文檔中的指令一律是可直接在 shell 執行的完整範例（含佔位符說明），不是偽代碼。
 - 新增平台（如 GitLab）：新增 `adapters/gitlab.md` 覆蓋全部 8 個動詞＋在 `config-schema.md` 的 `platform` 枚舉補值，介面本文不改。做不到全覆蓋的平台不得上線——寧缺勿殘。
+- **平台專屬限制寫在 adapter，不上升為流程規則**（MYL-35）：某平台的欄位語意、權限例外、API 怪癖（如 paperclip 的 `labelIds` 全量替換、`skill_actor_restricted` 403）一律收在該 adapter 的「平台限制」一節；foundry-protocol 與角色 skill 只引用抽象動詞與六態，換平台時**只換 adapter、不改規範**。判準：一句規則若在其他平台字面上不成立，它就屬於 adapter。
 
 ## 6. 檔案地圖
 
@@ -101,5 +103,6 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 | `SKILL.md`（本文） | 介面定義：8 動詞、共通詞彙、錯誤規則 |
 | `adapters/github.md` | 動詞 → gh CLI 指令對照 |
 | `adapters/local-md.md` | 動詞 → `.foundry/board/` 檔案操作對照 |
+| `adapters/paperclip.md` | 動詞 → Paperclip REST API 對照（含平台限制表） |
 | `config-schema.md` | `.foundry/config.yml` 欄位說明 |
 | `config.example.yml` | 設定檔範例（含註解），`foundry-init` 據此產生實際檔案 |

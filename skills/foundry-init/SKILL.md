@@ -5,7 +5,7 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
 
 # foundry-init：新專案初始化導入
 
-依已核可的 MYL-9 HLD §6.1 制定。本文是跨平台純 .md workflow：任何 agent runtime（Claude Code、Codex 等）或人類照本文逐步執行即可，不依賴特定 runtime 功能。Claude Code 可把本檔安裝為 slash command（`/foundry-init`）作為可選增強；缺了照樣能照文檔人工跑。
+依已核可的 MYL-9 HLD §6.1 制定（repo 歸檔本：`docs/features/cross-platform/HLD.md`）。本文是跨平台純 .md workflow：任何 agent runtime（Claude Code、Codex 等）或人類照本文逐步執行即可，不依賴特定 runtime 功能。Claude Code 可把本檔安裝為 slash command（`/foundry-init`）作為可選增強；缺了照樣能照文檔人工跑。
 
 ## 0. 邊界與詞彙
 
@@ -20,12 +20,13 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
 ## 1. 步驟 1：詢問平台＋前置檢查
 
 1. **發卡問使用者**，一張卡問齊三件事（減少往返；依 protocol 第 4 節，後兩件屬使用者裁定的授權邊界，不得由 agent 預設代選）：
-   - **平台**：`github` 或 `local-md`。不得自行猜測（foundry-platform §1 第 5 點）。
+   - **平台**：`github`｜`local-md`｜`paperclip`。不得自行猜測（foundry-platform §1 第 5 點）。
    - **branch push 權限**（`push.branch_push`）：`user`（每次 push 都問）或 `tech-lead`（分支 push＋開 PR 自動）。這是常設授權的給予，屬關卡 C，只能使用者拍板；卡上未選視同 `user`。
    - **平台側資源建立同意**（僅 github 模式需要）：卡上明列步驟 3 將建立的資源——標準 label 集、milestone 容器、名為「Foundry」（或使用者指定標題）的 ProjectV2＋三個 view。此欄的同意即 protocol 決策點 7（平台動作）的授權證據；未同意前不得執行步驟 3。
 2. **前置檢查**（依選定平台，任一項不過就停下回報，不得帶病續跑）：
    - **github**：`gh` 已安裝且 `gh auth status` 通過，token scopes 含 `repo` 與 `project`（缺 `project` 時請使用者跑 `gh auth refresh -s project`——互動式授權，agent 不能代跑）；`jq` 可用；`<TARGET>` 是 git repo 且 `gh repo view` 解析得到目標 repo。
    - **local-md**：`<TARGET>` 目錄可寫；尚非 git repo 時 `git init`。無其他外部依賴。
+   - **paperclip**：`curl`／`jq` 可用；`PAPERCLIP_API_URL`／`PAPERCLIP_API_KEY`／`PAPERCLIP_COMPANY_ID` 已注入且 `GET /api/agents/me` 通過；目標專案（`platform_options.paperclip.project_id`）已在平台上存在——**專案本身的建立屬平台側動作，不由本 workflow 代做**。
 
 ## 2. 步驟 2：產生 `.foundry/config.yml`＋複製 protocol／templates
 

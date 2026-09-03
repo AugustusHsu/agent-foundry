@@ -5,7 +5,7 @@ description: 關卡粒度調整 workflow（MYL-9 HLD §4.2）。凡是要盤點�
 
 # foundry-gates：關卡粒度調整 workflow
 
-依已核可的 MYL-9 HLD §4.2 制定。三個抽象關卡（A 規格核可、B 方案核可、C 對外／不可逆核可）的定義與執行語意見 `skills/foundry-protocol/SKILL.md` 第 4 節；`gates` 欄位的唯一 schema 權威是 `skills/foundry-platform/config-schema.md`。本文是跨平台純 .md workflow：不依賴特定 runtime，任何 agent（或人）照本文逐步執行即可。
+依已核可的 MYL-9 HLD §4.2 制定（repo 歸檔本：`docs/features/cross-platform/HLD.md`）。三個抽象關卡（A 規格核可、B 方案核可、C 對外／不可逆核可）的定義與執行語意見 `skills/foundry-protocol/SKILL.md` 第 4 節；`gates` 欄位的唯一 schema 權威是 `skills/foundry-platform/config-schema.md`。本文是跨平台純 .md workflow：不依賴特定 runtime，任何 agent（或人）照本文逐步執行即可。
 
 ## 0. 邊界與進入模式
 

@@ -7,9 +7,21 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 本文的每一條都是「可以判定過或不過」的規則，不是原則宣言。與第 2 層角色 skill 衝突時，以本文為準；與使用者的即時指示衝突時，停下來問（見第 4、6 節）。
 
+### 平台中立原則（MYL-35）
+
+本文是**平台無關**的流程規範：所有對執行層（工單／狀態／留言／label／里程碑／關聯）的操作，一律以 `skills/foundry-platform/SKILL.md` 的 8 個抽象動詞與六態表述，不寫任何單一平台的欄位名或指令。三類內容各有固定歸屬，**不得互相夾帶**：
+
+| 內容 | 歸屬 | 判準 |
+| --- | --- | --- |
+| 全平台通用的流程規則 | 本文（規則層 SSOT） | 換平台後字面仍成立 |
+| 平台專屬的欄位、限制、API 怪癖 | `skills/foundry-platform/adapters/<平台>.md` 的「平台限制」 | 換平台後字面不成立 |
+| 專案專屬的授權邊界（關卡、push） | 該專案 `.foundry/config.yml` | 換專案後值會不同 |
+
+本 repo（agent-foundry）自身的執行層平台是 **Paperclip**（`adapters/paperclip.md`），設定檔為 `.foundry/config.yml`——本 repo 與導入 Foundry 的其他專案跑的是**同一套流程**，差異只落在 adapter 與設定檔。
+
 ## 1. 工單骨架
 
-每張 Paperclip issue 的 description 一律用以下四段，順序固定、標題固定，缺任何一段就是不合格工單，接單者有權退回：
+每張工單的**描述欄**（issue description；各平台的實際載體見對應 adapter）一律用以下四段，順序固定、標題固定，缺任何一段就是不合格工單，接單者有權退回：
 
 ```
 **Inputs**
@@ -53,13 +65,13 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 ## 2. 狀態機
 
-直接使用 Paperclip 的六個狀態。硬依賴一律用 `blockedByIssueIds` 欄位表達，不用文字描述代替；前置單全部 `done` 之前，本單不得離開 `blocked`。
+使用 `foundry-platform` §2 的六態，狀態變更一律走 `update_status` 動詞。硬依賴一律用 `link_issues` 的 `blocked_by` 關聯表達（各平台承載欄位見對應 adapter），**不用工單內文的文字描述代替**；前置單全部 `done` 之前，本單不得離開 `blocked`。
 
 ### `blocked`
 
-- **進入**：有未完成的 `blockedByIssueIds`；或 Inputs 有項目不可存取；或觸發第 4 節 HITL 閘門正在等使用者回覆。
+- **進入**：有未完成的 `blocked_by` 前置單；或 Inputs 有項目不可存取；或觸發第 4 節 HITL 閘門正在等使用者回覆。
 - 進入時必須在留言註明：阻塞原因、解除者是誰、對方做什麼就能解。沒寫解除路徑的 `blocked` 視為不合格。
-- 平台限制：Paperclip 的 `unblockDescriptor.owner` 只能填 agent 自己（填別人整筆 PATCH 都不生效）。指望其他 agent 解鎖時，把對方的工單掛進 `blockedByIssueIds` 作一級 blocker，owner 欄位仍填自己、收尾動作寫在 `action`；「解除者是誰」寫在留言即可。（Pilot 卡點 #4）
+- 指望**其他執行者**解鎖時，一律把對方的工單掛成一級 blocker（`link_issues` 的 `blocked_by`），「解除者是誰」寫在留言。平台若對「阻塞負責人」欄位另有限制（如 Paperclip 只能填自己），依該 adapter 的「平台限制」一節處理，不在本文複述。（Pilot 卡點 #4）
 - **離開**：所有前置單 `done`、Inputs 全數可存取、待答問題已獲回覆 → 轉 `todo`。
 
 ### `todo`
@@ -75,6 +87,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 ### `in_review`
 
 - **進入**：Outputs 已產出、交接包（見第 3 節）已附在工單上、有明確的審查者或待核准的互動卡。**沒有真實審查路徑不得掛 `in_review`**——「等有人有空看」不是審查路徑。
+- 與 `blocked` 的分界（判準：**有沒有東西要人驗收**）：等待第 4 節**三個抽象關卡**的核可卡回覆 → `in_review`（卡本身就是審查路徑，foundry-gates §3、foundry-adopt §2 同此）；等待**觸發式 HITL 閘門**的回覆 → `blocked`（執行被打斷，沒有待驗收的交付物）。
 - **離開**：審查通過 → 轉 `done`；退回 → 轉 `in_progress`，並附具體缺陷清單（不是「再改改」）。
 
 ### `done`
@@ -104,7 +117,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 ### Scrum Master → Developer
 
 - 合格工單（通過第 1 節全部判準）。
-- `blockedByIssueIds` 已設定完成，依賴鏈上沒有 Developer 需要自己去猜的前置。
+- `blocked_by` 關聯已設定完成，依賴鏈上沒有 Developer 需要自己去猜的前置。
 - 工單內附對應設計文件的 repo 路徑。
 
 ### Developer → Code Reviewer
@@ -168,7 +181,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 3. **要花錢**：任何會產生費用的動作——開付費服務、升級方案、呼叫計費 API、購買資源。金額多小都要問，沒有「反正很便宜」的豁免。
 4. **要對外發佈**：任何會離開私有環境的動作——開 public repo、發佈網站、對外送出訊息、公開發佈套件。
 5. **破壞性操作**：刪除資料、覆寫既有成果、改動 git 歷史、動生產環境。
-6. **平台權限之外的動作**：只有使用者能執行的操作——公司層 skill 的匯入／更新（agent 呼叫會被 `skill_actor_restricted` 平台不變式擋下）、公司設定變更等。發卡請使用者執行，不要空轉重試。（Pilot 卡點 #5）
+6. **平台權限之外的動作**：只有使用者能執行的操作——skill／規範的匯入更新、組織與公司層設定變更等。各平台的實際限制清單見對應 adapter 的「平台限制」一節（Paperclip 例：skill 匯入被 `skill_actor_restricted` 擋下、agent terminate／pause 為 board-only）。發卡請使用者執行，不要空轉重試。（Pilot 卡點 #5）
 
 ### 鐵律：絕不自作主張採用建議值
 
@@ -194,7 +207,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 | 成因工單的 AC 正確，但實作沒達成 | **退回原單** | 原單轉回 `in_progress`（已結案的單由 Scrum Master 重開），缺陷描述寫進原單留言。不開新單。 |
 | 成因工單的 AC 本身寫錯或漏寫 | **改 AC 後退回原單** | 由 Scrum Master 修正 AC 後，原單退回重做。 |
 | 行為符合原 AC，但需求後來變了或想加新東西 | **開新單** | 新單走完整四段骨架，Inputs 引用原單編號。不得以「順手」為由夾進舊單。 |
-| 缺陷橫跨多張單、找不到單一成因 | **開新單收容** | 新單描述症狀與已排除的成因，`blockedByIssueIds` 掛上相關單（若有）。 |
+| 缺陷橫跨多張單、找不到單一成因 | **開新單收容** | 新單描述症狀與已排除的成因，`blocked_by` 掛上相關單（若有）。 |
 
 ### AC 寫錯由誰改
 
@@ -327,8 +340,8 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 ### 權威來源與同步
 
-- **本節是分層規則的權威來源。** Paperclip 各 agent 設定（`adapterConfig` 的 `model`／`effort`）是本節的映射；兩者不一致時，以本節為準並發起同步，而不是改本節遷就現況。
-- 變更 Paperclip agent 的模型設定屬公司層設定變更，依第 4 節 HITL 閘門第 6 條處理：發卡列出「角色 → 目標 model／effort」對照表，經使用者核可（或由使用者執行）後生效，並在對應工單留言留下同步證據。
+- **本節是分層規則的權威來源。** 執行平台上各 agent 的模型設定（Paperclip＝`adapterConfig` 的 `model`／`effort`）是本節的映射；兩者不一致時，以本節為準並發起同步，而不是改本節遷就現況。
+- 變更平台上 agent 的模型設定屬公司層設定變更，依第 4 節 HITL 閘門第 6 條處理：發卡列出「角色 → 目標 model／effort」對照表，經使用者核可（或由使用者執行）後生效，並在對應工單留言留下同步證據。
 - 模型代號會隨版本演進（實際環境可能提供高於 Opus 級的模型）。本節固定的是「三層相對關係與角色歸屬」；各層對應的具體模型代號以同步卡裁定為準，裁定後回寫到上方表格附註，後續模型換代時開單重新裁定並更新附註。
 
 ## 9. 組織結構與匯報線
@@ -411,8 +424,8 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 ### 權威來源與同步
 
-- **本節是組織結構的權威來源。** Paperclip 各 agent 的 `reportsTo` 欄位是本節的映射；兩者不一致時，以本節為準並發起同步（同第 8 節模式），而不是改本節遷就現況。
-- 變更組織結構（含 `reportsTo`）屬公司層設定變更，依第 4 節 HITL 閘門處理：未經使用者裁定的結構調整先發卡提案；已裁定的結構（如本節）由執行工單直接同步，並在工單留言留下同步證據。
+- **本節是組織結構的權威來源。** 執行平台上各 agent 的匯報欄位（Paperclip＝`reportsTo`）是本節的映射；兩者不一致時，以本節為準並發起同步（同第 8 節模式），而不是改本節遷就現況。
+- 變更組織結構（含平台上的匯報欄位）屬公司層設定變更，依第 4 節 HITL 閘門處理：未經使用者裁定的結構調整先發卡提案；已裁定的結構（如本節）由執行工單直接同步，並在工單留言留下同步證據。
 
 ## 附錄：開工前 30 秒自檢
 
@@ -421,7 +434,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 - [ ] 四段骨架齊全，AC 每條都知道怎麼驗？
 - [ ] Inputs 逐項打得開？
 - [ ] 未決事項是「無」，或全數已解？
-- [ ] `blockedByIssueIds` 的前置單都 `done` 了？
+- [ ] `blocked_by` 的前置單都 `done` 了？
 - [ ] 這張單會碰到錢、對外、破壞性操作嗎？會就先發卡。
 - [ ] 這張單涉及跨模組介面或安全敏感範圍嗎？會就依第 8 節直接用高層級。
 - [ ] 要開分支了嗎？分支名帶工單編號了嗎？

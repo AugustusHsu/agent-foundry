@@ -3,7 +3,7 @@
 
 foundry: 1
 
-platform: github            # github | local-md
+platform: github            # github | local-md | paperclip
 
 platform_options:           # 選填；省略時用各 adapter 預設
   github:
@@ -11,6 +11,9 @@ platform_options:           # 選填；省略時用各 adapter 預設
     project_owner: "@me"    # 個人帳號用 @me，org 專案填 org 名
   # local-md:
   #   id_prefix: FND        # 工單編號前綴，設定後不得變更
+  # paperclip:
+  #   company_id: "${PAPERCLIP_COMPANY_ID}"   # 省略時取同名環境變數
+  #   project_id: "<專案 UUID>"
 
 gates:
   spec_approval: user       # 關卡 A（做什麼）：user | ceo | tech-lead
