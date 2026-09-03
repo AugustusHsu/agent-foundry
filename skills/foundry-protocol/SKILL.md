@@ -307,11 +307,13 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 | 層級 | 模型／思考程度 | 預設適用 |
 | --- | --- | --- |
-| 高 | 當下可用的最高層級（現為 Fable 級）／`high` | Tech Lead 的設計（HLD／LLD／ADR）、Code Reviewer 的審查、CEO 的裁決與規範修訂 |
+| 高 | 當下可用的最高層級／最高思考程度（現為 Opus 級／`max`） | Tech Lead 的設計（HLD／LLD／ADR）、Code Reviewer 的審查、CEO 的裁決與規範修訂 |
 | 中 | Opus 級／`high` | Developer 的實作、QA 的測試、Product Analyst 的需求 |
 | 低 | Sonnet 級／`medium` | Scrum Master 的機械性流轉：狀態機維護、依模板拆單、巡檢兜底 |
 
-> 各層具體對應（2026-09-03 經使用者於同步卡 `ask:MYL-13:model-tier-sync:v1` 裁定）：高＝`claude-fable-5`／`high`、中＝`claude-opus-5`／`high`、低＝`claude-sonnet-5`／`medium`。
+> 各層具體對應（2026-09-03 經使用者於裁定卡 `ask:MYL-33:model-tier-rejudge:v2` 重新裁定，取代同日同步卡 `ask:MYL-13:model-tier-sync:v1`）：高＝`claude-opus-5`／`max`、中＝`claude-opus-5`／`high`、低＝`claude-sonnet-5`／`medium`。
+>
+> 前次裁定的高層 `claude-fable-5` 因方案額度用盡退場（MYL-33）。此次起高層與中層**同模型、以思考程度區分**：`effort` 實際支援 `low｜medium｜high｜xhigh｜max`（adapter 內建說明字串只寫到 `high`，已過時；adapter 原樣傳給 CLI 不做驗證）。
 
 - 分層綁的是「角色做自己的本職工作」。角色偶爾做出層級外的工作（例：Scrum Master 要做缺陷收容判定這類需要推理的事），依下方升級規則調整，不必改預設。
 

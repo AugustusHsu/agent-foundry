@@ -48,7 +48,7 @@
 
 | 層級 | 模型／思考程度 | 預設適用 |
 | --- | --- | --- |
-| 高 | 當下可用的最高層級（現為 Fable 級）／`high` | Tech Lead 的設計（HLD／LLD／ADR）、Code Reviewer 的審查、CEO 的裁決與規範修訂 |
+| 高 | 當下可用的最高層級／最高思考程度（現為 Opus 級／`max`） | Tech Lead 的設計（HLD／LLD／ADR）、Code Reviewer 的審查、CEO 的裁決與規範修訂 |
 | 中 | Opus 級／`high` | Developer 的實作、QA 的測試、Product Analyst 的需求 |
 | 低 | Sonnet 級／`medium` | Scrum Master 的機械性流轉：狀態機維護、依模板拆單、巡檢兜底 |
 
