@@ -16,7 +16,8 @@
 
 | # | 動作 | 結果 | 正解 |
 | --- | --- | --- | --- |
-| L1 | agent 呼叫 `PATCH /api/companies/{cid}/skills/{id}/files`／`POST …/skills/import` | 403 `skill_actor_restricted` | 見 L2——多數情況根本不需要匯入 |
+| L1 | agent 呼叫 `PATCH /api/companies/{cid}/skills/{id}/files` | 403 `skill_actor_restricted` | 見 L2——多數情況根本不需要改檔，`local_path` 參照式 skill 改 repo 即生效。⚠️ **本條原本也涵蓋 `POST …/skills/import`，該半部已於 2026-09-03（MYL-37）證實失效**：以 `{"source": "<repo 內 skill 目錄絕對路徑>"}` 匯入 `role-frontend-verifier` **成功**（HTTP 200，得到 `local/ef57ddad3d/role-frontend-verifier`），持 `skills:create` grant 即可。條目依維護規則保留供追溯 |
+| L1b | 把 skill 掛到某個 agent | ✅ **可自助**（2026-09-03 MYL-37 實測） | `POST /api/agents/{id}/skills/sync`，body `{"mode":"add","desiredSkills":["<skill key>"]}`。key 從 `GET /api/companies/{cid}/skills` 取（形如 `local/<hash>/<slug>`）。**`GET /api/agents/{id}/skills` 的 `entries` 會列出全公司的 skill**，只有 `desired: true` 那幾筆才是真的掛上——別把 `entries` 長度當成掛載數 |
 | L2 | 「請使用者重新匯入 skill」 | **多半是誤診** | `sourceType: local_path` 的參照式 skill 每次喚醒直接 materialize repo 檔案，**repo 一 commit 就生效**。詳見 §3 反悔錄 R3 |
 | L3 | `POST /api/agents/{id}/terminate`／`DELETE /api/agents/{id}`／`POST /api/agents/{id}/pause` | 403 `Board access required` | 只有使用者能在 UI 執行。發 `resolverPolicy: human_only` 的確認卡（MYL-34 已跑通全程）。軟退役可用 `PATCH /api/agents/{id}` 改 `metadata`＋`runtimeConfig.heartbeat.enabled: false`＋budget 0 |
 | L4 | `PATCH /api/agents/{id}` body 帶任一 `instructions*` 欄位 | 403，**整包被拒** | 只送要改的欄位。該 endpoint 的 `adapterConfig` 是**合併語意**不是覆寫，只送 `model`／`effort` 不會清掉 `paperclipSkillSync` |
