@@ -41,7 +41,21 @@
    - `Board`：Layout 選 Board，Column by 選 Status。
    - `Table`：Layout 選 Table，顯示 Title／Status／Labels／Milestone／Assignees 欄。
    - `Roadmap`：Layout 選 Roadmap，Date/iteration 依 milestone due date。
-- **查證**：`gh label list | grep -c '^type:'` 得 8；三個 view 在網頁可開；重跑步驟 1–3 無報錯、無重複。
+6. 裝 CI 閘門（MYL-36 增訂）：把 `.github/workflows/foundry-lint.yml` 放進 `<TARGET>`（由 `foundry-init` 步驟 2.5 複製）。
+
+   ```sh
+   # 首次 push 後確認 workflow 有被 GitHub 認得
+   gh workflow list --all | grep foundry-lint
+   ```
+
+   **這是 github 模式相對其他平台的實質優勢**：Foundry 的關卡在多數平台上靠 agent 自覺遵守，
+   在 GitHub 上規範可以有**機械執行力**——PR 沒過就是沒過。跑的內容與本機 `make check` 相同，
+   所以 CI 紅燈一定能在本機重現。
+   要讓它真的擋得住合併，還需在網頁把 `foundry-lint / check` 設為 **required status check**
+   （Settings → Branches → branch protection rule）——這是**改動 repo 保護設定**，
+   屬使用者權限範圍，agent 不得代設；列入 init 報告待辦請使用者處理。
+- **查證**：`gh label list | grep -c '^type:'` 得 8；三個 view 在網頁可開；重跑步驟 1–3 無報錯、無重複；
+  `gh workflow list --all` 列得到 `foundry-lint`。
 
 ### create_issue
 

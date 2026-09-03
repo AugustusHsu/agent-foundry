@@ -1,0 +1,37 @@
+# Foundry 機械層閘門（MYL-36 P5）
+#
+# 目的：讓 foundry-lint 從「有人記得跑」變成「跑不過不給過」。
+# 安裝一次即可：make hooks（等同 pre-commit install）
+#
+# 這裡只放**可機械證明**的檢查（protocol 第 10 節「支架」的第 1、2 層）；
+# 需要上下文判斷的事情歸 Code Reviewer，不塞進 hook。
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=512]
+
+  - repo: local
+    hooks:
+      - id: foundry-selfcheck
+        name: foundry-lint --selfcheck（雙入口／手冊 nav／錨點／規則 ID）
+        entry: python3 tools/foundry-lint/foundry_lint.py --selfcheck
+        language: system
+        pass_filenames: false
+        # 這四項檢查的輸入散落在 repo 各處（入口檔、手冊、mkdocs.yml、
+        # 發佈腳本、protocol），任何一處變動都可能讓其中一項失效，故全域觸發。
+        always_run: true
+
+      - id: foundry-lint-tests
+        name: foundry-lint 單元測試
+        entry: python3 -m unittest discover tools/foundry-lint
+        language: system
+        pass_filenames: false
+        files: ^tools/foundry-lint/

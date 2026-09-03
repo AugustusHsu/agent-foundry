@@ -1,0 +1,41 @@
+# Foundry 機械層閘門（CI）— MYL-36 P8
+#
+# 為什麼有這條 workflow：Foundry 的「關卡」在多數平台上靠 agent 自覺遵守，
+# 但在 GitHub 上可以有**機械執行力**——PR 沒過就是沒過，不靠人記得。
+# 這正是把自然語言規範轉成可機械驗證形式的那一步。
+#
+# 跑的內容與本機 `make check`、pre-commit hook 完全相同，
+# 所以 CI 紅燈一定能在本機重現，不會出現「只有 CI 會壞」的情況。
+
+name: foundry-lint
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # nav-sync 與 rule-ids 要讀整個 repo 的檔案，不需要歷史；
+          # 預設的 fetch-depth: 1 就夠，抓全部歷史只是浪費時間。
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # foundry-lint 只用標準函式庫，沒有依賴要裝——這是刻意的設計，
+      # 讓閘門在任何環境都能跑起來，不會因為裝不了套件而被略過。
+      - name: 規範自檢（雙入口／手冊 nav／錨點／規則 ID）
+        run: python3 tools/foundry-lint/foundry_lint.py --selfcheck
+
+      - name: foundry-lint 單元測試
+        run: python3 -m unittest discover tools/foundry-lint
