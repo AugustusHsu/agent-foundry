@@ -40,7 +40,8 @@ agent-foundry/
 │  ├─ foundry-adopt/        # workflow：既有專案漸進導入
 │  ├─ foundry-gates/        # workflow：調整關卡粒度
 │  ├─ foundry-model-routing/ # workflow：模型供應商路由（哪個角色用哪一家）
-│  └─ roles/<角色>/         # 第 2 層：角色薄 skill（6 個角色）
+│  ├─ foundry-browser/      # workflow：瀏覽器與視覺能力（L0～L3 探測、補齊、降級）
+│  └─ roles/<角色>/         # 第 2 層：角色薄 skill（7 個角色）
 ├─ templates/               # BRD / PRD / HLD / LLD / test-plan /
 │                           #   review-report / publish-review
 ├─ docs/
@@ -50,6 +51,8 @@ agent-foundry/
 │  └─ publish-reviews/      # 手冊發佈審查記錄（閘門證據，綁 commit sha）
 ├─ tools/foundry-lint/      # 文件檢查器＋自檢
 ├─ tools/model-routing/     # 供應商盤點腳本（哪幾家 CLI 真的可用）
+├─ tools/browser-probe/     # 瀏覽器能力盤點腳本（L0～L3 判級）
+├─ .mcp.json ＋ .claude/settings.json  # 瀏覽器 MCP 的宣告與放行（見下方 §5 第三把鑰匙）
 └─ scripts/publish-handbook.sh  # 手冊 → 公開鏡像（P2 常設授權）
 ```
 
@@ -79,6 +82,9 @@ agent-foundry/
 - **一單一分支**，分支名帶工單編號；commit 用 gitmoji ＋繁體中文標題。
 - **commit 前先驗 `git symbolic-ref --short HEAD`**——本 repo 的 workspace 是共用的，
   併行的 heartbeat run 會互相干擾 checkout（known-drift `X1`，真的發生過）。
+- **瀏覽器 MCP 要能用得湊齊三把鑰匙**：`.mcp.json` 宣告、settings `permissions.allow` 放行、
+  以及**工作區信任**。少了第三把時 `.claude/settings.json` 的放行規則**整份被忽略**，
+  設定檔看起來完全正確卻不生效（known-drift `L8`）。用 `make browser` 判定，不要憑設定檔外觀判斷。
 
 ## 6. 指令速查
 
@@ -97,6 +103,9 @@ make check
 
 # 盤點本機可用的模型供應商（foundry-model-routing 步驟 1；別憑印象回答這題）
 make providers
+
+# 盤點本機瀏覽器能力 L0～L3（foundry-browser 步驟 1；同樣別憑印象回答）
+make browser
 
 # 手冊網站本機預覽
 mkdocs serve

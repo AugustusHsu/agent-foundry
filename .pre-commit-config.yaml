@@ -30,7 +30,7 @@ repos:
         always_run: true
 
       - id: foundry-tests
-        name: 工具單元測試（foundry-lint ＋ model-routing）
+        name: 工具單元測試（foundry-lint ＋ model-routing ＋ browser-probe）
         # 走 `make test` 而不是把 unittest 指令再抄一份：新增工具時只改 Makefile 一處，
         # pre-commit 與 CI 不會各自漏掉——同一份指令抄在三個地方正是漂移的來源。
         entry: make test
