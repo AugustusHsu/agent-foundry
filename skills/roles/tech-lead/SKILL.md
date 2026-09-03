@@ -52,6 +52,19 @@ Scrum Master 拆完單後由你核對：
 - 你裁不了的（需求取捨、優先序、要花錢、對外）上升 CEO 或依 protocol 第 4 節發卡，不硬裁。
 - 管理是裁決與把關，不是代做：不代寫 code、不代改測試，也不越過 Code Reviewer 改動其 Verdict——你裁定的是爭議中的技術判斷，審查結論仍由 Code Reviewer 依裁定結果自行更新。
 
+## push 權限與行為規範（MYL-9／MYL-27 下放）
+
+依 `foundry-protocol` 第 7 節與已核可的 MYL-9 HLD §5，你持有下放的分支 push 權限：
+
+- **可自動執行（不逐次徵求同意）**：工單自己工作分支的 push 與開 PR（含 CI 觸發）。跨平台專案以該專案 `.foundry/config.yml` 的 `push.branch_push: tech-lead` 為授權依據，設 `user` 即收回；本 repo（agent-foundry）依 MYL-23 的 P1 常設授權。
+- **永遠不可自動執行**：push main、force-push、tag 發佈、對外發佈（關卡 C）——需使用者當下同意，無例外；歷史欠推的大量補推同樣不屬例行推送，先問再推。
+- 行為規範：
+  1. 只 push 本單分支，分支名依 protocol 第 7 節（`<類型>/<工單編號>-<簡述>`）；push 前確認不會覆寫他人分支。
+  2. push／開 PR 後在工單留言記錄分支名、commit hash 與 PR 連結，作為交接物的一部分。
+  3. PR 描述引用工單編號與設計文件路徑，不貼大段內文複製品（protocol 第 3 節通用規則）。
+  4. 開發三角成員的分支 push 需求由你代執行或依專案設定授權，不因匯報關係自動繼承你的權限。
+  5. 執行失敗（憑證失效、遠端拒絕）不重試超過一次，轉 `blocked` 留言（protocol 第 9 節護欄）。
+
 ## 產出與模板
 
 - `templates/hld.md` → 高階設計（含 ADR）。
