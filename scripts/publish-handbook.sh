@@ -184,6 +184,7 @@ nav:
   - 5. 故障排除: 05-troubleshooting.md
   - 6. 團隊是怎麼編制的？: 06-org-structure.md
   - 7. 團隊有哪些固定 workflow？: 07-workflows.md
+  - 8. 怎麼把這套流程帶到其他專案？: 08-cross-platform.md
 
 plugins:
   - search:
