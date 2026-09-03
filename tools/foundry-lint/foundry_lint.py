@@ -121,7 +121,7 @@ def parse_args(argv):
         prog="foundry-lint",
         description="檢查文件是否含模板規定的必備二級標題",
     )
-    parser.add_argument("--type", required=True, choices=sorted(TYPE_TO_TEMPLATE))
+    parser.add_argument("--type", required=True, choices=TYPE_TO_TEMPLATE.keys())
     parser.add_argument("--format", default="text", choices=["text", "json"])
     parser.add_argument("--templates-dir", default=None)
     parser.add_argument("file")
