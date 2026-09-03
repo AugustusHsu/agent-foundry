@@ -34,8 +34,10 @@ jobs:
 
       # foundry-lint 只用標準函式庫，沒有依賴要裝——這是刻意的設計，
       # 讓閘門在任何環境都能跑起來，不會因為裝不了套件而被略過。
+      # 三處（本機 make、pre-commit、CI）都走 Makefile 的同一個 target，
+      # 新增工具時只改 Makefile 一處，不會出現「CI 沒跑到新測試」的無聲缺口。
       - name: 規範自檢（雙入口／手冊 nav／錨點／規則 ID）
-        run: python3 tools/foundry-lint/foundry_lint.py --selfcheck
+        run: make selfcheck
 
-      - name: foundry-lint 單元測試
-        run: python3 -m unittest discover tools/foundry-lint
+      - name: 工具單元測試（foundry-lint ＋ model-routing）
+        run: make test

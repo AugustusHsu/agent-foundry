@@ -39,6 +39,7 @@ agent-foundry/
 │  ├─ foundry-init/         # workflow：新專案首次導入
 │  ├─ foundry-adopt/        # workflow：既有專案漸進導入
 │  ├─ foundry-gates/        # workflow：調整關卡粒度
+│  ├─ foundry-model-routing/ # workflow：模型供應商路由（哪個角色用哪一家）
 │  └─ roles/<角色>/         # 第 2 層：角色薄 skill（6 個角色）
 ├─ templates/               # BRD / PRD / HLD / LLD / test-plan /
 │                           #   review-report / publish-review
@@ -48,6 +49,7 @@ agent-foundry/
 │  ├─ features/<模組>/      # 各模組的 BRD/PRD/HLD/LLD 與審查報告
 │  └─ publish-reviews/      # 手冊發佈審查記錄（閘門證據，綁 commit sha）
 ├─ tools/foundry-lint/      # 文件檢查器＋自檢
+├─ tools/model-routing/     # 供應商盤點腳本（哪幾家 CLI 真的可用）
 └─ scripts/publish-handbook.sh  # 手冊 → 公開鏡像（P2 常設授權）
 ```
 
@@ -92,6 +94,9 @@ python3 -m unittest discover tools/foundry-lint
 
 # 一次跑完所有閘門（等同 pre-commit 會跑的內容）
 make check
+
+# 盤點本機可用的模型供應商（foundry-model-routing 步驟 1；別憑印象回答這題）
+make providers
 
 # 手冊網站本機預覽
 mkdocs serve

@@ -20,7 +20,7 @@
 | L2 | 「請使用者重新匯入 skill」 | **多半是誤診** | `sourceType: local_path` 的參照式 skill 每次喚醒直接 materialize repo 檔案，**repo 一 commit 就生效**。詳見 §3 反悔錄 R3 |
 | L3 | `POST /api/agents/{id}/terminate`／`DELETE /api/agents/{id}`／`POST /api/agents/{id}/pause` | 403 `Board access required` | 只有使用者能在 UI 執行。發 `resolverPolicy: human_only` 的確認卡（MYL-34 已跑通全程）。軟退役可用 `PATCH /api/agents/{id}` 改 `metadata`＋`runtimeConfig.heartbeat.enabled: false`＋budget 0 |
 | L4 | `PATCH /api/agents/{id}` body 帶任一 `instructions*` 欄位 | 403，**整包被拒** | 只送要改的欄位。該 endpoint 的 `adapterConfig` 是**合併語意**不是覆寫，只送 `model`／`effort` 不會清掉 `paperclipSkillSync` |
-| L5 | `GET /api/llms/agent-configuration/{adapterType}.txt` | 403 `Missing permission to read agent configuration reflection` | **agent 讀不到各 adapter 的設定 schema**（2026-09-03 MYL-36 實測）。要換 adapter 時，schema 需由使用者查或從 adapter 套件原始碼推定 |
+| L5 | `GET /api/llms/agent-configuration/{adapterType}.txt` | 403 `Missing permission to read agent configuration reflection` | **agent 讀不到各 adapter 的設定 schema**（2026-09-03 MYL-36 實測）。要換 adapter 時，schema 需由使用者查或從 adapter 套件原始碼推定。⇒ 換到沒用過的 adapter 時第一次寫 `adapterConfig` 是**試驗**不是照抄：失敗就原樣回報並發卡，不要換寫法連續重試（`foundry-model-routing` §4 已載明） |
 | L6 | `GET /api/agents`（列表） | `API route not found` | 此路徑不存在。agent 層只有 `/api/agents/me` 與 `/api/agents/{id}`；列編制用 `GET /api/companies/{cid}/agents` |
 
 ## 2. API 形狀陷阱：會回 4xx 但錯誤訊息不會告訴你原因
@@ -69,11 +69,25 @@
 - 審查職能已由 Code Reviewer 工單鏈承擔（交接包、Verdict、回寫留言）；PR 只是同一審查的第二份表單，會製造兩份真相。
 - **重啟條件**：出現多人／多 agent 同時寫 code 的真併發需求時再開單評估。
 
+### R6 — 把 agent 實際換到別的供應商：使用者裁定「先不改」（MYL-36）
+
+- 2026-09-03 裁定卡 `ask:MYL-36:platform-routing:v1`，pilot 題選 **`none`**。原文：
+  「我認為目前 paperclip 內的先不用跑」「目前 paperclip 先不實際改任何 agent 設定，**提供這樣的功能即可**」。
+- **這不等於「P10 不做」。** 使用者要的是**能力就位、開關不開**：
+  盤點腳本、路由規則（`M4`～`M6`）、`foundry-model-routing` workflow、`.foundry/config.yml`
+  的 `model_routing` 段全部落地，但**不動任何 agent 的 `adapterType`**。
+- 因此：7 個 agent 目前全在 `claude_local` 是**裁定的結果**，不是待同步的漂移。
+  下一個 session 看到「規則寫了異廠審查、實際卻全同一家」時，**不要自行發起同步**——
+  要啟用時由使用者說，或依 `M6` 發卡問，不要當成缺陷修掉。
+- 使用者陳述的目的是**觀點互補**（「不同服務商提供的模型會有不同觀點，可以補足」），
+  不是省額度、不是吞吐。之後若有人以「省額度」為由重提路由，那是另一個提案，
+  判準不同，不能援引本次裁定當背書。
+
 ## 4. 已知缺口：使用者知情下保留，不要當成待辦自行修掉
 
 | # | 缺口 | 出處與裁定 |
 | --- | --- | --- |
-| GAP-1 | **額度用盡沒有成文處置。** 可行做法（掛 `assigneeAdapterOverrides` 續跑＋開重裁單）只存在於 MYL-33 討論串，不是 protocol 條款，執行者不會自動知道 | MYL-33 v3 卡裁定 `no_clause`（維持現狀）。要改需重新發卡 |
+| ~~GAP-1~~ | ~~**額度用盡沒有成文處置。**~~ **已關閉（2026-09-03，MYL-36）**：使用者在 `ask:MYL-36:platform-routing:v1` 要求「額度耗盡……可以透過這個 workflow 自動指派」，已成文為 protocol 第 8 節 `M5` ＋ `foundry-model-routing` §5。條目保留供追溯：MYL-33 當時的 `no_clause` 裁定已被本次裁定取代 | MYL-33 v3 卡 `no_clause` → MYL-36 卡取代 |
 | GAP-2 | **高層無梯可升。** `M1` 寫 `low→medium→high`，但高層預設已站在 `max`；高層 agent 連續失敗兩次時 `M1` 無法適用，需臨場改走 `M3` 轉 `blocked` | MYL-33 v3 卡裁定 `ladder_no_change` |
 | GAP-3 | **`.foundry/config.yml` 的 `push` 段表達不了本 repo 現況。** MYL-23 P1「合併回 main 後 push origin 由執行者自行」寫不進 schema，權威來源是 protocol 第 7、9 節的分級表文字 | MYL-35 G7 選項 A，見 R4 |
 | GAP-4 | **`claude_local` adapter 內建說明字串的 `effort` 只寫到 `(low\|medium\|high)`，已過時。** 實際支援 `low/medium/high/xhigh/max`；adapter 對 `effort` 原樣傳給 CLI 不做驗證 | 實測 `claude-opus-5`＋`max` EXIT=0。protocol 第 8 節附註已載明 |
