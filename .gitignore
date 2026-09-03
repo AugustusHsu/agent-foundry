@@ -17,6 +17,9 @@ Thumbs.db
 # 工具本地快取（Serena MCP）
 .serena/
 
+# 瀏覽器 MCP 的輸出目錄（快照／截圖／console 落檔）
+.playwright-mcp/
+
 # 環境與密鑰
 .env
 *.env
