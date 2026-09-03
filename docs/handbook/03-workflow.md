@@ -72,6 +72,8 @@
 
 每張單轉 `done` 的鐵則：**AC 逐條有驗證證據、分支已收尾（合併或註明保留原因）。只有宣稱、沒有證據，不得結案。**
 
+另一項 Definition of Done（MYL-12 決議）：**動到 `docs/handbook/` 的工單，結案前必須檢查是否需執行 `scripts/publish-handbook.sh` 同步公開鏡像。**腳本會 push 公開 repo（對外發佈），執行前會徵求你當下同意；你尚未同意或暫不同步時，結案留言會註明「公開鏡像未同步」與後續處理方式，結案本身不被卡住。
+
 - **Pilot 實際**：MYL-19～21 依序結案後，Pilot 主單（MYL-6）收尾：六個卡點的規範修正回寫 repo（commit `f5dd989` 等），修正後的 skill 由使用者重新匯入 Paperclip（決策點 #7，agent 無權執行）。
 
 ## 狀態機速查
