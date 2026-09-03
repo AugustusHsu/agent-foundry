@@ -1,0 +1,24 @@
+# .foundry/config.yml 範例（schema 見 skills/foundry-platform/config-schema.md）
+# foundry-init 首次產生；gates 段之後由 foundry-gates 經使用者確認後改寫。
+
+foundry: 1
+
+platform: github            # github | local-md
+
+platform_options:           # 選填；省略時用各 adapter 預設
+  github:
+    project_title: Foundry  # GitHub ProjectV2 標題
+    project_owner: "@me"    # 個人帳號用 @me，org 專案填 org 名
+  # local-md:
+  #   id_prefix: FND        # 工單編號前綴，設定後不得變更
+
+gates:
+  spec_approval: user       # 關卡 A（做什麼）：user | ceo | tech-lead
+  design_approval:          # 關卡 B（怎麼做）：可寫純值，或物件形式啟用小單跳過
+    approver: user
+    skip_below: small       # 掛 size:small 的工單跳過本關
+  external_actions: user    # 關卡 C（要不要出去）：固定 user，不可調降
+
+push:
+  branch_push: tech-lead    # 分支 push＋開 PR：user | tech-lead
+  main_push: user           # push main／force-push／tag：固定 user
