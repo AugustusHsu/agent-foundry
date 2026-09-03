@@ -5,7 +5,7 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
 
 # foundry-adopt：既有專案漸進導入
 
-依已核可的 MYL-9 HLD §6.2 制定。與 `foundry-init` 是兩件套：init 一次建全套、adopt 分模組漸進。兩者共用 `foundry-platform`（adapter 介面與對照文檔）與 `foundry-gates`（關卡設定 workflow），本文不重複定義那兩份文檔已有的內容。本文是跨平台純 .md workflow：任何 agent runtime 或人類照本文逐步執行即可；Claude Code 可安裝為 slash command（`/foundry-adopt`）作可選增強。
+依已核可的 MYL-9 HLD §6.2 制定（repo 歸檔本：`docs/features/cross-platform/HLD.md`）。與 `foundry-init` 是兩件套：init 一次建全套、adopt 分模組漸進。兩者共用 `foundry-platform`（adapter 介面與對照文檔）與 `foundry-gates`（關卡設定 workflow），本文不重複定義那兩份文檔已有的內容。本文是跨平台純 .md workflow：任何 agent runtime 或人類照本文逐步執行即可；Claude Code 可安裝為 slash command（`/foundry-adopt`）作可選增強。
 
 ## 0. 邊界與詞彙
 
@@ -40,13 +40,13 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
    - 檔案衝突預查：`<TARGET>` 是否已有 `skills/foundry-*`、`templates/`、`.foundry/` 且內容與 `<SRC>` 不同——有就逐檔列出，這些檔在 M1 一律不覆蓋（§3.1）。
 3. **模組建議**：對照上述現況，逐模組寫「已啟用／可啟用／暫不建議＋理由」。平台側慣例與 Foundry 標準衝突時（例如既有 label 命名撞名）列為風險，附處理選項。
 4. **報告去向**：有工單系統 → 貼對應工單留言；無 → 存 `<TARGET>/.foundry/adopt-report-<YYYY-MM-DD>.md`（目錄不存在先建，這是本步唯一允許的寫入）。報告開頭記：執行日期、執行者、`<SRC>` commit sha、`<TARGET>` 路徑與 HEAD sha。
-5. **平台不在 adapter 枚舉時**（現行僅 `github`｜`local-md`；如 Paperclip、Jira）：盤點照跑、報告照出，但模組啟用不可用——報告註明「需先依 foundry-platform §5 新增該平台 adapter（protocol 第 9 節規範修訂流程）」，本次到此為止，不發模組選擇卡。
+5. **平台不在 adapter 枚舉時**（現行為 `github`｜`local-md`｜`paperclip`；如 Jira、Linear）：盤點照跑、報告照出，但模組啟用不可用——報告註明「需先依 foundry-platform §5 新增該平台 adapter（protocol 第 9 節規範修訂流程）」，本次到此為止，不發模組選擇卡。
 
 ## 2. 步驟 2：模組選擇（發卡）
 
 1. 發卡給使用者，卡上只列**未啟用**的模組（已啟用的在卡文註明現況即可），逐模組可勾選、允許全不勾（只留盤點報告，本次結束）。依賴自動連帶：勾了 M2／M3／M4 而 M1 未啟用，卡上明列「將一併啟用 M1」。
 2. M1 未啟用時，同卡問齊 init 步驟 1 的三件授權（同樣依 protocol 第 4 節不得代選）：
-   - **平台**：`github` 或 `local-md`（盤點若已見 `.foundry/board/` 或明確的 GitHub 使用慣例，可預填建議值，仍由使用者拍板）。
+   - **平台**：`github`｜`local-md`｜`paperclip`（盤點若已見 `.foundry/board/`、明確的 GitHub 使用慣例、或專案已跑在 Paperclip 上，可預填建議值，仍由使用者拍板）。
    - **branch push 權限**（`push.branch_push`）：`user` 或 `tech-lead`；未選視同 `user`。
    - **平台側資源建立同意**（github 模式）：明列將建立的資源——標準 label 集、納管標記 label `foundry:managed`、milestone 容器；勾了 M2 再加 ProjectV2＋三 view。此同意即 protocol 決策點 7 的授權證據，未同意不得動平台側。
 3. 勾了 M1 且既有工單系統與選定平台相同（例如既有 GitHub Issues），同卡問**既有工單納管範圍**：全部／依 milestone 或 label 圈選／逐單清單／暫不納管（見 §3.1 第 4 點）。

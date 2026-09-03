@@ -24,9 +24,12 @@ Foundry 把「文檔」拆成三層，各有各的載體與真實來源（SSOT�
 
 - `github` → GitHub Issues／Projects（agent 用 `gh` CLI 寫入、人類用網頁看板檢視）。
 - `local-md` → `.foundry/board/` 目錄裡的 .md 檔——**沒有 git server 也能跑完整流程**，日後要上 GitHub 再走遷移（見下方 adopt）。
+- `paperclip` → Paperclip 的工單與看板（agent 走 REST API）。**這就是你現在這支團隊跑的平台**——它不是「另一套流程」，而是同一套流程的其中一個 adapter。
 - 之後要支援 GitLab 或其他平台，只需新增一份對照文檔，介面與流程都不動。
 
-專案用哪個平台，記在專案根目錄的 `.foundry/config.yml`（`platform` 欄位）；這份設定檔同時記著關卡設定（`gates` 段）與 push 權限（`push` 段），是每個專案自己的授權邊界，**agent 不得未經對應 workflow 或使用者指示直接改它**。
+換平台時該動哪裡，只有三個地方，其餘一律不動（MYL-35）：**通用規則**在 `foundry-protocol`（不動）、**平台專屬的欄位與限制**在該平台的 adapter（換一份）、**專案專屬的授權邊界**在 `.foundry/config.yml`（換一份）。判準很簡單：一句規則如果換個平台就字面不成立，它就不該寫在規範裡。
+
+專案用哪個平台，記在專案根目錄的 `.foundry/config.yml`（`platform` 欄位）；這份設定檔同時記著關卡設定（`gates` 段）與 push 權限（`push` 段），是每個專案自己的授權邊界，**agent 不得未經對應 workflow 或使用者指示直接改它**。agent-foundry 自己也有一份（`platform: paperclip`），你在 MYL-28 選定的關卡方案就記在裡面——**規範怎麼要求別的專案，這個 repo 自己就怎麼做**。
 
 規則本體：`skills/foundry-platform/`（介面 SKILL.md＋`adapters/github.md`＋`adapters/local-md.md`＋`config-schema.md`）。
 
@@ -74,6 +77,7 @@ Foundry 把「文檔」拆成三層，各有各的載體與真實來源（SSOT�
 
 - `push.branch_push: tech-lead` → Tech Lead 可自動 push 工單分支＋開 PR（含 CI 觸發）；設 `user` 即收回。
 - `push.main_push` 只允許 `user`：push main、force-push、tag 發佈永遠要你當下同意，無例外。
+  - 你可能會想：那[第 6 章](06-org-structure.md)不是說我已經核可 P1、agent 可以自己把 main 推上去？是的，但那是你對 **agent-foundry 這個 repo** 的個別裁定，記在 protocol 的分級表裡，**設定檔沒有欄位能表達它**（MYL-35 你選了「維持硬約束不放寬」）。所以其他專案照上面這行字面走——要放寬，得你在該專案另外裁定。
 - 對外發佈（網站、public repo、套件）是關卡 C，不可調降。
 
 某個專案給過的常設授權**不會**自動延伸到另一個專案——新專案要放寬，得在該專案走 foundry-gates／關卡 C 由你另行裁定。

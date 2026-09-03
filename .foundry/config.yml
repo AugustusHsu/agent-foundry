@@ -1,0 +1,33 @@
+# agent-foundry 自身的 Foundry 專案設定
+# schema 權威：skills/foundry-platform/config-schema.md｜範例：skills/foundry-platform/config.example.yml
+# 建立依據：MYL-35（抹除「本 repo 流程」與「導入其他平台的流程」之間的差異）
+# 建立於 2026-09-03。agent 不得未經 foundry-gates／foundry-adopt 或使用者指示直接改本檔。
+
+foundry: 1
+
+# 本 repo 的執行層平台是 Paperclip（工單／狀態／看板）；
+# 規則層 .md 與程式碼仍在本 git repo，兩者分工見 foundry-protocol「平台中立原則」。
+platform: paperclip
+
+platform_options:
+  paperclip:
+    company_id: "${PAPERCLIP_COMPANY_ID}"            # My Lab；label 為公司層資源
+    project_id: "e7865c0c-6a46-429c-9bd6-566bc849bfeb"  # Foundry 專案
+
+# 關卡設定＝MYL-28 使用者於確認卡 0679629d 選定的 b-skip-small 方案
+# （選定紀錄原本只存在工單留言 d8d356f1；MYL-35 起落回規則層本檔）。
+gates:
+  spec_approval: user       # 關卡 A（做什麼）
+  design_approval:          # 關卡 B（怎麼做）
+    approver: user
+    skip_below: small       # 掛 size:small 的工單跳過本關
+  external_actions: user    # 關卡 C（要不要出去）：固定 user，不可調降
+
+push:
+  branch_push: tech-lead    # MYL-27 核可下放：工單分支 push＋開 PR 由 Tech Lead 自動
+  main_push: user           # 硬約束：push main／force-push／tag 一律使用者專屬，schema 不允許其他值
+  # 本欄與本 repo 現況的已知落差（MYL-35 G7，使用者 2026-09-03 於確認卡 cc915d68 裁定「選項 A：
+  # 維持硬約束不放寬」）：MYL-23 核可的 P1 常設授權含「合併回 main 後 push origin，執行者自行」，
+  # 本欄無法表達，故本 repo 的 push 授權以 protocol 第 7、9 節分級表為準，本欄只承載該表的 P3 部分。
+  #   ⚠️ 這條例外是使用者對「本 repo」的個別裁定，**不隨 foundry-init／foundry-adopt 傳染**：
+  #      導入 Foundry 的其他專案一律照本欄字面執行——main push 無例外，不得援引本 repo 前例放行。
