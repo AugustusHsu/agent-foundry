@@ -80,7 +80,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 ### `done`
 
 - **進入**：AC 逐條有驗證證據，且分支已依第 7 節收尾。**只有宣稱、沒有證據，不得結案。**
-- **手冊同步檢查（MYL-12 決議，MYL-32 增訂）**：本單若動到 `docs/handbook/`，結案前必須檢查是否需執行 `scripts/publish-handbook.sh` 同步公開鏡像。該腳本會 push 公開 repo，屬第 4 節「對外發佈」動作，執行前需使用者**當下同意**（除非日後另給常設授權）。已取得同意 → 執行同步並在結案留言附證據；使用者尚未回覆或選擇暫不同步 → 結案留言註明「公開鏡像未同步」與後續處理方式（不因等待同步而卡住結案）。
+- **手冊發佈檢查（MYL-12 決議，MYL-32／MYL-24 增訂）**：本單若動到 `docs/handbook/`，結案前必須走完第 7 節「手冊發佈審查」四步（合併進 main → 寫審查記錄 → commit → 跑 `scripts/publish-handbook.sh`）。同步屬 MYL-23 分級表 **P2**，由執行者自檢前提後自行執行，**不需使用者逐次同意**；結案留言附審查記錄路徑、過濾清單輸出、公開 repo commit hash 與站台 URL。前提不成立而暫不同步時（例如變更還沒合併進 main），結案留言註明「公開鏡像未同步」與後續處理方式，不因等待同步而卡住結案。
 - 原則上不重開；結案後發現的問題依第 5 節判定退回或開新單。
 
 ### `cancelled`
@@ -258,10 +258,26 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 - 每次 push 後在對應工單留言記錄分支、commit hash 與遠端；P2 另附發佈證據
   （過濾清單、公開 repo commit、站台 URL）。
 - 凡動到 `docs/handbook/` 的工單，結案自檢加一項：變更合併進 main 後，
-  是否需執行 `scripts/publish-handbook.sh` 同步公開鏡像（P2）？需要就在收尾時執行。
+  依下方「手冊發佈審查」流程同步公開鏡像（P2）。
 - 🔓 本節授權依 MYL-23 提案經使用者核可生效（2026-09-03，確認卡
   `confirmation:MYL-23:git-flow-proposal:309758d`；與全域 CLAUDE.md 同步，比照 MYL-10
   模式）；收回或收緊授權時，本節與全域 CLAUDE.md 對應條款**兩處一起改**，不得只改一處。
+
+### 手冊發佈審查（MYL-24 增訂）
+
+動到 `docs/handbook/` 的工單，結案前依序做完四步；**沒有使用者介入點**——P2 的拍板者是執行者本人（第 9 節分級表），使用者只在結案留言收摘要。
+
+1. **合併進 main**：手冊變更合併回 main 並 push（P1）。沒合併就發佈＝把只存在於工作分支的內容推上公開站。
+2. **寫審查記錄**：用 `templates/publish-review.md` 建 `docs/publish-reviews/<工單編號>.md`，逐項自檢 P2 三前提（來源已合併進 main／範圍僅限 `docs/handbook/`／私有連結過濾無異常）＋公開適切性（機敏資訊、內部路徑、連結可達性）。三前提全成立才填 `verdict: APPROVED`。
+3. **commit 審查記錄**：`handbook_commit` 欄填 `git log -1 --format=%H -- docs/handbook` 的完整 sha。
+4. **執行 `scripts/publish-handbook.sh`**：腳本的證據閘門會核對記錄，通過才 push。
+
+規則：
+
+- **審查者就是執行者本人**，不另設 Code Reviewer／Tech Lead 前置審查（MYL-23 分級表 P2 明定「無事前審查——內容已經該單既有審查鏈把關」）；巡檢兜底歸 Scrum Master。
+- **閘門綁 commit sha，不綁工單號**：審查通過後又改了手冊，舊記錄自動失效，必須重新自檢並更新 `handbook_commit`。想繞過閘門直接跑腳本會被拒跑。
+- 自檢有任一前提不成立 → 不要建 APPROVED 記錄，也不要跑腳本；工單結案留言註明「公開鏡像未同步」與原因（見第 2 節 `done`）。
+- 發佈範圍或過濾規則本身要改（不只是同步內容），那是 **P3**，發卡問使用者。
 
 ### push：跨平台專案的權限設定（MYL-9／MYL-27 增訂）
 
@@ -381,7 +397,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 | 級別 | 動作範圍 | 拍板者 | 審查者與審查內容 | 證據要求 |
 | --- | --- | --- | --- | --- |
 | **P1 私有例行推送** | 私有 repo（現為 agent-foundry）：push 既有分支新 commit、推送工單分支、刪除**已合併**的遠端工單分支 | 執行者本人（MYL-23 核可＝常設授權） | 無事前審查——內容已經該單既有審查鏈把關；Scrum Master 巡檢兜底 | 工單留言／交接包記明分支與 commit hash |
-| **P2 既有公開管道發佈** | 使用者已核可建立的公開管道之**內容同步**：現為 `scripts/publish-handbook.sh`（推 foundry-handbook main ＋ gh-pages） | 執行者本人，須前提全數成立：(1) 來源變更已合併進私有 main；(2) 同步範圍僅限既定目錄（`docs/handbook/`）；(3) 私有連結過濾輸出檢查無異常 | 執行 agent 逐項自檢前提；Scrum Master 巡檢兜底 | 工單留言附：過濾清單輸出、公開 repo commit hash、站台 URL |
+| **P2 既有公開管道發佈** | 使用者已核可建立的公開管道之**內容同步**：現為 `scripts/publish-handbook.sh`（推 foundry-handbook main ＋ gh-pages） | 執行者本人，須前提全數成立：(1) 來源變更已合併進私有 main；(2) 同步範圍僅限既定目錄（`docs/handbook/`）；(3) 私有連結過濾輸出檢查無異常 | 執行 agent 逐項自檢前提，結果寫入 `docs/publish-reviews/<工單編號>.md`（MYL-24，流程見第 7 節「手冊發佈審查」）；Scrum Master 巡檢兜底 | 審查記錄路徑＋工單留言附：過濾清單輸出、公開 repo commit hash、站台 URL |
 | **P3 使用者專屬** | 新開公開資源（public repo／網站／套件／網域）、擴大公開同步範圍（動 P2 的過濾規則或來源目錄）、force push／改遠端歷史、刪除遠端 repo 或未合併分支、任何涉費用的動作 | **使用者**，逐次發卡當下同意 | 發卡列明動作、影響、回退方式 | 互動卡核可紀錄 |
 
 護欄：
@@ -408,6 +424,6 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 - [ ] 這張單涉及跨模組介面或安全敏感範圍嗎？會就依第 8 節直接用高層級。
 - [ ] 要開分支了嗎？分支名帶工單編號了嗎？
 - [ ] （結案前）分支已合併或已註明保留原因？
-- [ ] （結案前）本單動到 `docs/handbook/` 嗎？有就依第 2 節 `done` 檢查是否同步公開鏡像。
+- [ ] （結案前）本單動到 `docs/handbook/` 嗎？有就走第 7 節「手冊發佈審查」四步（合併 → 寫審查記錄 → commit → 跑腳本）。
 
 任何一項答不出來，回到對應章節處理，再開工。
