@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # 把 docs/handbook/ 的可公開內容同步到 public repo（AugustusHsu/foundry-handbook）並發佈 GitHub Pages。
 #
-# ⚠️ 這支腳本會 git push 到公開 repo（對外發佈動作）。
-#    依團隊規範，agent 不得在未取得使用者當下同意時執行本腳本。
+# ⚠️ 這支腳本會 git push 到公開 repo（兩處：公開鏡像 main、gh-pages）。
+#    依 MYL-23 分級表屬 P2「既有公開管道發佈」，執行者自檢前提成立後可自行執行，
+#    但必須先通過下方的發佈審查證據閘門（MYL-24）——沒有對應的 APPROVED 審查記錄就拒跑。
 #
 # 過濾規則：指向私有 repo 內部路徑（skills/、templates/、docs/pilot/、私有 README）的
 # 超連結一律拆為純文字，內容照抄不改。來源真相永遠是私有 repo 的 docs/handbook/。
@@ -13,6 +14,69 @@ set -euo pipefail
 SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PUB_REPO="AugustusHsu/foundry-handbook"
 SITE_URL="https://augustushsu.github.io/foundry-handbook/"
+REVIEW_DIR="$SRC_ROOT/docs/publish-reviews"
+
+# ── 發佈審查證據閘門（MYL-24）─────────────────────────────────────────────
+# 擋在任何 clone／push 之前。閘門綁的是「手冊內容的 commit sha」而不是工單號——
+# 綁工單號的話，「審查通過後又改手冊再發佈」會從閘門下面溜過去。
+gate_fail() {
+  echo "❌ 發佈被擋下（MYL-24 發佈審查證據閘門）：$1" >&2
+  echo "   處理方式：$2" >&2
+  exit 1
+}
+
+echo "==> 檢查發佈審查證據"
+
+git -C "$SRC_ROOT" rev-parse --git-dir >/dev/null 2>&1 ||
+  gate_fail "$SRC_ROOT 不是 git repo，無法核對審查證據。" \
+            "在私有 repo agent-foundry 內執行本腳本。"
+
+DIRTY="$(git -C "$SRC_ROOT" status --porcelain -- docs/handbook docs/publish-reviews)"
+[ -z "$DIRTY" ] ||
+  gate_fail "docs/handbook/ 或 docs/publish-reviews/ 有未 commit 的變更，審查證據無法對應實際內容：
+$DIRTY" \
+            "先把變更 commit（並依審查結果更新審查記錄），再重跑。"
+
+HANDBOOK_SHA="$(git -C "$SRC_ROOT" log -1 --format=%H -- docs/handbook)"
+[ -n "$HANDBOOK_SHA" ] ||
+  gate_fail "找不到任何動到 docs/handbook/ 的 commit。" "確認 repo 內容完整。"
+
+# P2 前提 (1)：來源變更已合併進私有 main（本地 main 與 origin/main 都要涵蓋，
+# 否則會把只存在於工作分支的內容推上公開站）。
+for ref in main origin/main; do
+  git -C "$SRC_ROOT" rev-parse --verify --quiet "$ref" >/dev/null || continue
+  git -C "$SRC_ROOT" merge-base --is-ancestor "$HANDBOOK_SHA" "$ref" ||
+    gate_fail "手冊最新變更 ${HANDBOOK_SHA:0:8} 尚未合併進 $ref（P2 前提 1 不成立）。" \
+              "先把工作分支合併進 main 並推送，再重跑。"
+done
+
+APPROVAL="$(python3 - "$REVIEW_DIR" "$HANDBOOK_SHA" <<'PYEOF'
+import re, sys, pathlib
+d, sha = pathlib.Path(sys.argv[1]), sys.argv[2]
+def field(head, key):
+    m = re.search(rf'^{key}:\s*(.+?)\s*$', head, re.M)
+    return m.group(1).strip('"\'') if m else ''
+for p in sorted(d.glob('*.md')) if d.is_dir() else []:
+    m = re.match(r'---\n(.*?)\n---', p.read_text(encoding='utf-8'), re.S)
+    if not m:
+        continue
+    head, commit = m.group(1), field(m.group(1), 'handbook_commit')
+    # 允許短 sha，但至少 7 碼，避免空值或過短前綴誤中
+    if field(head, 'verdict') == 'APPROVED' and len(commit) >= 7 and sha.startswith(commit):
+        print(f"{p.name}|{field(head, 'issue')}|{field(head, 'reviewer')}")
+        break
+PYEOF
+)"
+
+[ -n "$APPROVAL" ] ||
+  gate_fail "手冊最新變更 ${HANDBOOK_SHA:0:8} 沒有對應的 APPROVED 發佈審查記錄。" \
+            "依 templates/publish-review.md 建立 docs/publish-reviews/<工單號>.md（verdict: APPROVED、handbook_commit: $HANDBOOK_SHA），commit 後重跑。"
+
+IFS='|' read -r A_FILE A_ISSUE A_REVIEWER <<<"$APPROVAL"
+echo "   ✅ 審查記錄：docs/publish-reviews/$A_FILE（工單 $A_ISSUE，審查者 $A_REVIEWER）"
+echo "   ✅ 手冊 commit：$HANDBOOK_SHA"
+# ──────────────────────────────────────────────────────────────────────────
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -144,7 +208,8 @@ Foundry——跑在 Paperclip 上的 AI 開發團隊——的使用手冊公開�
 bash scripts/publish-handbook.sh
 ```
 
-腳本會：過濾內容 → 更新本 repo main → `mkdocs gh-deploy` 重建站台。
+腳本會：核對發佈審查證據 → 過濾內容 → 更新本 repo main → `mkdocs gh-deploy` 重建站台。
+第一步的證據閘門找不到對應這版手冊的 APPROVED 審查記錄時會直接拒跑。
 MDEOF
 
 rm -f "$WORK/repo/docs/.gitkeep"
