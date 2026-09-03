@@ -15,6 +15,7 @@
 | [5. 故障排除](05-troubleshooting.md) | 流程卡住時怎麼看、怎麼推。全部案例來自 Pilot 實際踩過的六個卡點。 |
 | [6. 團隊是怎麼編制的？](06-org-structure.md) | 誰向誰匯報、爭議怎麼升級、什麼條件下才會加 PM 層。 |
 | [7. 團隊有哪些固定 workflow？](07-workflows.md) | 六條固定跑法總覽：每條的觸發條件與權威章節。含模型分層與升級規則。 |
+| [8. 怎麼把這套流程帶到其他專案？](08-cross-platform.md) | 三層文檔體系、平台 adapter、foundry-init／adopt 導入教學、關卡粒度調整。 |
 
 ## 30 秒版摘要
 
@@ -29,6 +30,8 @@
 
 - [`skills/foundry-protocol/SKILL.md`](../../skills/foundry-protocol/SKILL.md) — 核心規範：工單骨架、狀態機、交接格式、HITL 閘門、commit／分支規則。
 - `skills/roles/<角色>/SKILL.md` — 六個角色各自的判準。
+- `skills/foundry-platform/` — 平台 adapter 介面與 github／local-md 對照文檔、`.foundry/config.yml` schema。
+- `skills/foundry-gates/`、`skills/foundry-init/`、`skills/foundry-adopt/` — 關卡調整與新／舊專案導入的跨平台 workflow（見[第 8 章](08-cross-platform.md)）。
 - [`templates/`](../../templates/) — BRD／PRD／HLD／LLD／測試計畫／審查報告的共用骨架。
 
 手冊與規範衝突時，以規範（skill）為準，並回報修正手冊。
