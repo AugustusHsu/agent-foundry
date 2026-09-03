@@ -251,6 +251,45 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 - 變更 Paperclip agent 的模型設定屬公司層設定變更，依第 4 節 HITL 閘門第 6 條處理：發卡列出「角色 → 目標 model／effort」對照表，經使用者核可（或由使用者執行）後生效，並在對應工單留言留下同步證據。
 - 模型代號會隨版本演進（實際環境可能提供高於 Opus 級的模型）。本節固定的是「三層相對關係與角色歸屬」；各層對應的具體模型代號以同步卡裁定為準，裁定後回寫到上方表格附註，後續模型換代時開單重新裁定並更新附註。
 
+## 9. 組織結構與匯報線
+
+依 MYL-12 討論結論訂定（MYL-14 增訂）。
+
+### 現行結構
+
+```
+使用者
+└── CEO
+    ├── Product Analyst（需求）
+    ├── Scrum Master（流程）
+    └── Tech Lead（技術）
+        ├── Developer
+        ├── Code Reviewer
+        └── QA Engineer
+```
+
+- CEO 直轄三個職能負責人：Product Analyst、Scrum Master、Tech Lead。
+- **開發三角（Developer、Code Reviewer、QA Engineer）掛在 Tech Lead 下**：三角內的技術爭議（瑕疵判定異議、設計缺漏、修法歧見）先上報 Tech Lead 裁定，不直接找 CEO；Tech Lead 裁不了、或問題涉及需求取捨／優先序／花錢／對外，再上升 CEO 或依第 4 節發卡問使用者。
+- **現階段不在 CEO 下加 PM 層。**
+
+### 匯報線與流程鏈的關係
+
+第 3 節的流程鏈（需求→設計→工單→實作→審查→測試）是「工作交接」順序；本節是「管理與爭議升級」歸屬。兩者互相獨立：Scrum Master 拆單交棒給 Developer，不表示 Developer 匯報給 Scrum Master；Code Reviewer 掛在 Tech Lead 下，不影響其 Verdict 的獨立判定權。
+
+### 加 PM（stream owner）的觸發條件
+
+同時滿足以下兩項才啟動，且是為**每條流**設 stream owner，不是加單一 PM 層：
+
+1. 同時有 ≥2 條獨立 feature 流在進行。
+2. CEO 的時間主要花在跨流協調，而非單流內的裁決。
+
+觸發時由 CEO 開單提案（含各流的 stream owner 人選與職責切分），經使用者核可後修訂本節並同步 agent 設定；未觸發前不預先建置。
+
+### 權威來源與同步
+
+- **本節是組織結構的權威來源。** Paperclip 各 agent 的 `reportsTo` 欄位是本節的映射；兩者不一致時，以本節為準並發起同步（同第 8 節模式），而不是改本節遷就現況。
+- 變更組織結構（含 `reportsTo`）屬公司層設定變更，依第 4 節 HITL 閘門處理：未經使用者裁定的結構調整先發卡提案；已裁定的結構（如本節）由執行工單直接同步，並在工單留言留下同步證據。
+
 ## 附錄：開工前 30 秒自檢
 
 執行任何工單前，快速過一遍：
