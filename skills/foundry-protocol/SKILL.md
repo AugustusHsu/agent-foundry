@@ -304,6 +304,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 - 分支 push 下放僅及於**本單自己的工作分支**：push 前確認不會覆寫他人分支，push 後在工單留言記錄分支名與 PR 連結（有 PR 時）。
 - 各專案的常設授權互相獨立：本 repo 的 P1／P2 授權（MYL-23）是使用者對本 repo 的裁定，**不自動延伸到其他專案**；新專案要放寬，走 foundry-gates／關卡 C 由使用者另行裁定。
+- **本 repo 的已知例外（MYL-35 G7，使用者 2026-09-03 裁定選項 A）**：`push.main_push` 只允許 `user` 的硬約束**維持不放寬**（schema 未改）；但本 repo 依 MYL-23 P1「合併回 main 後 push origin 由執行者自行」這條授權，**寫不進設定檔**——它的權威來源是上方分級表這段規範文字，不是 `.foundry/config.yml`。此例外**僅對 agent-foundry 本 repo 成立**：`foundry-init`／`foundry-adopt` 導入的專案一律照 `push.main_push: user` 字面執行，main push 無例外，**agent 不得援引本 repo 前例替其他專案放行**。
 - 歷史欠推的補推（一次推上大量既有 commit）不屬例行推送：首次補推需使用者明確同意後才納入常規（本 repo 已於 MYL-23 核可選項 A 時完成此程序）。
 
 ### git 底層與危險操作

@@ -25,9 +25,9 @@ gates:
 
 push:
   branch_push: tech-lead    # MYL-27 核可下放：工單分支 push＋開 PR 由 Tech Lead 自動
-  main_push: user           # force-push／tag／改遠端歷史＝P3，永遠使用者專屬
-  # ⚠️ 本欄與本 repo 現況的落差（MYL-35 G7，待使用者裁定）：
-  #   MYL-23 核可的 P1 常設授權含「合併回 main 後 push origin」，由執行者自行執行；
-  #   但本欄目前無法區分「例行 main 同步（P1）」與「force-push／tag／改歷史（P3）」。
-  #   在裁定前，本 repo 的 push 權限**以 protocol 第 7、9 節的分級表為準**，本欄僅表達
-  #   「P3 類動作為使用者專屬」。裁定選項見 docs/features/cross-platform/gap-analysis.md。
+  main_push: user           # 硬約束：push main／force-push／tag 一律使用者專屬，schema 不允許其他值
+  # 本欄與本 repo 現況的已知落差（MYL-35 G7，使用者 2026-09-03 於確認卡 cc915d68 裁定「選項 A：
+  # 維持硬約束不放寬」）：MYL-23 核可的 P1 常設授權含「合併回 main 後 push origin，執行者自行」，
+  # 本欄無法表達，故本 repo 的 push 授權以 protocol 第 7、9 節分級表為準，本欄只承載該表的 P3 部分。
+  #   ⚠️ 這條例外是使用者對「本 repo」的個別裁定，**不隨 foundry-init／foundry-adopt 傳染**：
+  #      導入 Foundry 的其他專案一律照本欄字面執行——main push 無例外，不得援引本 repo 前例放行。

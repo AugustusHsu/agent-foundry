@@ -41,7 +41,7 @@ MYL-9 建好了跨平台的抽象層，**但本 repo 自己沒有站進去**：P
 | **G4** | **本 repo 沒有 `.foundry/config.yml`** | repo 根目錄無 `.foundry/`；MYL-28 使用者選定的關卡方案（b-skip-small）只存在工單留言 `d8d356f1` | 專案的授權邊界只存在於執行層，違反 protocol 第 6 節「規則只在 ① 編輯」；轉平台即遺失；`foundry-gates` 在本 repo 讀不到設定 | 建立 `.foundry/config.yml`：`platform: paperclip`、`gates` 帶入 MYL-28 選定、`push` 依 MYL-27／MYL-23 |
 | **G5** | **MYL-9 設計文件不在 repo** | `skills/` 五個檔共十餘處引用「MYL-9 HLD §x」；`docs/features/` 原無 cross-platform 目錄 | 違反 protocol 第 3 節「HLD／LLD 存於 `docs/features/<模組>/`」；離開 Paperclip 後所有引用斷鏈 | 逐字歸檔為 [`HLD.md`](HLD.md)（不重寫已核可文件），並在五處引用補上 repo 路徑 |
 | **G6** | 等卡期間的狀態語意不明 | protocol 第 2 節只寫「HITL 閘門等回覆 → `blocked`」；`foundry-gates` §3.4、`foundry-adopt` §2.4 寫「等待期間轉 `in_review`」 | 同一情境兩種寫法，跨平台照做的人會不一致 | protocol 第 2 節 `in_review` 補分界判準：**有沒有東西要人驗收**——關卡核可卡 → `in_review`；觸發式閘門 → `blocked` |
-| **G7** | **本 repo 的 main push 授權無法用 config 表達**（⚠️ 待裁定） | MYL-23 P1 常設授權含「合併回 main 後 push origin，執行者自行」；但 `config-schema.md` 硬約束 `push.main_push` **只允許 `user`**，否則整檔拒用 | 本 repo 的真實授權寫不進可攜格式，只能靠 protocol 第 7 節的散文例外句 | **本次不自行決定**（屬關卡 C：常設授權的表達與擴大是使用者專屬）。config 先寫 `main_push: user` 並註明本欄目前只表達 P3 類動作，本 repo push 仍以分級表為準；選項見 §5 |
+| **G7** | **本 repo 的 main push 授權無法用 config 表達**（✅ 已裁定：選項 A） | MYL-23 P1 常設授權含「合併回 main 後 push origin，執行者自行」；但 `config-schema.md` 硬約束 `push.main_push` **只允許 `user`**，否則整檔拒用 | 本 repo 的真實授權寫不進可攜格式，只能靠 protocol 第 7 節的散文例外句 | 使用者 2026-09-03 裁定**選項 A：維持硬約束不放寬**。schema 一字未改；本 repo 的例外改為明文記載——config 註解、protocol 第 7 節、手冊第 8 章三處都寫明「此例外只對本 repo 成立、不隨導入傳染」。詳見 §5 |
 
 ## 4. 本次變更清單
 
@@ -60,14 +60,26 @@ MYL-9 建好了跨平台的抽象層，**但本 repo 自己沒有站進去**：P
 | `docs/features/cross-platform/gap-analysis.md` | 本檔 |
 | `docs/handbook/08-cross-platform.md` | 說明層同步 |
 
-## 5. 待使用者裁定：G7 的兩個選項
+## 5. G7 裁定：選項 A（使用者 2026-09-03 核可）
+
+**裁定結果**：確認卡 `cc915d68-54a6-4b27-80f2-9daefd1a9f8d`（`核可，採選項 A`）——`push.main_push` 的硬約束**維持不放寬**，schema 一字未改。
+
+代價（本 repo 保留一條散文例外）如何收斂：例外不是「沒寫下來的默契」，而是三處明文並標明不可外傳——
+
+| 位置 | 記載內容 |
+| --- | --- |
+| `.foundry/config.yml` `push` 段註解 | 本欄只承載分級表的 P3 部分；P1 例行 main 同步的授權在 protocol，不在本檔 |
+| `foundry-protocol` 第 7 節「跨平台專案的權限設定」 | 例外只對本 repo 成立，導入 Foundry 的專案照 `main_push: user` 字面執行，不得援引本 repo 前例 |
+| 手冊第 8 章 | 對使用者說明同一件事，避免與第 6 章「你已核可 P1 常設授權」讀起來互相矛盾 |
+
+原始選項對照（保留供日後重新裁定時參考）：
 
 | 選項 | 做法 | 代價 |
 | --- | --- | --- |
 | **A 維持現狀（本分支預設）** | `push.main_push` 維持「只允許 `user`」的硬約束；本 repo 的 P1 例行 main 同步繼續以 protocol 第 7、9 節分級表為授權依據，config 的該欄只表達 P3 類動作 | 本 repo 仍有一條「散文例外」，跨平台一致性差最後一哩；但**零風險**——沒有任何平台的設定檔能自動放行 main push |
 | **B 擴充 schema** | `push.main_push` 加枚舉值（如 `executor`）表示「私有 repo 的例行 main 同步可由執行者自行」，force-push／tag／改遠端歷史仍寫死 `user`；本 repo 填該值 | 授權表達完全可攜、差異歸零；但**放寬了一條原本寫死的不變條款**——之後任何專案都可能被設成自動 push main，護欄改由「私有 repo」這個前提承擔 |
 
-依 protocol 第 4 節，常設授權的給予與擴大是**使用者專屬**，agent 不得自行採用建議值——故本次到此為止，等裁定。
+（依 protocol 第 4 節，常設授權的給予與擴大是**使用者專屬**，agent 不得自行採用建議值，故當時未自行決定。）
 
 ## 6. 驗證
 

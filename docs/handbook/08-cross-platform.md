@@ -77,6 +77,7 @@ Foundry 把「文檔」拆成三層，各有各的載體與真實來源（SSOT�
 
 - `push.branch_push: tech-lead` → Tech Lead 可自動 push 工單分支＋開 PR（含 CI 觸發）；設 `user` 即收回。
 - `push.main_push` 只允許 `user`：push main、force-push、tag 發佈永遠要你當下同意，無例外。
+  - 你可能會想：那[第 6 章](06-org-structure.md)不是說我已經核可 P1、agent 可以自己把 main 推上去？是的，但那是你對 **agent-foundry 這個 repo** 的個別裁定，記在 protocol 的分級表裡，**設定檔沒有欄位能表達它**（MYL-35 你選了「維持硬約束不放寬」）。所以其他專案照上面這行字面走——要放寬，得你在該專案另外裁定。
 - 對外發佈（網站、public repo、套件）是關卡 C，不可調降。
 
 某個專案給過的常設授權**不會**自動延伸到另一個專案——新專案要放寬，得在該專案走 foundry-gates／關卡 C 由你另行裁定。
