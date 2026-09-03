@@ -229,9 +229,11 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 | 層級 | 模型／思考程度 | 預設適用 |
 | --- | --- | --- |
-| 高 | Opus 級／`high` | Tech Lead 的設計（HLD／LLD／ADR）、Code Reviewer 的審查、CEO 的裁決與規範修訂 |
-| 中 | Sonnet 級／`medium` | Developer 的實作、QA 的測試、Product Analyst 的需求 |
-| 低 | Sonnet 級／`low`（或 Haiku 級） | Scrum Master 的機械性流轉：狀態機維護、依模板拆單、巡檢兜底 |
+| 高 | 當下可用的最高層級（現為 Fable 級）／`high` | Tech Lead 的設計（HLD／LLD／ADR）、Code Reviewer 的審查、CEO 的裁決與規範修訂 |
+| 中 | Opus 級／`high` | Developer 的實作、QA 的測試、Product Analyst 的需求 |
+| 低 | Sonnet 級／`medium` | Scrum Master 的機械性流轉：狀態機維護、依模板拆單、巡檢兜底 |
+
+> 各層具體對應（2026-09-03 經使用者於同步卡 `ask:MYL-13:model-tier-sync:v1` 裁定）：高＝`claude-fable-5`／`high`、中＝`claude-opus-5`／`high`、低＝`claude-sonnet-5`／`medium`。
 
 - 分層綁的是「角色做自己的本職工作」。角色偶爾做出層級外的工作（例：Scrum Master 要做缺陷收容判定這類需要推理的事），依下方升級規則調整，不必改預設。
 
@@ -247,7 +249,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 - **本節是分層規則的權威來源。** Paperclip 各 agent 設定（`adapterConfig` 的 `model`／`effort`）是本節的映射；兩者不一致時，以本節為準並發起同步，而不是改本節遷就現況。
 - 變更 Paperclip agent 的模型設定屬公司層設定變更，依第 4 節 HITL 閘門第 6 條處理：發卡列出「角色 → 目標 model／effort」對照表，經使用者核可（或由使用者執行）後生效，並在對應工單留言留下同步證據。
-- 模型代號會隨版本演進（實際環境可能提供高於 Opus 級的模型）。本節只固定「三層相對關係與角色歸屬」；各層對應的具體模型代號在同步卡上確認，不寫死在本節。
+- 模型代號會隨版本演進（實際環境可能提供高於 Opus 級的模型）。本節固定的是「三層相對關係與角色歸屬」；各層對應的具體模型代號以同步卡裁定為準，裁定後回寫到上方表格附註，後續模型換代時開單重新裁定並更新附註。
 
 ## 附錄：開工前 30 秒自檢
 
