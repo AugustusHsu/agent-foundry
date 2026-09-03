@@ -29,9 +29,11 @@ repos:
         # 發佈腳本、protocol），任何一處變動都可能讓其中一項失效，故全域觸發。
         always_run: true
 
-      - id: foundry-lint-tests
-        name: foundry-lint 單元測試
-        entry: python3 -m unittest discover tools/foundry-lint
+      - id: foundry-tests
+        name: 工具單元測試（foundry-lint ＋ model-routing）
+        # 走 `make test` 而不是把 unittest 指令再抄一份：新增工具時只改 Makefile 一處，
+        # pre-commit 與 CI 不會各自漏掉——同一份指令抄在三個地方正是漂移的來源。
+        entry: make test
         language: system
         pass_filenames: false
-        files: ^tools/foundry-lint/
+        files: ^tools/

@@ -40,8 +40,11 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    - `skills/foundry-protocol/SKILL.md`
    - `skills/foundry-platform/`（全目錄：SKILL.md、adapters/、config-schema.md、config.example.yml）
    - `skills/foundry-gates/SKILL.md`
+   - `skills/foundry-model-routing/SKILL.md`
    - `templates/`（全目錄）
    - `tools/foundry-lint/`（全目錄）——機械層閘門的本體，步驟 2.5 的 CI 與 hook 都靠它。
+   - `tools/model-routing/`（全目錄）——`foundry-model-routing` 步驟 1 的盤點腳本；沒有它，
+     那份 workflow 的第一步只能靠猜。
    - 不複製：`skills/foundry-init/`（目標專案用不到）、`skills/roles/`（組織分工屬 agent-foundry 自身設定，MYL-14 範疇）。
 4. 逐檔規則：目標檔不存在 → 複製；已存在且內容相同 → 跳過；已存在且不同 → 停止並回報（見 §0）。
 5. 驗證：`.foundry/config.yml` 依 config-schema.md 逐欄檢查合法（必填齊、枚舉值合法、`external_actions` 與 `main_push` 皆 `user`）；複製清單逐檔存在。

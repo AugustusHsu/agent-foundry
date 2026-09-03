@@ -13,6 +13,7 @@
 | `platform_options` | 物件 | ─ | adapter 專屬選項，鍵為平台名。省略時各 adapter 用下述預設值。 |
 | `gates` | 物件 | ✅ | 三個抽象關卡的核可設定（HLD §4）。 |
 | `push` | 物件 | ✅ | push 權限設定（HLD §5）。 |
+| `model_routing` | 物件 | ─ | 模型供應商路由（MYL-36）。**整段缺席＝路由未啟用**，全隊都用執行環境的預設供應商——這是預設狀態，不是設定缺漏。 |
 
 ## `platform_options`
 
@@ -51,6 +52,26 @@
 | --- | --- | --- | --- |
 | `push.branch_push` | 枚舉 | ✅ | `user`｜`tech-lead`。feature／docs 分支 push＋開 PR 的權限。`tech-lead` 表示 Tech Lead 可自動執行（HLD §5，經問卷同意）。 |
 | `push.main_push` | 枚舉 | ✅ | **只允許 `user`**——push main、force-push、tag 發佈永遠要使用者當下同意。讀取者遇到其他值同 `gates.external_actions` 處理：整檔拒用。 |
+
+## `model_routing`
+
+規則本體在 foundry-protocol 第 8 節「供應商維度」（`M4`～`M6`）；本段只定義欄位。流程與盤點腳本見 `skills/foundry-model-routing/SKILL.md`。
+
+**這一段管的是「哪一家的模型」，不是「工單放在哪」**——後者是頂層的 `platform`。兩條軸互相獨立，別混。
+
+| 欄位 | 型別 | 必填 | 說明 |
+| --- | --- | --- | --- |
+| `model_routing.default_provider` | 字串 | ✅（有本段時） | 未於 `roles` 指定的角色一律用這家。值為供應商 id，須存在於 `tools/model-routing/probe_providers.py` 的登記表。 |
+| `model_routing.roles` | 物件 | ─ | 角色 → 供應商 id 的覆寫。鍵用標準角色名（同 `role:*` label 的後綴，如 `developer`、`code-reviewer`）。 |
+| `model_routing.review_provider_distinct` | 布林 | ─（預設 `true`） | 是否強制 `M4`（實作與審查異廠）。設 `false` 等於放棄本段的主要目的，需在對應工單留言記錄理由。 |
+
+寫入者：**使用者，或 `foundry-model-routing` 在使用者核可該次指派之後**（`M6`：供應商切換屬公司層設定變更，agent 不得自行決定）。與本檔其他段落同規則——agent 不得未經核可直接改。
+
+合法性（違反時同下方總則，整檔拒用）：
+
+- `default_provider` 或 `roles` 的值不在供應商登記表 → 非法。**不得**自動 fallback 到別家：靜默換一家跑，產出風格會變而沒有人知道為什麼。
+- `review_provider_distinct` 為 `true`（或省略）卻把 `developer` 與 `code-reviewer` 指到同一家 → 非法。這是設定檔自相矛盾，可機械判定，不留給執行期才發現。
+- 指定的供應商在本機不可用（盤點腳本回報未安裝／未登入）→ **不是設定檔非法**，是環境問題：停下並依 `M5` 發卡，不要改設定遷就環境。
 
 ## 合法性總則
 

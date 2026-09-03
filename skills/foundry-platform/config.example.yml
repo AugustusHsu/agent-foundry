@@ -25,3 +25,13 @@ gates:
 push:
   branch_push: tech-lead    # 分支 push＋開 PR：user | tech-lead
   main_push: user           # push main／force-push／tag：固定 user
+
+# 模型供應商路由（選填，MYL-36）。整段註解掉＝未啟用＝全隊用執行環境預設供應商。
+# 規則本體：foundry-protocol 第 8 節 M4~M6；流程：skills/foundry-model-routing/SKILL.md
+# 先跑 `python3 tools/model-routing/probe_providers.py` 確認哪幾家真的可用再填。
+# model_routing:
+#   default_provider: claude
+#   roles:                    # 角色 → 供應商；未列的角色用 default_provider
+#     developer: codex        # 寫 code 與審 code 刻意分開兩家（M4），
+#     code-reviewer: claude   # 目的是觀點互補，不是省額度
+#   review_provider_distinct: true   # 強制 M4；設 false 需在工單記錄理由
