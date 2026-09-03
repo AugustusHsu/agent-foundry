@@ -19,6 +19,38 @@
 - **證據**：MYL-6 互動卡 `ask:MYL-6:pilot-topic:v1`（2026-09-02 由 CEO 發出）。
 - **結果**：使用者於 2026-09-02 選定 **CEO 提案 B：foundry-lint 文件檢查器**——一個檢查 BRD／PRD／HLD 等文件是否符合 foundry-protocol 模板必備章節的小 CLI。互動卡 `ask:MYL-6:pilot-topic:v1` 已 answered。
 
+### 決策點 #2：foundry-lint 需求層四項取捨（檢查範圍／嚴格度／類型指定／輸出格式）
+
+- **時機**：需求階段（MYL-16），BRD／PRD 起草後、定稿前。
+- **形式**：互動卡（ask_user_questions）四題，由 Product Analyst 發出。
+- **為何需要使用者**：這四題決定工具的行為邊界，是產品取捨而非技術實作細節，protocol 規定需求層決策點須經使用者確認。
+- **證據**：MYL-16 互動卡 `ask:MYL-16:lint-requirements:v1`（2026-09-03 answered）。
+- **結果**：(1) 檢查範圍＝六份模板全上；(2) 嚴格度＝單級，缺必備章節即不通過；(3) 文件類型由 `--type` 明確指定，不做自動推斷；(4) 輸出＝人讀文字＋exit code，另提供 `--format json`。BRD／PRD 依此定稿（commit `ac0c180`）。
+
+### 決策點 #3：BRD／PRD 定稿核可
+
+- **時機**：需求階段收尾，交接設計之前。
+- **形式**：確認卡（request_confirmation），由 Product Analyst 發出。
+- **為何需要使用者**：需求文件是後續所有階段的依據，protocol 要求定稿須經使用者核可才能往下交接。
+- **證據**：MYL-16 確認卡 `confirmation:MYL-16:prd-final:ac0c180`。
+- **結果**：使用者於 2026-09-03 **核可**，BRD／PRD 以 commit `ac0c180` 為定稿版本。
+
+### 決策點 #4：需求 → 設計交接的承接確認
+
+- **時機**：MYL-16 結單前，Product Analyst 向 Tech Lead 交接時。
+- **形式**：確認卡（request_confirmation）。
+- **為何需要使用者**：Pilot 期間每段交接都經使用者過目，確認交接內容完整（BRD／PRD 路徑與四項已確認決策）再放行。
+- **證據**：MYL-16 確認卡 `confirmation:MYL-16:handoff-techlead:ac0c180`（2026-09-03T01:05 核可）。
+- **結果**：核可，Tech Lead 承接開工 MYL-17，MYL-16 結單 `done`。
+
+### 決策點 #5：HLD／LLD 定稿與設計 → 拆單交接核可
+
+- **時機**：設計階段（MYL-17）收尾，Scrum Master 拆實作鏈之前。
+- **形式**：確認卡（request_confirmation），由 Tech Lead 發出。
+- **為何需要使用者**：設計文件（含 ADR-1～3 技術選型）決定實作方向，核可後 Scrum Master 才能據以拆單。
+- **證據**：MYL-17 確認卡 `confirmation:MYL-17:handoff-sm:76f3089`（2026-09-03T01:16 核可）。
+- **結果**：核可，HLD／LLD 以 commit `76f3089` 為定稿版本；MYL-18 拆單解除阻塞，拆出 MYL-19（實作）→ MYL-20（審查）→ MYL-21（測試）工單鏈。
+
 ---
 
 ## 二、卡住的地方清單
