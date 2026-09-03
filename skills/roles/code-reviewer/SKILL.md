@@ -55,5 +55,5 @@ description: Foundry 第 2 層角色 skill：Code Reviewer。凡是要審查 Dev
 
 ## 產出與模板
 
-- `templates/review-report.md` → 審查報告，貼在工單留言（protocol 第 3 節：退回後 Developer 不需翻對話就能看懂要改什麼）。
+- `templates/review-report.md` → 審查報告，貼在工單留言（protocol 第 3 節：退回後 Developer 不需翻對話就能看懂要改什麼），**並同步 commit 進 repo**（`docs/features/<模組>/review-report.md`）——留言給流程用，repo 檔案是正式交付物（MYL-6 卡點 #6）。
 - 你會「讀」的模板產物：`templates/hld.md`／`templates/lld.md` 產出（規格符合度的對照基準）。

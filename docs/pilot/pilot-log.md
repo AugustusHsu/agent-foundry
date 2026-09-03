@@ -109,3 +109,11 @@
 - **當下處置**：停止重試，發確認卡（`confirmation:MYL-6:skill-reimport:<commit>`）請使用者在 Paperclip 介面對 `foundry-protocol` skill 執行重新匯入，MYL-6 轉 `in_review` 等卡。
 - **規範怎麼改**：第 4 節 HITL 閘門新增第 6 條「平台權限之外的動作」——只有使用者能執行的操作（skill 匯入／更新、公司設定變更）一律發卡請使用者執行，不空轉重試；開 AC 時不得把此類動作寫成 agent 交付項。
 - **狀態**：✅ 規範已修正（本 commit）；匯入動作本身待使用者執行，見 MYL-6 確認卡。
+
+### 卡點 #6：審查報告只存在工單留言，未進 repo（結案核對時發現）
+
+- **卡在哪**：MYL-6 Outputs 要求「BRD／PRD／HLD／LLD／測試計畫／審查報告，全部進 repo」，但 Scrum Master 結案核對時發現 `docs/features/foundry-lint/` 只有前五份——MYL-20 的審查報告只張貼在工單留言，repo 裡沒有。
+- **為什麼卡**：`skills/roles/code-reviewer/SKILL.md`「產出與模板」一節明文寫報告「貼在工單留言」，沒有要求 commit 進 repo。這不是審查者疏漏，是第 2 層角色 skill 與 Pilot 工單 Outputs 對交付位置的定義不一致。
+- **當下處置**：Scrum Master 將 MYL-20 留言中的審查報告逐字轉錄為 `docs/features/foundry-lint/review-report.md`（附轉錄說明，內容未改動）。
+- **規範怎麼改**：role-code-reviewer skill「產出與模板」補——審查報告除貼工單留言外，並同步 commit 進 repo（`docs/features/<模組>/review-report.md`）；留言給流程用，repo 檔案是正式交付物。
+- **狀態**：✅ 規範已回寫 `skills/roles/code-reviewer/SKILL.md`（本 commit）；該 skill 重新匯入 Paperclip 為使用者專屬動作（同卡點 #5），另開後續單處理，不阻塞 MYL-6 結案。
