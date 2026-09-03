@@ -28,11 +28,11 @@
 
 長期只有三類（MYL-12 你的裁定）：
 
-1. **錢與權限**——任何會產生費用或變更權限的動作。
-2. **對外動作**——push、發布、公開任何東西。
+1. **錢與權限**——任何會產生費用或變更權限的動作，含常設授權的給予、擴大、收回。
+2. **對外動作**——push main／force-push／tag、新開公開資源、發布、公開任何東西（protocol 第 9 節分級表的 P3 級）。你已透過 MYL-23 核可把 P1（私有 repo 例行推送）與 P2（手冊公開鏡像同步）改為常設授權自動執行；跨平台專案中，分支 push＋開 PR 依 `.foundry/config.yml` 下放 Tech Lead（MYL-9）。
 3. **產品方向**——需求內容、範圍取捨、優先序。
 
-其餘決定都有明文的拍板者：技術選型歸 Tech Lead、AC 修改歸 Scrum Master、審查結論歸 Code Reviewer、技術爭議歸 Tech Lead 裁定。完整的「誰拍板、裁不了怎麼升級」矩陣在 [`foundry-protocol` 第 9 節](../../skills/foundry-protocol/SKILL.md)。如果你被問到矩陣內已授權的決定，可以直接回「這由 {角色} 依規範決定」，把決定推回去。
+常規流程中，這三類決定的執行形式就是[第 4 章](04-decision-points.md)的三個關卡（A 規格、B 方案、C 對外／不可逆）。其餘決定都有明文的拍板者：技術選型歸 Tech Lead、AC 修改歸 Scrum Master、審查結論歸 Code Reviewer、技術爭議歸 Tech Lead 裁定、分支 push＋開 PR 歸 Tech Lead（跨平台專案）。完整的「誰拍板、裁不了怎麼升級」矩陣在 [`foundry-protocol` 第 9 節](../../skills/foundry-protocol/SKILL.md)。如果你被問到矩陣內已授權的決定，可以直接回「這由 {角色} 依規範決定」，把決定推回去。
 
 ## 現在為什麼不加 PM？
 
