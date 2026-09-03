@@ -41,9 +41,33 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    - `skills/foundry-platform/`（全目錄：SKILL.md、adapters/、config-schema.md、config.example.yml）
    - `skills/foundry-gates/SKILL.md`
    - `templates/`（全目錄）
+   - `tools/foundry-lint/`（全目錄）——機械層閘門的本體，步驟 2.5 的 CI 與 hook 都靠它。
    - 不複製：`skills/foundry-init/`（目標專案用不到）、`skills/roles/`（組織分工屬 agent-foundry 自身設定，MYL-14 範疇）。
 4. 逐檔規則：目標檔不存在 → 複製；已存在且內容相同 → 跳過；已存在且不同 → 停止並回報（見 §0）。
 5. 驗證：`.foundry/config.yml` 依 config-schema.md 逐欄檢查合法（必填齊、枚舉值合法、`external_actions` 與 `main_push` 皆 `user`）；複製清單逐檔存在。
+
+## 2.5. 步驟 2.5：產生雙入口檔＋機械層閘門（MYL-36 增訂）
+
+沒有入口檔，`<TARGET>` 的每個新 session 都得從 `git ls-files` 重新摸索一次專案結構與規範位置；
+沒有閘門，`foundry-lint` 就只是一個「有人記得跑才有用」的腳本。這一步把兩者都補上。
+
+1. **雙入口檔**：依 `<SRC>/templates/entry-file.md` 產生 `<TARGET>/CLAUDE.md` 與 `<TARGET>/AGENTS.md`。
+   - 兩檔的 `FOUNDRY:SHARED-BODY` 標記之間**逐字相同**，只有 §8 工具名對應不同。
+   - 佔位符（專案定位、地圖、大檔表、指令速查）依 `<TARGET>` 實況填寫：
+     地圖照實際目錄寫、大檔表用 `git ls-files | xargs du -b | sort -rn | head` 產生、
+     指令速查只列該專案真的會用到的指令。**填不出來的整節刪掉，不要留佔位殼**——
+     留著假內容比沒有更糟，讀者會照著錯的做。
+   - `<TARGET>` 已存在同名檔案時**不得覆蓋**：停止並回報（同 §0 規則），由使用者裁定合併方式。
+2. **機械層閘門**：複製 `<SRC>/.pre-commit-config.yaml` 與 `<SRC>/Makefile` 到 `<TARGET>`。
+   - 兩檔任一已存在且內容不同 → **不覆蓋**，改為在步驟 5 報告列出「建議合併的 target／hook」，交使用者決定。
+   - `pre-commit` 未安裝時不視為失敗：`make check` 照樣能手動跑；報告的待辦列上 `make hooks`。
+3. **github 模式另加 CI**：複製 `<SRC>/.github/workflows/foundry-lint.yml` 到 `<TARGET>/.github/workflows/`。
+   這是 github 模式相對其他平台的**實質優勢**——關卡在多數平台靠 agent 自覺遵守，
+   在 GitHub 上可以有機械執行力。已存在同名 workflow 時不覆蓋，列入報告待辦。
+4. **驗證**：在 `<TARGET>` 執行 `python3 tools/foundry-lint/foundry_lint.py --selfcheck`。
+   - `entry-sync` 必須通過——這是雙入口檔產對的證明。
+   - 其他三項（手冊 nav、錨點、規則 ID）在尚未建手冊的新專案會因目錄不存在而報缺；
+     **這屬預期狀況**，記進報告即可，不算 init 失敗。
 
 ## 3. 步驟 3：呼叫 adapter `init_structure`
 
@@ -80,6 +104,10 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
 - [ ] 步驟 1 有使用者的平台選定與（github 模式）平台側資源建立同意證據；前置檢查全過。
 - [ ] `.foundry/config.yml` 依 config-schema.md 驗證合法；`external_actions` 與 `main_push` 皆 `user`。
 - [ ] 複製清單逐檔在 `<TARGET>` 存在且與 `<SRC>` 一致；未覆蓋任何既有檔案。
+- [ ] `CLAUDE.md` 與 `AGENTS.md` 均已產生，佔位符全數填寫或整節刪除（無殘留 `{}`）；
+      `foundry-lint --selfcheck` 的 `entry-sync` 通過。
+- [ ] `.pre-commit-config.yaml`、`Makefile`（github 模式另加 `.github/workflows/foundry-lint.yml`）
+      已就位或已列入報告待辦。
 - [ ] `init_structure` 查證通過且重跑冪等；github 模式的人工待辦已列入報告。
 - [ ] gates 段是使用者選定（確認卡回覆或既有選定紀錄），非 agent 推定。
 - [ ] 初始化報告已產出並含下一步指引；新增檔案已 commit。

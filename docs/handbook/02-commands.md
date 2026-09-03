@@ -52,6 +52,6 @@ CEO 把需求轉給 Product Analyst 開需求單，接著你會收到訪談卡�
 | --- | --- | --- |
 | 回報 bug | 對 CEO 描述：重現步驟／預期／實際（三段式） | 依 protocol 第 5 節找成因工單：實作沒達成 AC → 退回原單；AC 本身錯 → Scrum Master 改 AC 後退回；需求變了 → 開新單。 |
 | 加需求、改需求 | 對 CEO 講新需求，指明影響哪個功能 | 走「開新單」：新單走完整四段骨架，不夾進舊單。Product Analyst 會把加範圍的代價擺給你選。 |
-| 改團隊規範 | 直接說要改 `foundry-protocol` 或某角色 skill 的哪條 | 修正回寫 repo 後，**由你**在 Paperclip 重新匯入 skill（agent 無權限，見卡點 #5）。 |
+| 改團隊規範 | 直接說要改 `foundry-protocol` 或某角色 skill 的哪條 | 修正回寫 repo 並 commit 後**即刻生效**，你不必做任何事——skill 是參照式安裝，每次喚醒 agent 都直接讀 repo 當下的檔案。（早期手冊寫「須由你重新匯入」，那是誤診，已更正；見[第 5 章](05-troubleshooting.md)案例 5。） |
 | 更新使用手冊（`docs/handbook/`） | 對 CEO 說要改哪章、改什麼 | 修訂合併進 main 後，執行 agent 自己做發佈審查（寫審查記錄→跑 `scripts/publish-handbook.sh`），公開站直接更新，**不會再問你一次**——這是你在 push 分級表裡給的 P2 常設授權。結案留言會附審查記錄與站台 URL。（四個步驟見[第 3 章](03-workflow.md)「第 7 段：結案」） |
 | 催進度／問狀態 | 問 CEO 某單現在卡在哪 | 依留言與狀態機回報；若卡在等你回卡，會請你回卡（見[第 5 章](05-troubleshooting.md)）。 |

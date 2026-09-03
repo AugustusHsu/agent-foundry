@@ -4,6 +4,7 @@
 """
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -237,6 +238,146 @@ class RealRepoSmokeTest(unittest.TestCase):
                     doc.write_text(skeleton, encoding="utf-8")
                     proc = run_cli("--type", doc_type, str(doc))
                 self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
+class MkdocsSlugTest(unittest.TestCase):
+    """slugify 必須複製 markdown.extensions.toc 的 unicode=False 行為。
+
+    這是 MYL-25 的成因：中文標題的錨點不是中文字面。
+    """
+
+    def test_中文被整段丟掉只留_ASCII(self):
+        self.assertEqual(foundry_lint.mkdocs_slug("1. 主開發流程鏈"), "1")
+        self.assertEqual(foundry_lint.mkdocs_slug("3. HITL 發卡"), "3-hitl")
+
+    def test_去掉行內標記後才_slugify(self):
+        self.assertEqual(foundry_lint.mkdocs_slug("**Bold** and `code`"),
+                         "bold-and-code")
+
+    def test_重複標題加底線序號(self):
+        anchors = foundry_lint.anchors_of("## Alpha\n## Alpha\n## Alpha\n")
+        self.assertEqual(anchors, {"alpha", "alpha_1", "alpha_2"})
+
+    def test_純中文標題產生空_slug_不列為錨點(self):
+        self.assertEqual(foundry_lint.anchors_of("## 總覽\n"), set())
+
+
+class RuleIdRegistryTest(unittest.TestCase):
+    def test_展開波浪號範圍(self):
+        text = "## 11. 規則 ID 索引\n\n| ID | x |\n| --- | --- |\n| `H1`～`H4` | 閘門 |\n"
+        declared, prefixes, _ = foundry_lint.parse_rule_id_registry(text)
+        self.assertEqual(declared, {"H1", "H2", "H3", "H4"})
+        self.assertEqual(prefixes, {"H"})
+
+    def test_斜線列舉逐個登記(self):
+        text = "## 11. 規則 ID 索引\n\n| `G-A`／`G-B`／`G-C` | 關卡 |\n"
+        declared, _, _ = foundry_lint.parse_rule_id_registry(text)
+        self.assertEqual(declared, {"G-A", "G-B", "G-C"})
+
+    def test_沒有索引節時回空集合(self):
+        self.assertEqual(foundry_lint.parse_rule_id_registry("# 無")[0], set())
+
+
+class SelfcheckTest(unittest.TestCase):
+    """在真實 repo 的副本上做變異，證明每項檢查都真的擋得住。
+
+    「永遠會通過的檢查」等於沒有檢查，所以每一項都配一個反例。
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "repo"
+        shutil.copytree(
+            REPO_ROOT, self.root,
+            ignore=shutil.ignore_patterns(".git", "site", "__pycache__"),
+        )
+
+    def _run(self):
+        return run_cli("--selfcheck", "--repo-root", str(self.root))
+
+    def _named(self, name):
+        results = foundry_lint.run_selfcheck(self.root)
+        return next(r for r in results if r.name == name)
+
+    def test_真實_repo_四項全過_exit_0(self):
+        proc = self._run()
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("全部通過", proc.stdout)
+
+    def test_雙入口正文不同步被擋下(self):
+        p = self.root / "AGENTS.md"
+        p.write_text(p.read_text(encoding="utf-8").replace("## 1. 這個 repo 是什麼",
+                                                           "## 1. 這個 repo 是啥"),
+                     encoding="utf-8")
+        res = self._named("entry-sync")
+        self.assertFalse(res.passed)
+        self.assertIn("共用正文不一致", res.failures[0])
+
+    def test_缺入口檔被擋下(self):
+        (self.root / "AGENTS.md").unlink()
+        res = self._named("entry-sync")
+        self.assertFalse(res.passed)
+        self.assertIn("AGENTS.md 不存在", res.failures[0])
+
+    def test_新增章節只改一份_nav_被擋下(self):
+        (self.root / "docs" / "handbook" / "09-new.md").write_text(
+            "# 9. 新章\n", encoding="utf-8")
+        res = self._named("nav-sync")
+        self.assertFalse(res.passed)
+        self.assertEqual(len(res.failures), 2)  # 兩份 nav 各報一次
+        self.assertTrue(all("09-new.md" in f for f in res.failures))
+
+    def test_nav_指向不存在章節被擋下(self):
+        (self.root / "docs" / "handbook" / "08-cross-platform.md").unlink()
+        res = self._named("nav-sync")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("指向不存在的章節" in f for f in res.failures))
+
+    def test_中文字面錨點被擋下(self):
+        p = self.root / "docs" / "handbook" / "07-workflows.md"
+        p.write_text(p.read_text(encoding="utf-8") + "\n[看這節](#總覽)\n",
+                     encoding="utf-8")
+        res = self._named("anchors")
+        self.assertFalse(res.passed)
+        self.assertIn("#總覽", res.failures[0])
+
+    def test_未登記的規則_ID_被擋下(self):
+        p = self.root / "docs" / "handbook" / "05-troubleshooting.md"
+        p.write_text(p.read_text(encoding="utf-8") + "\n違反 `H9` 要退件。\n",
+                     encoding="utf-8")
+        res = self._named("rule-ids")
+        self.assertFalse(res.passed)
+        self.assertIn("`H9`", res.failures[0])
+
+    def test_登記了但_protocol_沒定義的_ID_被擋下(self):
+        p = self.root / "skills" / "foundry-protocol" / "SKILL.md"
+        p.write_text(p.read_text(encoding="utf-8").replace("| `C1`～`C5` |",
+                                                           "| `C1`～`C6` |"),
+                     encoding="utf-8")
+        res = self._named("rule-ids")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("`C6`" in f and "找不到它的定義" in f
+                            for f in res.failures))
+
+    def test_known_drift_自有_ID_不被誤判(self):
+        """known-drift 的 L*／S*／R*／X* 前綴未登記於 protocol，應略過而非報錯。"""
+        res = self._named("rule-ids")
+        self.assertTrue(res.passed, res.failures)
+
+    def test_json_格式可解析且與_exit_code_一致(self):
+        (self.root / "AGENTS.md").unlink()
+        proc = run_cli("--selfcheck", "--repo-root", str(self.root),
+                       "--format", "json")
+        self.assertEqual(proc.returncode, 1)
+        data = json.loads(proc.stdout)
+        self.assertFalse(data["passed"])
+        self.assertEqual({c["name"] for c in data["checks"]},
+                         {"entry-sync", "nav-sync", "anchors", "rule-ids"})
+
+    def test_selfcheck_不需要_type_與_file(self):
+        proc = self._run()
+        self.assertEqual(proc.stderr, "")
 
 
 if __name__ == "__main__":
