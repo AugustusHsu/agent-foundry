@@ -13,7 +13,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 2. 依值載入對照文檔：`github` → `adapters/github.md`；`local-md` → `adapters/local-md.md`。
 3. 要做的操作對應到下方哪個動詞，就照對照文檔中該動詞的指令執行。
 4. 對照文檔沒有涵蓋的平台寫入操作，一律不做——需要新操作時先開單擴充介面，不得私下直呼平台指令繞過。
-5. 找不到 `.foundry/config.yml` 時視為專案尚未導入 Foundry：停下，走 `foundry-init`（S4，尚未實作前發卡問使用者），不得自行猜測平台。
+5. 找不到 `.foundry/config.yml` 時視為專案尚未導入 Foundry：停下，走 `foundry-init`（新專案）或 `foundry-adopt`（既有開發中專案），不得自行猜測平台。
 
 ## 2. 共通詞彙
 

@@ -1,6 +1,6 @@
 # adapter：local-md
 
-`platform: local-md` 時的動詞對照。介面語意見 `../SKILL.md`。無 git server 平台可用時的 fallback：以 repo 內 `.foundry/board/` 目錄模擬執行層，全部操作都是本地檔案讀寫（MYL-9 HLD §2.4）。日後遷移到 GitHub 由 `foundry-adopt`（S5）轉換。
+`platform: local-md` 時的動詞對照。介面語意見 `../SKILL.md`。無 git server 平台可用時的 fallback：以 repo 內 `.foundry/board/` 目錄模擬執行層，全部操作都是本地檔案讀寫（MYL-9 HLD §2.4）。日後遷移到 GitHub 由 `foundry-adopt` §4 轉換。
 
 ## 目錄結構
 
