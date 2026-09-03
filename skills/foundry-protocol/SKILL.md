@@ -59,6 +59,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 - **進入**：有未完成的 `blockedByIssueIds`；或 Inputs 有項目不可存取；或觸發第 4 節 HITL 閘門正在等使用者回覆。
 - 進入時必須在留言註明：阻塞原因、解除者是誰、對方做什麼就能解。沒寫解除路徑的 `blocked` 視為不合格。
+- 平台限制：Paperclip 的 `unblockDescriptor.owner` 只能填 agent 自己（填別人整筆 PATCH 都不生效）。指望其他 agent 解鎖時，把對方的工單掛進 `blockedByIssueIds` 作一級 blocker，owner 欄位仍填自己、收尾動作寫在 `action`；「解除者是誰」寫在留言即可。（Pilot 卡點 #4）
 - **離開**：所有前置單 `done`、Inputs 全數可存取、待答問題已獲回覆 → 轉 `todo`。
 
 ### `todo`
@@ -193,7 +194,8 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 - **一單一分支**。分支名含工單編號：`<類型>/<工單編號>-<簡述>`，例如 `feat/MYL-12-login-form`、`docs/MYL-7-handbook`。
 - 不在別人的分支上工作；一個分支塞多張工單的變更即違規。
-- 工單結案前分支要收尾乾淨：該合的合、該刪的刪，不留孤兒分支。Code Reviewer 在 APPROVED 時檢查這一項。
+- 工單結案前分支要收尾乾淨：該合的合、該刪的刪，不留孤兒分支。有審查單的工單由 Code Reviewer 在 APPROVED 時檢查這一項；**不經 Code Reviewer 的工單（如純文件單），由結案前的最後執行者自查，Scrum Master 巡檢兜底**。結案留言須寫明「分支已合併」或保留原因。（Pilot 卡點 #2）
+- **合併時點**：掛有審查單的實作分支，合併回 main 一律在審查單 APPROVED **之後**。使用者確認卡的核可＝同意交付進入審查，**不等於**合併授權，兩者不可互相取代。若使用者明確指示先合併，審查單改為對已合入 commit 的核驗，並在審查報告開頭註明。（Pilot 卡點 #3）
 
 ### commit
 
@@ -205,6 +207,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
   - 上一次的同意不延續到下一次。
   - 「使用者之前都同意」「這次跟上次差不多」都不構成本次授權。
 - 視覺／互動相關的改動，commit 前先同步到使用者的即時環境讓其實際測過，不是只給文字 diff；純文件／後端邏輯不受此限。
+- 🔓 **暫行放寬（MYL-10，2026-09-03 起，與全域 CLAUDE.md 同步）**：上兩條暫緩執行——允許自動 commit 不必先徵求同意；視覺／互動改動可直接 commit、不強制先實測。恢復嚴格模式時，本條與全域 CLAUDE.md 的對應條款**兩處一起改回**，不得只改一處。（Pilot 卡點 #1）
 
 ### push
 
@@ -227,5 +230,6 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 - [ ] `blockedByIssueIds` 的前置單都 `done` 了？
 - [ ] 這張單會碰到錢、對外、破壞性操作嗎？會就先發卡。
 - [ ] 要開分支了嗎？分支名帶工單編號了嗎？
+- [ ] （結案前）分支已合併或已註明保留原因？
 
 任何一項答不出來，回到對應章節處理，再開工。

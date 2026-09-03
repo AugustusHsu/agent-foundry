@@ -70,7 +70,7 @@
 - **卡在哪**：`skills/foundry-protocol/SKILL.md` 第 7 節規定「commit 需當次同意：每次 commit 前把訊息草案給使用者過目」；但使用者全域 CLAUDE.md 已依 MYL-10（2026-09-03 起）暫時放寬為「允許自動 commit，不必先徵求同意」。兩份規範對同一行為給出相反指示。
 - **為什麼卡**：foundry-protocol 寫定後，MYL-10 的暫行放寬只更新了全域 CLAUDE.md，沒有回寫到 protocol。任何 agent 掛著 protocol 工作時都會遇到「照哪份做」的矛盾；本次依文檔權威階序由使用者即時指示（CLAUDE.md 放寬條款）優先，先行自動 commit。
 - **規範怎麼改（提案，尚未執行）**：在 foundry-protocol 第 7 節 commit 規則加註 MYL-10 暫行放寬條款（含恢復條件），與全域 CLAUDE.md 的寫法對齊；恢復嚴格模式時兩處一起改回。修改權歸 protocol 維護者（CEO／使用者核可後執行）。
-- **狀態**：已記錄，待納入規範修正批次（驗收標準 4）。
+- **狀態**：✅ 已修正——對應條款已回寫 `skills/foundry-protocol/SKILL.md`（本批次 commit），重新匯入 Paperclip 的證據見 MYL-6 結案留言。
 
 ### 卡點 #2：MYL-4 結案時分支未合併，下游工單 Inputs 在 main 上打不開
 
@@ -78,18 +78,18 @@
 - **為什麼卡**：foundry-protocol 第 7 節規定「工單結案前分支要收尾乾淨：該合的合」，並指定由 Code Reviewer 在 APPROVED 時檢查；但純文件工單沒有走 Code Reviewer 審查，這條檢查就沒人執行，規則出現無人負責的縫隙。
 - **當下處置**：Scrum Master 於 2026-09-02 將 `docs/MYL-4-role-skills-templates` fast-forward 合入 main（552bb40→cff7dc8，非破壞性、未 push），解除 Inputs 阻塞。
 - **規範怎麼改（提案，尚未執行）**：protocol 第 7 節補一條——不經 Code Reviewer 的工單（如純文件單），分支收尾由「結案前的最後執行者」自查、Scrum Master 巡檢兜底；結案檢查清單加入「分支已合併或已註明保留原因」。
-- **狀態**：已記錄，待納入規範修正批次（驗收標準 4）。
+- **狀態**：✅ 已修正——對應條款已回寫 `skills/foundry-protocol/SKILL.md`（本批次 commit），重新匯入 Paperclip 的證據見 MYL-6 結案留言。
 
 ### 卡點 #3：使用者確認卡核可導致「先合併、後正式審查」順序倒置
 
 - **卡在哪**：MYL-19 的交付確認卡（決策點 #6）核可後，Developer 隨即把 `feat/MYL-19-foundry-lint` 合入本地 main、刪分支、結單；排在其後的 MYL-20 正式審查變成對「已合入 main 的 commit」做核驗，與工單原設計「審查通過後才合併」順序倒置。Code Reviewer 只能在審查報告開頭加流程備註說明。
 - **為什麼卡**：protocol 第 7 節只規定「結案前分支收尾乾淨」，沒有規定**合併時點**與審查單的先後關係；使用者確認卡的「核可」語意涵蓋了收尾動作，讓 Developer 有依據先合。兩種授權（使用者核可交付 vs 審查者核可品質）在規範裡沒有被區分開。
 - **規範怎麼改（提案，尚未執行）**：第 7 節「分支」補「合併時點」條款——掛有審查單的實作分支，合併回 main 一律在審查單 APPROVED 之後；使用者確認卡的核可＝同意交付進入審查，不等於合併授權。若使用者明確指示先合併，審查單改為對已合入 commit 的核驗，並在審查報告開頭註明（本次 MYL-20 的實際做法，就地追認為例外程序）。
-- **狀態**：已記錄，待納入規範修正批次（驗收標準 4）。
+- **狀態**：✅ 已修正——對應條款已回寫 `skills/foundry-protocol/SKILL.md`（本批次 commit），重新匯入 Paperclip 的證據見 MYL-6 結案留言。
 
 ### 卡點 #4：`unblockDescriptor.owner` 只能填自己，照規範直覺填「解除者」會整筆 PATCH 失敗
 
 - **卡在哪**：Scrum Master 把 MYL-6 重新掛回 `blocked` 時，依 protocol 第 2 節「留言註明解除者是誰」的精神把 owner 填成 QA agent，API 回「Agents may only name themselves as an unblock owner」，且**整個 PATCH 不生效**——status 與 `blockedByIssueIds` 也一併沒寫入，需重送。
 - **為什麼卡**：protocol 要求寫明「解除者」，但 Paperclip 平台限制 `unblockDescriptor.owner` 只能是 agent 自己；規範沒有提示這條平台限制與正確做法，直覺填法必踩。
 - **規範怎麼改（提案，尚未執行）**：第 2 節 `blocked` 補平台限制註記——指望其他 agent 解鎖時，把對方的工單掛進 `blockedByIssueIds` 作一級 blocker，owner 欄位一律填自己，收尾動作寫在 `action`；「解除者是誰」寫在留言即可。
-- **狀態**：已記錄，待納入規範修正批次（驗收標準 4）。
+- **狀態**：✅ 已修正——對應條款已回寫 `skills/foundry-protocol/SKILL.md`（本批次 commit），重新匯入 Paperclip 的證據見 MYL-6 結案留言。
