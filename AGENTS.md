@@ -95,6 +95,8 @@ agent-foundry/
 | `docs/pilot/pilot-log.md` | 歷史紀錄，除非要查典故否則不必讀 |
 | `skills/foundry-init/SKILL.md` | 只在導入全新專案時讀 |
 | `skills/foundry-platform/adapters/github.md` | 兩種用途各佔一半：`platform: github` 的動詞對照，與「鏡像模式」規格。要哪一個讀哪一節 |
+| `skills/foundry-platform/SKILL.md` | 9 個動詞的介面定義。只讀你要用的那個動詞那一節；§5 的「全覆蓋」裁定只在新增平台或新增文檔目標面時才需要 |
+| `skills/foundry-platform/config-schema.md` | `.foundry/config.yml` 的欄位權威。依段落取用——`gates`／`push`／`model_routing`／`docs` 四段互相獨立，別整份載 |
 | `skills/foundry-platform/adapters/paperclip.md` | 未達門檻但一樣別整份載：只讀當前平台那一份，不要三份都載 |
 <!-- FOUNDRY:BIG-FILES:END -->
 

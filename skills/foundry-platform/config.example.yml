@@ -43,14 +43,18 @@ push:
 #     code-reviewer: claude   # 目的是觀點互補，不是省額度
 #   review_provider_distinct: true   # 強制 M4；設 false 需在工單記錄理由
 
-# 文檔投影（選填，MYL-39 D-3）。整段註解掉＝不投影：
-# 文件仍在版控內，只是沒有任何機械產生的閱讀面。
+# 文檔投影（選填，MYL-39 D-3；欄位由 MYL-52 落實）。整段註解掉＝不投影：
+# 文件仍在版控內，只是沒有任何機械產生的閱讀面。這是預設狀態，不是設定缺漏。
 # 三層：source（唯一可寫的真相）→ primary（主閱讀面）→ mirror_site（精裝站，可選）。
 # 只有 source 可以人手改；投影面被人改過時，同步要停下報錯、不得覆蓋。
+# ⚠️ 本段只宣告「已開通的管道」。開通目標面本身（啟用 wiki、新建公開 repo、開 Pages）
+#    是關卡 C，不因為寫進這裡而獲得授權。
 # docs:
 #   source: docs/handbook/    # 來源目錄，相對 repo 根、以 / 結尾
-#   primary: wiki             # 主閱讀面：wiki | repo（不投影、直接讀 repo）| none
+#   primary: github-wiki      # 主閱讀面：github-wiki | repo（不投影、直接讀 repo）| none
+#   link_policy: absolute     # 指向 repo 內部路徑的連結：absolute（改寫成絕對 URL）| plain（拆為純文字）
 #   mirror_site:              # 整段省略＝不建精裝站
 #     enabled: true           # 顯式 false＝保留設定但暫時關閉
+#     target: mkdocs-mirror   # 目前只有這一個
 #     trigger: tag            # tag | merge（合併進 main 即發）| manual
 #     tag_pattern: 'handbook-v*'   # 只在 trigger: tag 時有意義
