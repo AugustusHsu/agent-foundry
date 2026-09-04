@@ -100,7 +100,7 @@
 
 ## 5. 併發與競態：多個 run 共用同一個 workspace
 
-本 repo 的 workspace 是**共用**的，heartbeat run 可能併行。以下三件事都真的發生過。
+本 repo 的 workspace 是**共用**的，heartbeat run 可能併行；`X3` 起也一併收「mkdocs 渲染出來的東西跟來源字面不一樣」這一類踩點。以下每一條都真的發生過。
 
 - `X1` **commit 落到別人的分支。** 兩個 run 併行時 checkout 會互相干擾（MYL-23 的 commit 曾落到 MYL-27 的分支）。
   → **commit 前先驗 `git symbolic-ref --short HEAD`**，不要假設分支還是你切的那條。
@@ -108,6 +108,9 @@
   → **發佈後要驗遠端實際內容，不能只看腳本回報成功**；發現被蓋掉就以最新 main 重跑。
 - `X3` **手冊錨點與 mkdocs slug 不符。** 中文標題的錨點不是中文字面，是 mkdocs 產生的 slug（`#1`、`#3-hitl`…）。手寫中文錨點會變成點了不跳轉的死連結（MYL-25 踩過）。
   → 已納入 `foundry-lint --selfcheck` 的機械檢查。
+- `X4` **兩塊連續的 blockquote 會被 mkdocs 併成同一塊，空行擋不住。** Python-Markdown 的 blockquote 處理器看的是「前一個兄弟節點是不是 blockquote」，是就往裡面接。所以「`>` 戳記 → 空行 → `>` 章引言」渲染出來是**單一 `<blockquote>` 內含兩個 `<p>`**，視覺上一條左側豎線同時包住戳記與引言。MYL-49 在公開站實測 `04`／`06`／`07` 三章皆如此；`03-workflow` 沒事只是因為它戳記後面接的是一般段落，不是錨點挑得比較好。
+  → **MYL-44 判定不修**（2026-09-04）：戳記的功能目的（讀者看得到最後對照的 protocol sha）已達成，`handbook-stamp` 要驗的東西全部成立，嚴重度純視覺。改戳記形式（例如換成斜體段落）會連動 `STAMP_RE`、pre-commit 觸發器、protocol 第 7 節條文、四章來源檔，還要再走一次發佈循環與一次視覺覆驗——為一條豎線不值得。**下一個看到的人請不要順手「修好」它**，要動先在工單裡把上面這串連動成本重新算一次。
+  → 連帶的環境事實：**agent 在本機驗不了渲染。** 這個 workspace 的 `python3` 沒有 `markdown`、沒有 `mkdocs`，也沒有 `pip`（CLAUDE.md 第 6 節列的 `mkdocs serve` 是給使用者的，不是 agent 跑得動的）。⇒ 任何「這樣寫渲染出來會長怎樣」的假設，都只能靠公開站實測驗證，而那得先發佈——順序是反的。動手改渲染相關的東西前先認清這件事：你手上沒有便宜的驗證手段。
 
 ### 兩份 nav 的結構性漂移
 
