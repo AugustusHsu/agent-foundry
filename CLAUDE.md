@@ -92,7 +92,7 @@ agent-foundry/
 # 文件是否符合模板必備章節（type: brd|prd|hld|lld|review-report|test-plan）
 python3 tools/foundry-lint/foundry_lint.py --type prd docs/features/<模組>/PRD.md
 
-# repo 規範自檢（規則 ID 引用、手冊 nav 一致性、錨點、雙入口同步）
+# repo 規範自檢（規則 ID 引用、手冊 nav 一致性、錨點、雙入口同步、相對連結）
 python3 tools/foundry-lint/foundry_lint.py --selfcheck
 
 # 測試

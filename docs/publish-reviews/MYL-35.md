@@ -24,7 +24,7 @@ reviewed_at: 2026-09-03
 | --- | --- | --- | --- |
 | 1 | 來源變更已合併進私有 main | ✅ | `docs/MYL-35-platform-consistency` 已 `--no-ff` 合併為 `a474c4a` 並 push origin/main（`9d47b72..a474c4a`）；`main` 與 `origin/main` 同為 `a474c4a`，工單分支本地與遠端皆已刪除 |
 | 2 | 同步範圍僅限既定目錄 `docs/handbook/` | ✅ | `git diff 9d47b72..a474c4a --stat -- docs/handbook/` ＝ `docs/handbook/08-cross-platform.md` 單檔（+5 −1）。同區間的 `skills/`、`.foundry/config.yml`、`docs/features/cross-platform/` 屬規則層與設計文件，腳本只讀 `docs/handbook/`，公開站僅收到該章異動 |
-| 3 | 私有連結過濾輸出檢查無異常 | ✅ | 本次新增內容只有一條連結 `[第 6 章](06-org-structure.md)`——章內相對連結，公開站各章平移後仍可解析，與既有章節（如第 4 章連結）寫法一致。未新增任何指向 `skills/`、`templates/`、`docs/pilot/` 或私有 repo 的超連結，過濾器不應對本次內容作動；腳本 `filtered:` 輸出見工單結案留言 |
+| 3 | 私有連結過濾輸出檢查無異常 | ✅ | 本次新增內容只有一條連結，指向 [第 6 章](../handbook/06-org-structure.md)（手冊原文為章內相對寫法 `06-org-structure.md`）——公開站各章平移後仍可解析，與既有章節（如第 4 章連結）寫法一致。未新增任何指向 `skills/`、`templates/`、`docs/pilot/` 或私有 repo 的超連結，過濾器不應對本次內容作動；腳本 `filtered:` 輸出見工單結案留言 |
 
 ## 3. 公開適切性檢查
 
