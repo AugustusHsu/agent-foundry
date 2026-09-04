@@ -9,6 +9,9 @@ foundry: 1
 # 規則層 .md 與程式碼仍在本 git repo，兩者分工見 foundry-protocol「平台中立原則」。
 platform: paperclip
 
+# 刻意不寫 mirror_platform：工單鏡像尚未實作（MYL-39 N2 才做）。
+# 先寫進來，設定檔會宣稱「外面看得到」而實際沒有——讀者於是不去同步，比整段缺席更糟。
+
 platform_options:
   paperclip:
     company_id: "${PAPERCLIP_COMPANY_ID}"            # My Lab；label 為公司層資源
@@ -31,3 +34,15 @@ push:
   # 本欄無法表達，故本 repo 的 push 授權以 protocol 第 7、9 節分級表為準，本欄只承載該表的 P3 部分。
   #   ⚠️ 這條例外是使用者對「本 repo」的個別裁定，**不隨 foundry-init／foundry-adopt 傳染**：
   #      導入 Foundry 的其他專案一律照本欄字面執行——main push 無例外，不得援引本 repo 前例放行。
+
+# 三層文檔投影（MYL-39 計畫 v5 §2「D-3」，使用者於確認卡 7598a79e 整包核可；本段值即該節寫定的值）。
+# 只有 source 這一層可以人手改；wiki 與精裝站都是機械投影，手改會被下次同步覆蓋。
+# 本段由 MYL-51 依上述核可寫入——依據是使用者核可的計畫，且只動 docs 段、未碰 gates／push
+# （那兩段才是使用者裁定的授權邊界）。
+docs:
+  source: docs/handbook/     # 唯一可寫的真相，留在版控內
+  primary: wiki              # 主閱讀面：wiki | repo | none
+  mirror_site:
+    enabled: true            # 精裝站（mkdocs）：本專案開
+    trigger: tag             # tag | merge | manual
+    tag_pattern: 'handbook-v*'

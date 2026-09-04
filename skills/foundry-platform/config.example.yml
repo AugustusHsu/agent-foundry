@@ -5,6 +5,13 @@ foundry: 1
 
 platform: github            # github | local-md | paperclip
 
+# 對外可見面的鏡像平台（選填，MYL-39 T-2）。整段註解掉＝不鏡像。
+# 語意：執行與喚醒仍在上面的 platform，工單「單向」鏡像到這裡供外部閱讀；
+# 鏡像端唯讀——在那邊改狀態不會回寫，下次同步會被覆蓋。
+# 值域同 platform，但必須是 adapter 寫了「鏡像模式」一節的平台（目前只有 github）。
+# 鏡像端的 adapter 選項寫在下面 platform_options 的同名鍵，不另開結構。
+# mirror_platform: github
+
 platform_options:           # 選填；省略時用各 adapter 預設
   github:
     project_title: Foundry  # GitHub ProjectV2 標題
@@ -35,3 +42,15 @@ push:
 #     developer: codex        # 寫 code 與審 code 刻意分開兩家（M4），
 #     code-reviewer: claude   # 目的是觀點互補，不是省額度
 #   review_provider_distinct: true   # 強制 M4；設 false 需在工單記錄理由
+
+# 文檔投影（選填，MYL-39 D-3）。整段註解掉＝不投影：
+# 文件仍在版控內，只是沒有任何機械產生的閱讀面。
+# 三層：source（唯一可寫的真相）→ primary（主閱讀面）→ mirror_site（精裝站，可選）。
+# 只有 source 可以人手改；投影面被人改過時，同步要停下報錯、不得覆蓋。
+# docs:
+#   source: docs/handbook/    # 來源目錄，相對 repo 根、以 / 結尾
+#   primary: wiki             # 主閱讀面：wiki | repo（不投影、直接讀 repo）| none
+#   mirror_site:              # 整段省略＝不建精裝站
+#     enabled: true           # 顯式 false＝保留設定但暫時關閉
+#     trigger: tag            # tag | merge（合併進 main 即發）| manual
+#     tag_pattern: 'handbook-v*'   # 只在 trigger: tag 時有意義

@@ -160,6 +160,123 @@ gh project item-list <PROJECT> --owner <OWNER> --format json --limit 200 \
 
 - **查證**：parent → `gh issue view <P>` 網頁版 sub-issues 區塊（或 GraphQL 查 `subIssues`）；blocked_by → `gh issue view <N> --comments | grep 'Blocked-by:'`。
 
+## 鏡像模式（`mirror_platform: github`）
+
+（MYL-39 計畫 v5 §3 定案；欄位規格見 `../config-schema.md` 的 `mirror_platform` 段。）
+
+`platform: github` 時，上面的動詞對照就是全部——真相在這裡。**鏡像模式是另一回事**：真相在別的平台
+（本 repo 是 Paperclip），GitHub 只承載**可見面**。差別具體在三點：
+
+- **鏡像 issue 唯讀。** 在這裡留言、改 Status、close，都不會回到來源端，而且會在下一次同步被覆蓋。
+- **鏡像端不承載指派。** GitHub 的 assignee 喚不動任何 agent，設了只會讓人以為在這裡能派工。
+- **同步是【自律】的。** 沒有任何東西會在你漏同步的當下擋住你；兜底的是下面的對帳，而對帳只在
+  `make check`／CI 跑——也就是**下一次有人 commit** 才會發現。知道這件事之後再決定要不要偷懶。
+
+**授權定位**：鏡像是對外動作（`H4`／`G-C`）。使用者已核可**管道本身**（MYL-39 計畫 v5，含「issue 公開、
+標題與內文都對外可見」這項知情事項），因此每張單的鏡像**不逐張發卡**；逐張還要判斷的只剩「這張單的內容
+適不適合公開」，見時機 1。**這個授權綁本 repo 的那一次核可，不隨 `foundry-init`／`foundry-adopt` 傳染**——
+別的專案要開鏡像，由該專案的使用者自己核可一次。
+
+### 對應標記（唯一權威）
+
+鏡像 issue 的 body **第一行**固定為（其後空一行才是正文）：
+
+```
+Foundry-Source: paperclip/MYL-123
+```
+
+格式 `Foundry-Source: <來源平台>/<issue_ref>`，解析用 `^Foundry-Source: ([a-z-]+)/(\S+)$`。
+
+- **放 body 首行、不放 label**：label 值域是 `init_structure` 建的固定集合，一單一值的動態 label 會把
+  label 空間撐爆；body 首行則 `gh issue list --json body` 一次撈得回來，**不依賴 GitHub 的搜尋索引**
+  （`--search` 有建索引延遲，剛建的單查不到，對帳會誤報漏建）。
+- 建單後在**來源工單**留一行 `Mirrored-to: github#<N>`（用抽象動詞 `comment`）。這只是反查快取；
+  **兩邊衝突時以 body 首行標記為準**，否則對應關係本身就有兩份真相。
+- 經網頁編輯過的 body 行尾可能是 CRLF，解析首行前先剝掉尾端 `\r`。
+
+### 時機 1：建單
+
+在來源端 `create_issue` **成功之後**（順序不能反：單號的發源地是來源端）：
+
+1. 組 body：首行標記 → 空行 → 來源描述全文 → 末行附一句唯讀聲明
+   （`> 真相與指派在 <來源平台>；本 issue 是唯讀鏡像，在此留言不會觸發任何 agent。`）。
+2. 建單，label 用 `init_structure` 建的同一套，不另建：
+
+   ```sh
+   gh issue create --title "<來源標題>" --body-file <mirror-body.md> \
+     --label "<type_label>" [--label "role:<角色>"] [--label "size:<規模>"]
+   ```
+
+3. `gh project item-add <PROJECT> --owner <OWNER> --url <上一步輸出的 issue URL>`，Status 設 `Todo`（附錄 B）。
+4. **不設 assignee**；負責角色以 `role:*` label 表達。
+5. 回來源工單留言 `Mirrored-to: github#<N>`。
+
+**不鏡像的情況**：工單內容不宜公開時（鏡像 repo 是 public，標題與內文全部對外可見）**不要建**，改在
+來源工單留一行 `Mirror-skipped: <理由>`——對帳看到這行就不算漏建。拿不準算不算「不宜公開」時不要鏡像：
+沒鏡像可以事後補，送出去的收不回來。
+
+- **查證**：`gh issue view <N> --json body --jq '.body' | head -1` 等於標記行；
+  `gh issue view <N> --json assignees --jq '.assignees'` 為空陣列。
+
+### 時機 2：改狀態
+
+來源端狀態變更成功之後，對鏡像 issue 跑本文 `update_status` **全套**（project 的 Status 欄位 ＋ issue 開關），
+六態對照沿用同一張表，不另立一套。
+
+- **查證**：同 `update_status`。
+
+### 時機 3：結案
+
+進 `done`／`cancelled` 時，除了 `update_status` 的 close 之外，**追加一則結案留言**：一行結論
+（審查 verdict、撤回理由或取代它的單號）＋來源工單的最終狀態。理由是可見面的價值在於外部看得到**結果**——
+只有一個 closed 狀態，讀者分不出這單是做完了、不做了、還是被別的單取代了。
+
+來源端日後離開 `done`／`cancelled` 時照時機 2 走（`gh issue reopen` ＋ Status 改回）。
+
+- **查證**：`gh issue view <N> --json state,stateReason,comments`。
+
+### 對帳
+
+比對三個欄位，任一不合即紅燈：
+
+| 欄位 | 來源端 | 鏡像端 | 判定 |
+| --- | --- | --- | --- |
+| 單號對應 | `issue_ref` | body 首行標記 | 每張來源工單恰好對到一個鏡像 issue |
+| 狀態 | 六態 | project 的 Status 選項名 | 依 `update_status` 的六態對照表換算後相同 |
+| 開關狀態 | `done`／`cancelled` 為關，其餘為開 | issue 的 `state` | 兩邊一致 |
+
+一次撈完鏡像端（直接解析首行，不用 `--search`）：
+
+```sh
+gh issue list --state all --limit 500 --json number,state,body \
+  | jq -r '.[] | (((.body // "") | split("\n") | .[0] // "") | sub("\r$";"")) as $h
+           | select($h | startswith("Foundry-Source: "))
+           | [($h | ltrimstr("Foundry-Source: ")), .number, .state] | @tsv'
+```
+
+（`// ""` 兩層都要：空 body 的 issue 在 API 回的是 `null`，而 `"" | split("\n")` 回的是空陣列——
+少一層，整個對帳會被一張沒有內文的 issue 中斷，而錯誤訊息不會告訴你是哪一張。）
+
+三種紅燈，**都只回報、不自動修**：
+
+- **漏建**：來源端有、鏡像端找不到對應標記，且來源端沒有 `Mirror-skipped:` 留言。
+- **孤兒**：鏡像端的標記指到來源端不存在的單。**沒有標記的 issue 不算孤兒**——那是人手開的，不歸鏡像管，
+  別把它當殘骸清掉。
+- **一對多**：同一個 `issue_ref` 對到兩個以上 issue。修法是關掉多餘的那個，而關／刪對外資源屬 `G-C`，
+  要使用者核可；對帳自己不動手。
+
+`--limit` 要蓋得住鏡像端的實際單數，超過時分頁撈完，**不得靜默截斷**——截斷過的對帳會把漏建報成「全過」，
+比不對帳更危險。
+
+### 這一節刻意不做的事
+
+| 不做 | 為什麼 |
+| --- | --- |
+| 對帳標題與內文 | 對帳要抓的是「漏同步」，單號／狀態／開關三者已足以判定。全文比對的成本與價值不成比例，真的踩到再開單。 |
+| 鏡像來源端的每一則留言 | 那會讓 GitHub 變成第二個討論場，也就是第二份真相。只有結案摘要例外——那是結果，不是過程。 |
+| 接受鏡像端的任何寫入 | 見本節開頭：唯讀。要改回來源端改。 |
+| 鏡像父子／`blocked_by` 關係 | 掛關係要求兩邊都已存在鏡像，牽涉建單順序與重試語意，本規格不定；先讓三個時機穩定。 |
+
 ## 附錄 A：查 project 編號
 
 ```sh
