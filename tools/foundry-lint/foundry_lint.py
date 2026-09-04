@@ -2,12 +2,13 @@
 """foundry-lint：檢查文件是否含模板規定的必備二級標題，並提供 repo 規範自檢。
 
 規格來源：docs/features/foundry-lint/LLD.md（介面、資料模型、流程、錯誤表均依該文件）。
-`--selfcheck` 為 MYL-36 增訂的機械層閘門，四項檢查各對應一個實際踩過的缺陷。
+`--selfcheck` 為 MYL-36 增訂的機械層閘門，每項檢查各對應一個實際踩過的缺陷。
 exit code：0＝通過、1＝不通過、2＝執行／使用錯誤。
 """
 
 import argparse
 import json
+import os
 import re
 import sys
 import unicodedata
@@ -121,13 +122,17 @@ def render_json(result: CheckResult) -> str:
 # ══════════════════════ selfcheck：repo 規範自檢（MYL-36） ══════════════════════
 #
 # 每一項檢查都對應一個實際發生過的缺陷——不是預想的風險：
-#   entry-sync  雙入口 CLAUDE.md／AGENTS.md 共用正文漂移
-#   nav-sync    手冊章節與兩份 nav 不同步 → 公開站漏章（MYL-31）
-#   anchors     中文錨點與 mkdocs slug 不符 → 點了不跳轉（MYL-25）
-#   rule-ids    引用了不存在的規則 ID（protocol 第 11 節）
-#   big-files   入口檔的大檔清單漏列 → 接手者整份載入（MYL-42）
+#   entry-sync      雙入口 CLAUDE.md／AGENTS.md 共用正文漂移
+#   nav-sync        手冊章節與兩份 nav 不同步 → 公開站漏章（MYL-31）
+#   anchors         中文錨點與 mkdocs slug 不符 → 點了不跳轉（MYL-25）
+#   rule-ids        引用了不存在的規則 ID（protocol 第 11 節）
+#   big-files       入口檔的大檔清單漏列 → 接手者整份載入（MYL-42）
+#   internal-links  相對連結指向不存在的檔案 → 點了 404（MYL-41）
 #
 # （這裡刻意不寫「共 N 項」——那種數字沒有人會回來改，正是 MYL-42 要收掉的漂移。）
+
+#: 自檢掃描 .md 時一律略過的頂層目錄（版控內部、依賴、mkdocs 建置輸出）。
+SKIP_DIRS = (".git", "node_modules", "site")
 
 SHARED_BEGIN = "<!-- FOUNDRY:SHARED-BODY:BEGIN -->"
 SHARED_END = "<!-- FOUNDRY:SHARED-BODY:END -->"
@@ -156,6 +161,10 @@ BIG_SCAN_DIRS = ("skills", "docs")
 BIG_SKIP_PREFIXES = (("docs", "features"),)
 #: 清單裡的路徑一律寫成 `反引號包住的 .md 路徑`。
 MD_PATH_RE = re.compile(r"`([^`\n]+\.md)`")
+
+#: 不需驗檔案存在性的連結目標：帶協定的 URL（`https:`、`mailto:`）、
+#: 協定相對網址（`//host/…`）、以及純錨點（`#anchor`，同頁跳轉）。
+EXTERNAL_TARGET_RE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.-]*:|//|#)")
 
 
 @dataclass
@@ -222,6 +231,57 @@ def anchors_of(text: str) -> set:
             seen[slug] = 0
         anchors.add(slug)
     return anchors
+
+
+def strip_code(text: str) -> str:
+    """把圍欄區塊與行內程式碼挖掉，只留「真的會被渲染成連結」的正文。
+
+    圍欄裡的 `[文字](路徑)` 是語法示例，反引號裡的是路徑字面——
+    兩者都不是連結，掃了只會製造誤報（MYL-39 計畫 v3 §7 明確不做）。
+    逐行處理並保留行數，讓挖掉的內容不會把上下兩行黏成一條假連結。
+    """
+    out = []
+    in_fence = False
+    for line in text.splitlines():
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
+            out.append("")
+            continue
+        out.append("" if in_fence else INLINE_CODE_RE.sub(" ", line))
+    return "\n".join(out)
+
+
+def check_internal_links(root: Path) -> SelfcheckResult:
+    """markdown 相對連結 `[文字](路徑)` 的目標必須真的存在。
+
+    MYL-41：`docs/publish-reviews/` 曾用裸章節檔名連手冊，而相對連結是從
+    **所在目錄**解析、不是從 repo 根——`03-workflow.md` 於是指到不存在的
+    `docs/publish-reviews/03-workflow.md`。閘門證據文件裡的死連結躺在 main 上，
+    正是因為前四項自檢沒有一項驗目標存在性。
+
+    只驗檔案存在；錨點正確性歸 anchors 那一項，外部 URL 的可達性一律不驗。
+    """
+    res = SelfcheckResult("internal-links", "markdown 相對連結目標存在")
+    total = 0
+    for path in sorted(root.rglob("*.md")):
+        rel = path.relative_to(root)
+        if rel.parts[0] in SKIP_DIRS:
+            continue
+        for target in MD_LINK_TARGET_RE.findall(strip_code(read_text(path))):
+            if EXTERNAL_TARGET_RE.match(target):
+                continue
+            file_part = target.partition("#")[0]
+            if not file_part:
+                continue
+            total += 1
+            if not (path.parent / file_part).exists():
+                resolved = os.path.normpath(str(rel.parent / file_part))
+                res.failures.append(
+                    f"{rel} 連到 `{target}`，但目標 {resolved} 不存在"
+                    "——相對連結從所在目錄解析，不是從 repo 根"
+                )
+    res.summary += f"（相對連結 {total} 條）"
+    return res
 
 
 def check_entry_sync(root: Path) -> SelfcheckResult:
@@ -398,7 +458,7 @@ def check_rule_ids(root: Path) -> SelfcheckResult:
     # repo 內所有 .md 對已登記前綴的引用，都必須落在已登記範圍內。
     for path in sorted(root.rglob("*.md")):
         rel = path.relative_to(root)
-        if rel.parts[0] in (".git", "node_modules", "site"):
+        if rel.parts[0] in SKIP_DIRS:
             continue
         for tok in set(BACKTICK_RE.findall(read_text(path))):
             m = ID_TOKEN_RE.match(tok)
@@ -484,7 +544,7 @@ def check_big_files(root: Path) -> SelfcheckResult:
 
 
 SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
-              check_big_files)
+              check_big_files, check_internal_links)
 
 
 def run_selfcheck(root: Path) -> list:
@@ -534,7 +594,8 @@ def parse_args(argv):
     parser.add_argument(
         "--selfcheck",
         action="store_true",
-        help="跑 repo 規範自檢（雙入口同步、手冊 nav、錨點、規則 ID、大檔清單），不需 --type／file",
+        help="跑 repo 規範自檢（雙入口同步、手冊 nav、錨點、規則 ID、大檔清單、相對連結），"
+             "不需 --type／file",
     )
     parser.add_argument("--repo-root", default=None, help="自檢的 repo 根目錄，預設為本檔上溯兩層")
     parser.add_argument("file", nargs="?")

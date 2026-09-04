@@ -25,7 +25,7 @@ reviewed_at: 2026-09-03
 | --- | --- | --- | --- |
 | 1 | 來源變更已合併進私有 main | ✅ | `c6cf06c` 已由 merge commit `214f0ee` 併入 main 並 push；`git merge-base --is-ancestor c6cf06c main` 與 `origin/main` 皆通過（腳本閘門自動複驗） |
 | 2 | 同步範圍僅限既定目錄 `docs/handbook/` | ✅ | `git diff --stat f1d8603 HEAD -- docs/handbook` 只有 `02-commands.md`、`03-workflow.md` 兩檔；本單其餘變更落在 `scripts/`、`skills/`、`templates/`、`docs/publish-reviews/`，皆不在腳本複製範圍內 |
-| 3 | 私有連結過濾輸出檢查無異常 | ✅ | 新增內容的 markdown 連結只有 `[第 3 章](03-workflow.md)`、`[第 4 章](04-decision-points.md)`，兩者都是公開站 nav 內的章節；`grep` 新增行無 `skills/`、`templates/`、`docs/pilot` 字樣，過濾規則無須動作 |
+| 3 | 私有連結過濾輸出檢查無異常 | ✅ | 新增內容的 markdown 連結只有兩條，指向 [第 3 章](../handbook/03-workflow.md)、[第 4 章](../handbook/04-decision-points.md)（手冊原文為章內相對寫法 `03-workflow.md`／`04-decision-points.md`，相對 `docs/handbook/` 解析），兩者都是公開站 nav 內的章節；`grep` 新增行無 `skills/`、`templates/`、`docs/pilot` 字樣，過濾規則無須動作 |
 
 ## 3. 公開適切性檢查
 

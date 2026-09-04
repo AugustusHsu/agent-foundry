@@ -414,6 +414,65 @@ class SelfcheckTest(unittest.TestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("門檻" in f and "對不上" in f for f in res.failures))
 
+    def test_相對連結指向不存在的檔案被擋下(self):
+        """MYL-41 的原始缺陷：用裸章節檔名連手冊，從所在目錄解析會落空。"""
+        p = self.root / "docs" / "publish-reviews" / "MYL-24.md"
+        p.write_text(p.read_text(encoding="utf-8") + "\n見 [第 3 章](03-workflow.md)。\n",
+                     encoding="utf-8")
+        res = self._named("internal-links")
+        self.assertFalse(res.passed)
+        self.assertEqual(len(res.failures), 1)
+        self.assertIn("docs/publish-reviews/MYL-24.md", res.failures[0])
+        self.assertIn("docs/publish-reviews/03-workflow.md", res.failures[0])
+
+    def test_正確的相對連結不誤報(self):
+        p = self.root / "docs" / "publish-reviews" / "MYL-24.md"
+        p.write_text(
+            p.read_text(encoding="utf-8")
+            + "\n見 [第 3 章](../handbook/03-workflow.md)。\n",
+            encoding="utf-8",
+        )
+        self.assertTrue(self._named("internal-links").passed)
+
+    def test_錨點與外部_URL_不誤報(self):
+        p = self.root / "docs" / "handbook" / "05-troubleshooting.md"
+        p.write_text(
+            p.read_text(encoding="utf-8")
+            + "\n[同頁](#1)、[站外](https://example.com/x.md)、"
+            "[信](mailto:a@b.c)、[協定相對](//cdn.example.com/y.md)\n",
+            encoding="utf-8",
+        )
+        self.assertTrue(self._named("internal-links").passed)
+
+    def test_反引號與圍欄內的連結語法不掃(self):
+        """散文裡的路徑示例不該誤報（MYL-39 計畫 v3 §7 明確不做）。"""
+        p = self.root / "docs" / "handbook" / "05-troubleshooting.md"
+        p.write_text(
+            p.read_text(encoding="utf-8")
+            + "\n寫法是 `[第 3 章](03-workflow.md)` 這樣。\n"
+            "\n```markdown\n[範例](完全不存在.md)\n```\n",
+            encoding="utf-8",
+        )
+        self.assertTrue(self._named("internal-links").passed)
+
+    def test_帶錨點的相對連結只驗檔案存在(self):
+        p = self.root / "docs" / "handbook" / "05-troubleshooting.md"
+        p.write_text(
+            p.read_text(encoding="utf-8")
+            + "\n[在](03-workflow.md#隨便一個不存在的錨點)、[不在](沒這檔.md#1)\n",
+            encoding="utf-8",
+        )
+        res = self._named("internal-links")
+        self.assertFalse(res.passed)
+        self.assertEqual(len(res.failures), 1)
+        self.assertIn("沒這檔.md", res.failures[0])
+
+    def test_指向目錄的相對連結算存在(self):
+        p = self.root / "CLAUDE.md"
+        p.write_text(p.read_text(encoding="utf-8") + "\n[手冊](docs/handbook/)\n",
+                     encoding="utf-8")
+        self.assertTrue(self._named("internal-links").passed)
+
     def test_json_格式可解析且與_exit_code_一致(self):
         (self.root / "AGENTS.md").unlink()
         proc = run_cli("--selfcheck", "--repo-root", str(self.root),
@@ -423,7 +482,7 @@ class SelfcheckTest(unittest.TestCase):
         self.assertFalse(data["passed"])
         self.assertEqual({c["name"] for c in data["checks"]},
                          {"entry-sync", "nav-sync", "anchors", "rule-ids",
-                          "big-files"})
+                          "big-files", "internal-links"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()
