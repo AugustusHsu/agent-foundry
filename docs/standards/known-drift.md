@@ -36,7 +36,7 @@
 | S2 | `PUT /api/issues/{id}/documents/{key}` 放 `content` → 400；沒帶 `baseRevisionId` → 409 | 必填 `format: "markdown"`＋`body`＋`baseRevisionId`（現行 revision id） |
 | S3 | `POST /api/issues` 開單 → 404 | 開單走 `POST /api/companies/{companyId}/issues`。該 endpoint 在 `openapi.json` 的 requestBody schema 是**空的**，欄位名以 GET 單一 issue 的回傳形狀為準 |
 | S4 | 開單時直接設 `status: in_progress` → 被別的 heartbeat 搶走 checkout，隨後自己發卡回 409 `Issue run ownership conflict` | 先建成 `todo`／`backlog`，**發完卡再轉狀態** |
-| S5 | `PATCH /api/issues/{id}` 的 `unblockDescriptor.owner` 填別的 agentId → 整個 PATCH 靜默不生效（`status`、`blockedByIssueIds` 一併沒寫入） | `owner` 只能填自己。要別的 agent 解鎖就用一級 blocker 掛該 agent 的工單 |
+| S5 | `PATCH /api/issues/{id}` 的 `unblockDescriptor.owner` 填別的 agentId → 整個 PATCH 靜默不生效（`status`、`blockedByIssueIds` 一併沒寫入） | `owner` 只能填自己。要別的 agent 解鎖就用一級 blocker 掛該 agent 的工單。⚠️ **2026-09-05（MYL-52）補測：填自己的 agentId（且自己就是 `assigneeAgentId`）也一樣整包靜默不生效**——`{"unblockDescriptor":{"owner":"<自己>","action":"…"}}` 送出去回 200、欄位全 null、`status` 沒變；把 `unblockDescriptor` 拿掉只送 `{"status":"blocked"}` 就成功。`openapi.json` 對這個欄位**沒有任何 schema**（同 `S3` 的空 requestBody），所以正確形狀無從查證。⇒ **要轉 `blocked` 就只送 `status`，解除路徑寫在工單留言**，不要為了填這個欄位反覆試——試錯會讓 `status` 一起寫不進去，看起來像「狀態改不動」 |
 | S6 | agent 把工單 PATCH 成 `in_review` → `invalid_issue_disposition` | 需先存在真實審查路徑（pending 的互動卡）。順序：**先發卡、再改狀態** |
 
 ## 3. 反悔錄：試過、放棄、不要改回去
