@@ -4,6 +4,7 @@
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,23 @@ SCRIPT = Path(__file__).resolve().with_name("foundry_lint.py")
 REPO_ROOT = SCRIPT.parent.parent.parent
 REAL_TEMPLATES_DIR = REPO_ROOT / "templates"
 REAL_PRD = REPO_ROOT / "docs" / "features" / "foundry-lint" / "PRD.md"
+
+# ── 測試程序一開始就把繼承來的 `GIT_*` 全部清掉（MYL-52 修）─────────────────
+# git 呼叫 hook 時會設 `GIT_DIR`／`GIT_INDEX_FILE`。這些變數勝過 `git -C <路徑>`，
+# 於是在 hook 底下跑的測試裡，`git -C <臨時目錄> init` 會回頭指到**外層 repo**：
+# 臨時 repo 根本沒建起來，接著的 commit 觸發外層 pre-commit、在臨時目錄找不到
+# `.pre-commit-config.yaml` 而整組紅。
+#
+# 症狀很難認：**單獨跑全過、在 `pre-commit` 裡跑同一組全敗**。而 `foundry-tests`
+# 這個 hook 只在 staged 檔案含 `tools/` 時才觸發，所以它平常看不見，只在動到
+# tools/ 的那次 commit 現形——MYL-52 就是這樣撞上的。
+#
+# 在**程序層**清而不是逐一傳 `env=`：`foundry_lint.git_run` 也是 shell out，
+# 逐一傳只擋得住測試自己下的那幾道 git 指令，擋不住受測程式碼下的。
+for _leaked in [k for k in os.environ if k.startswith("GIT_")]:
+    del os.environ[_leaked]
+
+CLEAN_GIT_ENV = dict(os.environ)
 
 FAKE_TEMPLATE = "# 模板\n\n## 1. 概述\n\n內文\n\n## 2. 需求\n\n## 3. 未決事項\n"
 
@@ -526,7 +544,7 @@ class HandbookStampTest(unittest.TestCase):
     # ── 輔助 ──────────────────────────────────────────────────────────
     def git(self, *args):
         proc = subprocess.run(("git", "-C", str(self.root)) + args,
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, env=CLEAN_GIT_ENV)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         return proc.stdout.strip()
 
