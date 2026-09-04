@@ -34,7 +34,7 @@
 
 | 我想要… | 前往 |
 | --- | --- |
-| 改全隊硬規則（改了會改變每個 agent 的行為） | `skills/foundry-protocol/SKILL.md`。新增條款要同步在第 11 節登記規則 ID，否則 `--selfcheck` 擋下 |
+| 改全隊硬規則（改了會改變每個 agent 的行為） | `skills/foundry-protocol/SKILL.md`。新增條款要同步在第 11 節登記規則 ID，否則 `--selfcheck` 擋下；改動同時觸發手冊同步戳記（見 §7） |
 | 改某個角色獨有的判準 | `skills/roles/<角色>/SKILL.md`。跨角色共通的規則屬 protocol，別寫進角色 skill |
 | 改使用手冊 | `docs/handbook/`，並照 §7 走完發佈四步；新增章節要改**兩份** nav |
 | 加一項機械檢查 | `tools/foundry-lint/foundry_lint.py` 的 `SELFCHECKS` ＋同目錄測試（每項檢查都要配一個擋得住的反例），`make check` 驗 |
@@ -122,7 +122,7 @@ agent-foundry/
 # 文件是否符合模板必備章節（type: brd|prd|hld|lld|review-report|test-plan）
 python3 tools/foundry-lint/foundry_lint.py --type prd docs/features/<模組>/PRD.md
 
-# repo 規範自檢（雙入口同步、手冊 nav 一致性、錨點、規則 ID 引用、大檔清單、相對連結）
+# repo 規範自檢（雙入口同步、手冊 nav 一致性、錨點、規則 ID 引用、大檔清單、相對連結、手冊戳記）
 python3 tools/foundry-lint/foundry_lint.py --selfcheck
 
 # 測試
@@ -149,6 +149,10 @@ mkdocs serve
 
 ⚠️ 新增手冊章節時要改**兩份 nav**：`mkdocs.yml` 與 `scripts/publish-handbook.sh` 內嵌的那份。
 只改一份會導致公開站漏章（known-drift 已記錄此結構性漂移，`--selfcheck` 會擋）。
+
+反方向也有一條（MYL-44）：**動到 protocol 的工單要同步手冊**。`03`／`04`／`06`／`07`
+四章各掛一行「最後對照 protocol」戳記，pre-commit 在「改了 protocol 卻沒動手冊」時擋下，
+`--selfcheck` 的 `handbook-stamp` 再驗戳記沒落後。判準與被擋下時的三條處置見 protocol 第 7 節。
 <!-- FOUNDRY:SHARED-BODY:END -->
 
 ## 8. 工具名對應（Codex／通用 harness）

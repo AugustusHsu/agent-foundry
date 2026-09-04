@@ -50,9 +50,9 @@ for ref in main origin/main; do
               "先把工作分支合併進 main 並推送，再重跑。"
 done
 
-APPROVAL="$(python3 - "$REVIEW_DIR" "$HANDBOOK_SHA" <<'PYEOF'
+REVIEWS="$(python3 - "$REVIEW_DIR" <<'PYEOF'
 import re, sys, pathlib
-d, sha = pathlib.Path(sys.argv[1]), sys.argv[2]
+d = pathlib.Path(sys.argv[1])
 def field(head, key):
     m = re.search(rf'^{key}:\s*(.+?)\s*$', head, re.M)
     return m.group(1).strip('"\'') if m else ''
@@ -62,18 +62,59 @@ for p in sorted(d.glob('*.md')) if d.is_dir() else []:
         continue
     head, commit = m.group(1), field(m.group(1), 'handbook_commit')
     # 允許短 sha，但至少 7 碼，避免空值或過短前綴誤中
-    if field(head, 'verdict') == 'APPROVED' and len(commit) >= 7 and sha.startswith(commit):
-        print(f"{p.name}|{field(head, 'issue')}|{field(head, 'reviewer')}")
-        break
+    if field(head, 'verdict') == 'APPROVED' and len(commit) >= 7:
+        print(f"{p.name}|{field(head, 'issue')}|{field(head, 'reviewer')}|{commit}")
 PYEOF
 )"
 
+# (a) 精確匹配：有一份 APPROVED 記錄的 handbook_commit 正是這版手冊。
+APPROVAL=""
+while IFS='|' read -r R_FILE R_ISSUE R_REVIEWER R_COMMIT; do
+  [ -n "$R_COMMIT" ] || continue
+  case "$HANDBOOK_SHA" in
+    "$R_COMMIT"*) APPROVAL="$R_FILE|$R_ISSUE|$R_REVIEWER"; break ;;
+  esac
+done <<<"$REVIEWS"
+
+# (b) 戳記旁路（MYL-44）：沒有精確匹配時，找出最近一份仍在 HEAD 歷史上的 APPROVED
+#     記錄當基準，若它到 HEAD 之間的手冊變更**每一行都是同步戳記**，就放行。
+#     為什麼要這條：戳記-only 的 commit 會換掉手冊 sha，於是找不到對應記錄、
+#     發佈直接失敗——公開站會被自己的閘門鎖在舊版，而那正是戳記要避免的事。
+#     判定條件全由 `git diff` 決定（見 foundry_lint.handbook_diff_is_stamp_only），
+#     是封閉的洞不是人治例外：夾帶任何一行實質內容就落回 (a) 的閘門。
+STAMP_SKIPPED=""
+if [ -z "$APPROVAL" ]; then
+  BASE=""; BASE_DIST=""; BASE_INFO=""
+  while IFS='|' read -r R_FILE R_ISSUE R_REVIEWER R_COMMIT; do
+    [ -n "$R_COMMIT" ] || continue
+    git -C "$SRC_ROOT" rev-parse --verify --quiet "${R_COMMIT}^{commit}" >/dev/null || continue
+    git -C "$SRC_ROOT" merge-base --is-ancestor "$R_COMMIT" HEAD || continue
+    dist="$(git -C "$SRC_ROOT" rev-list --count "$R_COMMIT..HEAD")"
+    if [ -z "$BASE_DIST" ] || [ "$dist" -lt "$BASE_DIST" ]; then
+      BASE="$R_COMMIT"; BASE_DIST="$dist"; BASE_INFO="$R_FILE|$R_ISSUE|$R_REVIEWER"
+    fi
+  done <<<"$REVIEWS"
+
+  if [ -n "$BASE" ] && STAMP_SKIPPED="$(python3 "$SRC_ROOT/tools/foundry-lint/foundry_lint.py" \
+        --stamp-only-since "$BASE" --repo-root "$SRC_ROOT")"; then
+    APPROVAL="$BASE_INFO"
+  else
+    STAMP_SKIPPED=""
+  fi
+fi
+
 [ -n "$APPROVAL" ] ||
-  gate_fail "手冊最新變更 ${HANDBOOK_SHA:0:8} 沒有對應的 APPROVED 發佈審查記錄。" \
+  gate_fail "手冊最新變更 ${HANDBOOK_SHA:0:8} 沒有對應的 APPROVED 發佈審查記錄，且與最近一份已核可版本之間的差異不只有同步戳記。" \
             "依 templates/publish-review.md 建立 docs/publish-reviews/<工單號>.md（verdict: APPROVED、handbook_commit: $HANDBOOK_SHA），commit 後重跑。"
 
 IFS='|' read -r A_FILE A_ISSUE A_REVIEWER <<<"$APPROVAL"
 echo "   ✅ 審查記錄：docs/publish-reviews/$A_FILE（工單 $A_ISSUE，審查者 $A_REVIEWER）"
+if [ -n "$STAMP_SKIPPED" ]; then
+  echo "   ↷ 戳記旁路（MYL-44）：以上記錄核可的是 ${BASE:0:8}，其後這些 commit 只改了同步戳記，未另做審查："
+  while IFS= read -r line; do
+    [ -n "$line" ] && echo "      · $line"
+  done <<<"$STAMP_SKIPPED"
+fi
 echo "   ✅ 手冊 commit：$HANDBOOK_SHA"
 # ──────────────────────────────────────────────────────────────────────────
 

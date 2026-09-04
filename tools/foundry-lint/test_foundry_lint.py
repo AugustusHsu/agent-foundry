@@ -482,11 +482,279 @@ class SelfcheckTest(unittest.TestCase):
         self.assertFalse(data["passed"])
         self.assertEqual({c["name"] for c in data["checks"]},
                          {"entry-sync", "nav-sync", "anchors", "rule-ids",
-                          "big-files", "internal-links"})
+                          "big-files", "internal-links", "handbook-stamp"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()
         self.assertEqual(proc.stderr, "")
+
+    def test_手冊章節少了戳記行被擋下(self):
+        """副本沒帶 .git，落後與否驗不了，但字面缺漏照樣要擋。"""
+        p = self.root / "docs" / "handbook" / "03-workflow.md"
+        kept = [ln for ln in p.read_text(encoding="utf-8").splitlines()
+                if not foundry_lint.STAMP_RE.match(ln)]
+        p.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        res = self._named("handbook-stamp")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("03-workflow.md" in f and "第一個非空行" in f
+                            for f in res.failures), res.failures)
+
+
+class HandbookStampTest(unittest.TestCase):
+    """手冊同步戳記（MYL-44）：在臨時 git repo 上驗三層閘門各自擋得住什麼。
+
+    這一組必須有真的 git 歷史——落後的判準問的是「戳記之後的 protocol 改動有沒有
+    手冊變更同行」，那是 commit 之間的關係，不是單看檔案內容能回答的事。
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "repo"
+        (self.root / foundry_lint.HANDBOOK_REL).mkdir(parents=True)
+        (self.root / foundry_lint.PROTOCOL_REL).parent.mkdir(parents=True)
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.email", "test@example.com")
+        self.git("config", "user.name", "測試")
+        self.write_protocol("初版規範\n")
+        for name in foundry_lint.STAMPED_CHAPTERS:
+            self.chapter(name).write_text(f"# {name}\n\n本章內文。\n", encoding="utf-8")
+        self.commit("初始")
+        self.restamp()
+        self.commit("掛上戳記")
+
+    # ── 輔助 ──────────────────────────────────────────────────────────
+    def git(self, *args):
+        proc = subprocess.run(("git", "-C", str(self.root)) + args,
+                              capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout.strip()
+
+    def chapter(self, name):
+        return self.root / foundry_lint.HANDBOOK_REL / name
+
+    def write_protocol(self, text):
+        (self.root / foundry_lint.PROTOCOL_REL).write_text(text, encoding="utf-8")
+
+    def protocol_sha(self):
+        return self.git("log", "-1", "--format=%h", "--", foundry_lint.PROTOCOL_REL)
+
+    def set_stamp(self, name, sha, date="2026-09-04"):
+        path = self.chapter(name)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        body = [ln for ln in lines[1:] if not foundry_lint.STAMP_RE.match(ln)]
+        while body and not body[0].strip():   # 反覆蓋戳記不該堆出空行
+            body.pop(0)
+        head = [lines[0], "", f"> 最後對照 protocol `{sha}`（{date}）", ""]
+        path.write_text("\n".join(head + body) + "\n", encoding="utf-8")
+
+    def restamp(self, sha=None, date="2026-09-04"):
+        sha = sha or self.protocol_sha()
+        for name in foundry_lint.STAMPED_CHAPTERS:
+            self.set_stamp(name, sha, date)
+
+    def commit(self, message):
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
+    def touch_chapter(self, name="03-workflow.md", text="補一句說明。\n"):
+        path = self.chapter(name)
+        path.write_text(path.read_text(encoding="utf-8") + text, encoding="utf-8")
+
+    def stamp_check(self):
+        return foundry_lint.check_handbook_stamp(self.root)
+
+    # ── 層 1：戳記驗證 ────────────────────────────────────────────────
+    def test_四章戳記齊全且最新_通過(self):
+        res = self.stamp_check()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_protocol_改了沒動手冊_四章全部報落後(self):
+        self.write_protocol("初版規範\n新增一條\n")
+        self.commit("改規範但沒動手冊")
+        res = self.stamp_check()
+        self.assertFalse(res.passed)
+        self.assertEqual(len(res.failures), len(foundry_lint.STAMPED_CHAPTERS))
+        self.assertTrue(all("戳記停在" in f for f in res.failures), res.failures)
+
+    def test_protocol_與手冊同一顆_commit_不算落後(self):
+        """判準是『有手冊變更同行』，不是『戳記等於最新 sha』——後者永遠不可能成立。"""
+        self.write_protocol("初版規範\n新增一條\n")
+        self.touch_chapter()
+        self.commit("規範與手冊一起改")
+        res = self.stamp_check()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_合併_commit_不算一顆未同步的_protocol_改動(self):
+        """`--no-ff` 合併會產生一顆碰到 protocol 的 merge commit，那不是改動。"""
+        self.git("checkout", "-q", "-b", "topic")
+        self.write_protocol("初版規範\n分支上的一條\n")
+        self.touch_chapter()
+        self.commit("分支上規範與手冊一起改")
+        self.git("checkout", "-q", "main")
+        self.git("merge", "-q", "--no-ff", "-m", "合併 topic", "topic")
+        res = self.stamp_check()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_戳記不在標題後第一個非空行被擋下(self):
+        name = foundry_lint.STAMPED_CHAPTERS[0]
+        path = self.chapter(name)
+        lines = path.read_text(encoding="utf-8").splitlines()
+        stamp = lines.pop(2)
+        path.write_text("\n".join(lines + [stamp]) + "\n", encoding="utf-8")
+        res = self.stamp_check()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(name in f and "第一個非空行" in f for f in res.failures),
+                        res.failures)
+
+    def test_戳記_sha_太短不合格式(self):
+        self.set_stamp(foundry_lint.STAMPED_CHAPTERS[0], "abc123")
+        res = self.stamp_check()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("第一個非空行" in f for f in res.failures), res.failures)
+
+    def test_戳記日期格式錯不合格式(self):
+        path = self.chapter(foundry_lint.STAMPED_CHAPTERS[0])
+        lines = path.read_text(encoding="utf-8").splitlines()
+        lines[2] = f"> 最後對照 protocol `{self.protocol_sha()}`（2026/09/04）"
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        res = self.stamp_check()
+        self.assertFalse(res.passed)
+
+    def test_戳記_sha_不是本_repo_的_commit_被擋下(self):
+        self.set_stamp(foundry_lint.STAMPED_CHAPTERS[0], "0" * 40)
+        res = self.stamp_check()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("不是本 repo 的 commit" in f for f in res.failures),
+                        res.failures)
+
+    def test_戳記指向不在_HEAD_歷史上的_commit_被擋下(self):
+        self.git("checkout", "-q", "-b", "側枝")
+        self.write_protocol("側枝上的規範\n")
+        self.commit("側枝上的改動")
+        side = self.git("rev-parse", "--short", "HEAD")
+        self.git("checkout", "-q", "main")
+        self.set_stamp(foundry_lint.STAMPED_CHAPTERS[0], side)
+        res = self.stamp_check()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("不在 HEAD 的歷史上" in f for f in res.failures), res.failures)
+
+    def test_掛戳記的章節少一份被擋下(self):
+        self.chapter(foundry_lint.STAMPED_CHAPTERS[0]).unlink()
+        res = self.stamp_check()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("少了一份" in f for f in res.failures), res.failures)
+
+    # ── 層 0：pre-commit 觸發器 ───────────────────────────────────────
+    def test_層0_改了_protocol_沒動手冊_擋下且說得出下一步(self):
+        self.write_protocol("初版規範\n新增一條\n")
+        self.git("add", "-A")
+        res = foundry_lint.check_staged_handbook_sync(self.root)
+        self.assertFalse(res.passed)
+        message = res.failures[0]
+        for expected in ("沒有任何變更", "(1)", "(2)", "(3)", "--amend", "--no-verify"):
+            self.assertIn(expected, message)
+
+    def test_層0_protocol_與手冊同行_放行(self):
+        self.write_protocol("初版規範\n新增一條\n")
+        self.touch_chapter()
+        self.git("add", "-A")
+        self.assertTrue(foundry_lint.check_staged_handbook_sync(self.root).passed)
+
+    def test_層0_沒動_protocol_放行(self):
+        self.touch_chapter()
+        self.git("add", "-A")
+        self.assertTrue(foundry_lint.check_staged_handbook_sync(self.root).passed)
+
+    def test_層0_只有工作區有改動而沒_stage_不算(self):
+        """看的是 index，不是工作區——沒進 index 的改動不在這次 commit 裡。"""
+        self.write_protocol("初版規範\n新增一條\n")
+        self.assertTrue(foundry_lint.check_staged_handbook_sync(self.root).passed)
+
+    def test_層0_CLI_擋下時_exit_1(self):
+        self.write_protocol("初版規範\n新增一條\n")
+        self.git("add", "-A")
+        proc = run_cli("--staged-handbook-sync", "--repo-root", str(self.root))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("handbook", proc.stdout)
+
+    # ── 範圍二：發佈腳本的戳記旁路 ───────────────────────────────────
+    def test_旁路_戳記_only_的手冊變更放行(self):
+        base = self.git("rev-parse", "HEAD")
+        self.write_protocol("初版規範\n新增一條\n")
+        self.commit("改規範（模擬 --no-verify 溜過層 0）")
+        self.restamp()
+        self.commit("📝 補推同步戳記")
+        only, commits, offending = foundry_lint.handbook_diff_is_stamp_only(self.root, base)
+        self.assertTrue(only, offending)
+        self.assertEqual(len(commits), 1)
+        self.assertIn("補推同步戳記", commits[0])
+
+    def test_旁路_夾帶實質內容仍擋下(self):
+        """工單指名的反向測試：沒有它，這條旁路等於把發佈閘門拆了。"""
+        base = self.git("rev-parse", "HEAD")
+        self.write_protocol("初版規範\n新增一條\n")
+        self.commit("改規範")
+        self.restamp()
+        self.touch_chapter(text="偷渡的一句話。\n")
+        self.commit("📝 推戳記，順手夾帶內容")
+        only, _, offending = foundry_lint.handbook_diff_is_stamp_only(self.root, base)
+        self.assertFalse(only)
+        self.assertIn("偷渡的一句話", offending)
+
+    def test_旁路_首次掛戳記帶進的空行不算實質內容(self):
+        """戳記的錨點是「標題／空行／戳記／空行／引言」，首次掛上必然多一個空行。"""
+        name = foundry_lint.STAMPED_CHAPTERS[0]
+        path = self.chapter(name)
+        kept = [ln for ln in path.read_text(encoding="utf-8").splitlines()
+                if not foundry_lint.STAMP_RE.match(ln)]
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        self.commit("拆掉戳記，回到沒掛戳記的狀態")
+        base = self.git("rev-parse", "HEAD")
+        self.set_stamp(name, self.protocol_sha())
+        self.commit("📝 首次掛上戳記")
+        only, _, offending = foundry_lint.handbook_diff_is_stamp_only(self.root, base)
+        self.assertTrue(only, offending)
+
+    def test_旁路_刪掉一段內文仍擋下(self):
+        """放行空白行不能連帶放行『把內容刪光只留空行』。"""
+        base = self.git("rev-parse", "HEAD")
+        path = self.chapter(foundry_lint.STAMPED_CHAPTERS[0])
+        kept = [ln for ln in path.read_text(encoding="utf-8").splitlines()
+                if ln != "本章內文。"]
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        self.commit("刪掉一段內文")
+        only, _, offending = foundry_lint.handbook_diff_is_stamp_only(self.root, base)
+        self.assertFalse(only)
+        self.assertIn("本章內文", offending)
+
+    def test_旁路_刪掉整章不算戳記變更(self):
+        base = self.git("rev-parse", "HEAD")
+        self.chapter(foundry_lint.STAMPED_CHAPTERS[0]).unlink()
+        self.commit("刪掉一章")
+        only, _, _ = foundry_lint.handbook_diff_is_stamp_only(self.root, base)
+        self.assertFalse(only)
+
+    def test_旁路_基準_sha_無效時不放行(self):
+        only, _, offending = foundry_lint.handbook_diff_is_stamp_only(self.root, "0" * 40)
+        self.assertFalse(only)
+        self.assertIn("取不到", offending)
+
+    def test_旁路_CLI_通過印出_commit_清單_夾帶時_exit_1(self):
+        base = self.git("rev-parse", "HEAD")
+        self.write_protocol("初版規範\n新增一條\n")
+        self.commit("改規範")
+        self.restamp()
+        self.commit("📝 補推同步戳記")
+        ok = run_cli("--stamp-only-since", base, "--repo-root", str(self.root))
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertIn("補推同步戳記", ok.stdout)
+
+        self.touch_chapter(text="偷渡的一句話。\n")
+        self.commit("📝 夾帶內容")
+        bad = run_cli("--stamp-only-since", base, "--repo-root", str(self.root))
+        self.assertEqual(bad.returncode, 1)
+        self.assertIn("戳記以外", bad.stderr)
 
 
 if __name__ == "__main__":

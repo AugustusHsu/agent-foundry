@@ -1,5 +1,7 @@
 # 7. 團隊有哪些固定 workflow？
 
+> 最後對照 protocol `8433b97`（2026-09-04）
+
 > 本章把散在規範各節的「固定跑法」收攏成一份總覽：每條 workflow 一句話講清楚它是什麼、什麼情況會啟動、規則本體在哪一節。規則本體永遠以 [`skills/foundry-protocol/SKILL.md`](../../skills/foundry-protocol/SKILL.md) 為準；本章只做索引與簡介。
 
 ## 總覽

@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import unicodedata
 from dataclasses import dataclass, field
@@ -128,6 +129,7 @@ def render_json(result: CheckResult) -> str:
 #   rule-ids        引用了不存在的規則 ID（protocol 第 11 節）
 #   big-files       入口檔的大檔清單漏列 → 接手者整份載入（MYL-42）
 #   internal-links  相對連結指向不存在的檔案 → 點了 404（MYL-41）
+#   handbook-stamp  protocol 改了而手冊沒跟 → 公開站開始騙人（MYL-44）
 #
 # （這裡刻意不寫「共 N 項」——那種數字沒有人會回來改，正是 MYL-42 要收掉的漂移。）
 
@@ -165,6 +167,22 @@ MD_PATH_RE = re.compile(r"`([^`\n]+\.md)`")
 #: 不需驗檔案存在性的連結目標：帶協定的 URL（`https:`、`mailto:`）、
 #: 協定相對網址（`//host/…`）、以及純錨點（`#anchor`，同頁跳轉）。
 EXTERNAL_TARGET_RE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.-]*:|//|#)")
+
+# ── 手冊同步戳記（MYL-44）─────────────────────────────────────────────────
+#: 規則層本體。戳記追的就是這一份的修改歷史。
+PROTOCOL_REL = "skills/foundry-protocol/SKILL.md"
+HANDBOOK_REL = "docs/handbook"
+#: 掛戳記的章節。只有這四章在複述規則層語意；`08-cross-platform` 講的是
+#: 「把流程帶到別的平台」，不隨 protocol 條文變動，故不掛（計畫 v3 §7）。
+STAMPED_CHAPTERS = (
+    "03-workflow.md", "04-decision-points.md",
+    "06-org-structure.md", "07-workflows.md",
+)
+#: 戳記行形狀：`> 最後對照 protocol \`<sha>\`（YYYY-MM-DD）`。
+#: 寫成 blockquote 是為了在 mkdocs 上與正文區隔；sha 允許短碼（至少 7 碼）。
+STAMP_RE = re.compile(
+    r"^>\s*最後對照 protocol\s*`([0-9a-fA-F]{7,40})`\s*（(\d{4}-\d{2}-\d{2})）\s*$"
+)
 
 
 @dataclass
@@ -543,8 +561,182 @@ def check_big_files(root: Path) -> SelfcheckResult:
     return res
 
 
+# ══════════════════ 手冊同步戳記：三層閘門（MYL-44） ══════════════════
+#
+# 層 0  pre-commit 觸發器（`--staged-handbook-sync`）：改了 protocol 沒動手冊就擋下。
+# 層 1  戳記驗證（本檔的 `handbook-stamp` 自檢，跑在 `make check`／CI）。
+# 層 2  agent 判斷——**只在被層 0 攔下時才跑**，約每 12 顆 commit 一次。
+#
+# 設計關鍵：**推戳記本身就是銷案憑證**。agent 不寫「已同步／不需同步＋理由」那種
+# 會退化成儀式的散文，它必須把戳記推到新 sha，而那是 diff 上看得見的。
+# 「看過了」與「沒看過」因此不再靠自我申報。
+
+
+def git_run(root: Path, *args) -> tuple:
+    """跑 git，回傳 `(ok, stdout)`；git 不存在或不是 repo 時 `ok` 為 False。
+
+    自檢會在沒有 `.git` 的環境跑（單元測試把 repo 複製出來時就刻意不帶），
+    所以「拿不到 git」是正常狀況而不是錯誤——那時只驗戳記的字面合法性，
+    落後與否留給有 git 的地方（`make check`／CI／pre-commit）判。
+    """
+    try:
+        proc = subprocess.run(
+            ("git", "-C", str(root)) + args,
+            capture_output=True, text=True, check=False,
+        )
+    except OSError:
+        return False, ""
+    return proc.returncode == 0, proc.stdout.strip()
+
+
+def unsynced_protocol_commits(root: Path, stamp_sha: str) -> list:
+    """`stamp_sha` 之後動了 protocol、卻沒有手冊變更同行的 commit（新到舊）。
+
+    判準刻意不是「戳記要等於 protocol 最新 sha」——那個條件在同一顆 commit 內
+    永遠無法成立：戳記只能指向已經存在的 commit，指不到自己這顆。改成
+    「戳記之後的每一顆 protocol 改動都要有手冊變更同行」，於是「protocol 與手冊
+    一起改」的那顆自然算已同步，不必再補一顆戳記 commit 去指它。
+
+    `--no-merges`：合併本身不是改動，改動由被合併的那顆代表；把 merge commit
+    算進來的話，每次 `--no-ff` 合併都會冒出一顆假的「動了 protocol 沒動手冊」。
+    代價是在 merge commit 裡順手改 protocol（evil merge）會漏掉，那種改法本來就該避免。
+    """
+    ok, out = git_run(root, "log", "--no-merges", "--format=%H",
+                      f"{stamp_sha}..HEAD", "--", PROTOCOL_REL)
+    if not ok or not out:
+        return []
+    unsynced = []
+    for sha in out.splitlines():
+        _, touched = git_run(root, "diff-tree", "--no-commit-id", "--name-only",
+                             "-r", sha, "--", HANDBOOK_REL)
+        if not touched:
+            unsynced.append(sha)
+    return unsynced
+
+
+def check_handbook_stamp(root: Path) -> SelfcheckResult:
+    """四章戳記要存在、格式合法，且不落後於 protocol 的修改歷史。
+
+    MYL-44：`docs/handbook/` 是規則層的說明層，protocol 改了而手冊沒跟，公開站
+    就開始騙人。實測 74 顆 commit 裡 16 顆動 protocol，其中 10 顆同一顆就同步了
+    手冊，真正會漏的只有 5～6 顆——問題真實但稀疏，所以要零 token 的機械攔截。
+
+    戳記必須落在**標題後第一個非空行**：四章裡有三章的標題下方本來就是引言
+    blockquote，位置不定死的話戳記會跟引言黏成同一塊，也無從機械定位。
+    """
+    res = SelfcheckResult("handbook-stamp", "手冊四章戳記不落後於 protocol")
+    has_git, _ = git_run(root, "rev-parse", "--verify", "HEAD")
+    for name in STAMPED_CHAPTERS:
+        rel = f"{HANDBOOK_REL}/{name}"
+        path = root / HANDBOOK_REL / name
+        if not path.exists():
+            res.failures.append(f"{rel} 不存在——掛戳記的章節少了一份")
+            continue
+        lines = read_text(path).splitlines()
+        # 第 0 行是 H1 標題（手冊每章都以 `# ` 開頭），戳記緊接其後第一個非空行。
+        stamp_line = next((ln for ln in lines[1:] if ln.strip()), "")
+        m = STAMP_RE.match(stamp_line)
+        if not m:
+            res.failures.append(
+                f"{rel} 標題後第一個非空行不是戳記行，讀到的是"
+                f"「{stamp_line.strip() or '（沒有內容）'}」——形狀為"
+                " `> 最後對照 protocol `<sha>`（YYYY-MM-DD）`"
+            )
+            continue
+        if not has_git:
+            continue
+        sha = m.group(1)
+        ok, _ = git_run(root, "rev-parse", "--verify", f"{sha}^{{commit}}")
+        if not ok:
+            res.failures.append(f"{rel} 的戳記 sha `{sha}` 不是本 repo 的 commit")
+            continue
+        ok, _ = git_run(root, "merge-base", "--is-ancestor", sha, "HEAD")
+        if not ok:
+            res.failures.append(
+                f"{rel} 的戳記 sha `{sha}` 不在 HEAD 的歷史上"
+                "——戳記指向別的分支，這份對照無從查證"
+            )
+            continue
+        lagging = unsynced_protocol_commits(root, sha)
+        if lagging:
+            shown = "、".join(s[:8] for s in lagging[:5])
+            more = f"（另有 {len(lagging) - 5} 顆）" if len(lagging) > 5 else ""
+            res.failures.append(
+                f"{rel} 的戳記停在 `{sha}`，其後有 {len(lagging)} 顆改了 protocol "
+                f"卻沒有手冊變更同行的 commit：{shown}{more}"
+                "——讀那幾顆的 diff，該補的補進本章，再把戳記推到 protocol 最新 sha"
+            )
+    ok, latest = git_run(root, "log", "-1", "--format=%h", "--", PROTOCOL_REL)
+    res.summary += f"（protocol 最新 {latest}）" if has_git and ok and latest \
+        else "（拿不到 git，只驗字面）"
+    return res
+
+
+def check_staged_handbook_sync(root: Path) -> SelfcheckResult:
+    """層 0 觸發器：本次 staged 動了 protocol，就必須有手冊變更同行。
+
+    這一項不在 `SELFCHECKS` 裡——它看的是 index 而不是工作區，只在 pre-commit
+    跑得到（`--staged-handbook-sync`）。`make check` 那邊由層 1 接手。
+    """
+    res = SelfcheckResult("staged-handbook-sync", "本次 commit 的 protocol 改動有手冊同行")
+    ok, out = git_run(root, "diff", "--cached", "--name-only")
+    if not ok:
+        res.summary += "（拿不到 git，略過）"
+        return res
+    staged = out.splitlines()
+    if PROTOCOL_REL not in staged:
+        res.summary += "（本次未動 protocol）"
+        return res
+    if any(p.startswith(HANDBOOK_REL + "/") for p in staged):
+        res.summary += "（protocol 與手冊同行）"
+        return res
+    _, latest = git_run(root, "log", "-1", "--format=%h", "--", PROTOCOL_REL)
+    res.failures.append(
+        f"本次 commit 改了 {PROTOCOL_REL}，但 {HANDBOOK_REL}/ 沒有任何變更。\n"
+        f"  手冊是規則層的說明層，規則改了而說明沒跟，公開站就開始騙人。\n"
+        f"  讀本次 protocol diff，判斷 {'、'.join(STAMPED_CHAPTERS)} 這四章要不要改，然後：\n"
+        f"    (1) 要改內容 → 改完連戳記一起 commit；\n"
+        f"    (2) 內容不用改 → 只把戳記推到 `{latest or '<protocol 最新 sha>'}`＋今天日期，一起 commit；\n"
+        f"    (3) 戳記已是該 sha 且日期同天（同一天第二次改 protocol）→ 把本次改動\n"
+        f"        `git commit --amend` 併進前一顆，或先 `--no-verify` commit 這顆、\n"
+        f"        再補一顆戳記-only commit 把戳記推到新 sha（漏補的話 `make check` 的\n"
+        f"        handbook-stamp 會紅，這條路封閉，矇混不過去）。"
+    )
+    return res
+
+
+def handbook_diff_is_stamp_only(root: Path, base_sha: str) -> tuple:
+    """`base_sha..HEAD` 的手冊變更是不是只有戳記行。
+
+    回傳 `(只有戳記?, 動到手冊的 commit 摘要清單, 第一個實質變更行)`。
+    `scripts/publish-handbook.sh` 用它判斷能否略過發佈審查——戳記-only 的 commit
+    會換掉手冊 sha，找不到對應的 APPROVED 記錄，發佈就會被自己的閘門擋死。
+    判定條件是機械的（`git diff` 說了算），所以這是封閉的洞、不是人治例外：
+    夾帶任何一行實質內容就會落回原來的閘門。
+    """
+    ok, out = git_run(root, "diff", "-U0", f"{base_sha}..HEAD", "--", HANDBOOK_REL)
+    if not ok:
+        return False, [], f"取不到 {base_sha}..HEAD 的手冊 diff（sha 無效或不是 git repo）"
+    offending = ""
+    for line in out.splitlines():
+        # diff header（`diff --git`、`index`、`@@`）與 `\ No newline` 都不是變更行；
+        # `+++`／`---` 是檔名行，長得像變更行但不是。
+        if line.startswith(("+++", "---")) or line[:1] not in ("+", "-"):
+            continue
+        content = line[1:]
+        # 空白行一併放行：戳記的錨點形狀是「標題／空行／戳記／空行／既有引言」，
+        # 首次掛上時必然連帶新增一個空行。空行不帶進任何可見內容，放行它不開洞
+        # ——真要夾帶東西，那幾行帶著文字，落不進這個條件。
+        if content.strip() and not STAMP_RE.match(content):
+            offending = line
+            break
+    _, log = git_run(root, "log", "--format=%h %s", f"{base_sha}..HEAD",
+                     "--", HANDBOOK_REL)
+    return (not offending), (log.splitlines() if log else []), offending
+
+
 SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
-              check_big_files, check_internal_links)
+              check_big_files, check_internal_links, check_handbook_stamp)
 
 
 def run_selfcheck(root: Path) -> list:
@@ -594,27 +786,58 @@ def parse_args(argv):
     parser.add_argument(
         "--selfcheck",
         action="store_true",
-        help="跑 repo 規範自檢（雙入口同步、手冊 nav、錨點、規則 ID、大檔清單、相對連結），"
-             "不需 --type／file",
+        help="跑 repo 規範自檢（雙入口同步、手冊 nav、錨點、規則 ID、大檔清單、"
+             "相對連結、手冊戳記），不需 --type／file",
+    )
+    parser.add_argument(
+        "--staged-handbook-sync",
+        action="store_true",
+        help="層 0 觸發器（pre-commit 用）：本次 staged 改了 protocol 卻沒動"
+             " docs/handbook/ 就擋下",
+    )
+    parser.add_argument(
+        "--stamp-only-since",
+        metavar="SHA",
+        default=None,
+        help="判定 SHA..HEAD 的 docs/handbook/ 變更是否只有同步戳記行；"
+             "通過時 stdout 列出那些 commit（scripts/publish-handbook.sh 的戳記旁路用）",
     )
     parser.add_argument("--repo-root", default=None, help="自檢的 repo 根目錄，預設為本檔上溯兩層")
     parser.add_argument("file", nargs="?")
     args = parser.parse_args(argv)
-    if not args.selfcheck and (args.type is None or args.file is None):
+    other_modes = args.selfcheck or args.staged_handbook_sync or args.stamp_only_since
+    if not other_modes and (args.type is None or args.file is None):
         parser.error("需要 --type 與 file（或改用 --selfcheck）")
     return args
+
+
+def repo_root_of(args) -> Path:
+    """自檢類模式的 repo 根：`--repo-root` 優先，否則由本檔位置上溯兩層。"""
+    return (Path(args.repo_root) if args.repo_root
+            else Path(__file__).resolve().parent.parent.parent)
 
 
 def main(argv=None):
     args = parse_args(argv)
     exit_code = 0
 
-    if args.selfcheck:
-        root = (
-            Path(args.repo_root)
-            if args.repo_root
-            else Path(__file__).resolve().parent.parent.parent
+    if args.staged_handbook_sync:
+        result = check_staged_handbook_sync(repo_root_of(args))
+        print(render_selfcheck_text([result]))
+        sys.exit(0 if result.passed else 1)
+
+    if args.stamp_only_since:
+        only, commits, offending = handbook_diff_is_stamp_only(
+            repo_root_of(args), args.stamp_only_since
         )
+        if only:
+            print("\n".join(commits))
+        else:
+            print(f"手冊變更含戳記以外的內容：{offending}", file=sys.stderr)
+        sys.exit(0 if only else 1)
+
+    if args.selfcheck:
+        root = repo_root_of(args)
         try:
             results = run_selfcheck(root)
         except LintError as e:
