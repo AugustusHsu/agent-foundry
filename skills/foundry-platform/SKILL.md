@@ -10,7 +10,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 | 介面 | 動詞 | 由哪個設定欄位分派 | 管什麼 |
 | --- | --- | --- | --- |
 | **執行層** | §3.1–§3.8 共 8 個 | `platform` | 工單／狀態／里程碑／看板 |
-| **文檔投影** | §3.9 `publish_docs` | `docs`（`primary`／`mirror_site.target`） | 源頭文檔 → 對外閱讀面 |
+| **文檔投影** | §3.9 `publish_docs` | `docs`（宿主平台由 `mirror_platform`／`platform` 決定） | 源頭文檔 → 對外閱讀面 |
 
 每個支援的平台有一份對照文檔（`adapters/<name>.md`）把動詞翻成具體指令。流程規範（foundry-protocol）只引用抽象動詞，不綁定平台——新增平台時只需新增一份對照文檔，介面與流程都不動。
 
@@ -23,7 +23,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 3. 要做的操作對應到下方哪個動詞，就照對照文檔中該動詞的指令執行。
 4. 對照文檔沒有涵蓋的平台寫入操作，一律不做——需要新操作時先開單擴充介面，不得私下直呼平台指令繞過。
 5. 找不到 `.foundry/config.yml` 時視為專案尚未導入 Foundry：停下，走 `foundry-init`（新專案）或 `foundry-adopt`（既有開發中專案），不得自行猜測平台。
-6. 要跑 `publish_docs` 時改讀 `docs` 段（不是 `platform`），依目標面名稱載入對照文檔：`github-wiki`、`mkdocs-mirror` → `adapters/github.md` 的「§publish_docs」一節。`docs` 段缺席＝本專案不做文檔投影，此時 `publish_docs` 不可用，**這不是設定缺漏**。
+6. 要跑 `publish_docs` 時改讀 `docs` 段。對照文檔由**宿主平台**決定：`mirror_platform` 有值取它、否則取 `platform`（判定方式與 `config-schema.md` 的 `docs` 合法性規則同一條）——宿主是 `github` 時，`primary: wiki` 與 `mirror_site` 兩個面都在 `adapters/github.md` 的「§publish_docs」一節。`docs` 段缺席＝本專案不做文檔投影，此時 `publish_docs` 不可用，**這不是設定缺漏**。
 
 ## 2. 共通詞彙
 
@@ -103,7 +103,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 
 - **輸入**：
   - `source_dir`：來源目錄，**唯一可寫的真相**（本 repo＝`docs/handbook/`）。
-  - `target`：目標面，取自 `.foundry/config.yml` 的 `docs.primary` 或 `docs.mirror_site.target`（如 `github-wiki`、`mkdocs-mirror`）。
+  - `target`：目標面，取自 `.foundry/config.yml` 的 `docs.primary`（主閱讀面）或 `docs.mirror_site`（精裝面）。一個專案可以同時有兩個面，各自有自己的觸發時機。
   - `trigger`：觸發時機，`on_merge_main`｜`on_tag`｜`manual`。宣告用途——動詞本身不排程，排程是 CI 或執行者的事。
 - **行為**：
   1. **過前置閘門**：`source_dir` 的變更必須已合併進 main，且有對應的發佈審查證據（本 repo＝MYL-24 審查記錄 ＋ MYL-44 戳記旁路，見 foundry-protocol 第 7 節）。閘門不過就**不做任何寫入**。
@@ -126,7 +126,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 - 對照文檔中的指令一律是可直接在 shell 執行的完整範例（含佔位符說明），不是偽代碼。
 - 新增平台（如 GitLab）：新增 `adapters/gitlab.md` **覆蓋該介面的全部動詞**＋在 `config-schema.md` 的對應枚舉補值，介面本文不改。做不到全覆蓋的不得上線——寧缺勿殘。
   - 執行層平台（`platform` 的值）＝§3.1–§3.8 的 8 個動詞全覆蓋。
-  - 文檔投影目標面（`docs.primary`／`docs.mirror_site.target` 的值）＝`publish_docs` 完整定義（轉換規則、防手改比對依據、逐章比對方式）。
+  - 文檔投影宿主（被 `docs` 段指到的平台）＝`publish_docs` 完整定義（轉換規則、防手改比對依據、逐章比對方式），且 `docs.primary` 用得到的面都要涵蓋。
   - **兩者互不蘊含**：只做執行層的平台不因為沒有 `publish_docs` 而殘缺，只做文檔面的目標也不必實作工單動詞。
 
   <details><summary><b>MYL-52 裁定：加第 9 個動詞為什麼沒有讓既有三份 adapter 全部不合格</b></summary>
@@ -135,7 +135,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 
   - **① 三份 adapter 全部補齊 `publish_docs`：否決。** Paperclip 沒有文檔面（它的 documents 掛在單張工單上，不是一本手冊），補出來的會是憑空發明的東西，而發明出來的規格沒有人驗得了。
   - **② 把 `publish_docs` 標為選配動詞：否決。** 選配只是讓分派錯軸這件事靜默下來，沒有解決它。**本 repo 就是決定性反例**：`platform: paperclip`、文檔面卻在 GitHub wiki。若 `publish_docs` 跟著 `platform` 分派，本 repo 讀到的是 `adapters/paperclip.md`，得到「本平台不支援文檔投影」——而本 repo 正在做文檔投影。選配讓這個矛盾不報錯，不代表它不存在。
-  - **③ 改寫定義（採用）**：`publish_docs` 由 `docs` 段分派，與 `platform` 正交；「全覆蓋」改為**每個介面各自全覆蓋**。既有三份 adapter 維持為執行層 adapter，全部仍然合格；`github.md` 另外多一個身分——它同時是 `github-wiki` 與 `mkdocs-mirror` 兩個文檔目標面的對照文檔。
+  - **③ 改寫定義（採用）**：`publish_docs` 由 `docs` 段分派（宿主取 `mirror_platform`／`platform`），與執行層的 `platform` 正交；「全覆蓋」改為**每個介面各自全覆蓋**。既有三份 adapter 維持為執行層 adapter，全部仍然合格；`github.md` 另外多一個身分——它同時是 wiki 與 mkdocs 精裝站兩個文檔投影面的對照文檔。
 
   「寧缺勿殘」的原意（不讓半套平台上線）因此完整保留：殘不殘的判準是「**宣告支援的那個介面有沒有做完**」，而不是「有沒有做完所有介面」。
   </details>
@@ -146,7 +146,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 | 檔案 | 內容 |
 | --- | --- |
 | `SKILL.md`（本文） | 介面定義：9 動詞（8 執行層＋1 文檔投影）、共通詞彙、錯誤規則 |
-| `adapters/github.md` | 執行層動詞 → gh CLI 指令對照；**另含 `publish_docs` 的兩個目標面**（`github-wiki`、`mkdocs-mirror`） |
+| `adapters/github.md` | 執行層動詞 → gh CLI 指令對照；**另含 `publish_docs` 的兩個投影面**（wiki 主閱讀面、mkdocs 精裝站） |
 | `adapters/local-md.md` | 執行層動詞 → `.foundry/board/` 檔案操作對照 |
 | `adapters/paperclip.md` | 執行層動詞 → Paperclip REST API 對照（含平台限制表） |
 | `config-schema.md` | `.foundry/config.yml` 欄位說明 |

@@ -95,44 +95,6 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 
 ## `docs`
 
-`publish_docs` 動詞（`SKILL.md` §3.9）的目標面宣告。MYL-52 增訂。
-
-**這一段管的是「文檔投影到哪些面」，不是「工單放在哪」**——後者是頂層的 `platform`。
-兩條軸互相獨立，別混（同 `model_routing` 的處理）。本 repo 就是活的例子：
-`platform: paperclip`，而手冊投影到 GitHub wiki。
-
-結構沿用 MYL-39 計畫 v5 D-3 的三層說法（源頭 → 主閱讀面 → 精裝站），
-MYL-52 只把目標面的值改成**明確的目標面名稱**：原草稿寫 `primary: wiki`，
-但「wiki」在 platform 不是 github 時指的是別家的 wiki，而這條軸與 platform 正交，
-名稱不能靠 platform 補完。
-
-| 欄位 | 型別 | 必填 | 說明 |
-| --- | --- | --- | --- |
-| `docs.source` | 字串 | ✅（有本段時） | 源頭文檔目錄，相對 repo 根、以 `/` 結尾。**唯一可寫的真相**：投影一律機械產生，人只改這裡。 |
-| `docs.primary` | 枚舉 | ✅（有本段時） | 主閱讀面：`github-wiki`｜`repo`（不投影、直接讀 repo）｜`none`。決定載入哪份對照文檔（`github-wiki` → `adapters/github.md` 的 `publish_docs` 節）。 |
-| `docs.link_policy` | 枚舉 | ─（預設 `absolute`） | 源頭裡指向 repo 內部路徑的相對連結怎麼處理：`absolute`＝改寫成絕對 URL；`plain`＝拆為純文字。 |
-| `docs.mirror_site` | 物件 | ─ | 精裝站。整段省略＝不建。 |
-| `docs.mirror_site.enabled` | 布林 | ✅（有本段時） | 顯式 `false`＝保留設定但暫時關閉。 |
-| `docs.mirror_site.target` | 枚舉 | ✅（有本段時） | 目前只有 `mkdocs-mirror`。 |
-| `docs.mirror_site.trigger` | 枚舉 | ✅（有本段時） | `tag`｜`merge`（合併進 main 即發）｜`manual`。宣告用途——動詞本身不排程。 |
-| `docs.mirror_site.tag_pattern` | 字串 | ─ | 只在 `trigger: tag` 時有意義。 |
-
-**整段缺席＝本專案不做文檔投影**，`publish_docs` 不可用——這是預設狀態，不是設定缺漏
-（同 `model_routing` 的語意）。缺席不使該專案的 adapter 變成「殘缺」，見 `SKILL.md` §5 的 MYL-52 裁定。
-
-⚠️ **本段只宣告「已開通的管道」。** 開通目標面本身（啟用 wiki、新建公開 repo、開 Pages）
-是關卡 C（`gates.external_actions: user`，不可調降），不因為寫進本段而獲得授權。
-
-寫入者：**使用者，或在使用者核可之後**——同本檔其他段落。
-
-合法性（違反時同下方總則，整檔拒用）：
-
-- `default_provider` 或 `roles` 的值不在供應商登記表 → 非法。**不得**自動 fallback 到別家：靜默換一家跑，產出風格會變而沒有人知道為什麼。
-- `review_provider_distinct` 為 `true`（或省略）卻把 `developer` 與 `code-reviewer` 指到同一家 → 非法。這是設定檔自相矛盾，可機械判定，不留給執行期才發現。
-- 指定的供應商在本機不可用（盤點腳本回報未安裝／未登入）→ **不是設定檔非法**，是環境問題：停下並依 `M5` 發卡，不要改設定遷就環境。
-
-## `docs`
-
 （MYL-39 計畫 v5 §2「D-3 三層投影」定案。）
 
 三層，**只有第一層可以人手改**：
@@ -151,6 +113,7 @@ MYL-52 只把目標面的值改成**明確的目標面名稱**：原草稿寫 `p
 | --- | --- | --- | --- |
 | `docs.source` | 字串 | ✅（有本段時） | 來源目錄，相對 repo 根、以 `/` 結尾。這是唯一可寫的真相。 |
 | `docs.primary` | 枚舉 | ✅（有本段時） | 主閱讀面：`wiki`（投影到平台 wiki）｜`repo`（不投影，讀者直接讀 repo 內的 `source`）｜`none`（不對外提供閱讀面）。 |
+| `docs.link_policy` | 枚舉 | ─（預設 `absolute`，MYL-52 增訂） | 來源裡指向 repo 內部路徑（`skills/`、`templates/` 之類）的相對連結，投影時怎麼處理：`absolute`＝改寫成指回 repo 的絕對 URL；`plain`＝拆為純文字。**投影面的頁面是平的，這些相對路徑在那邊一定失效，所以沒有「原樣保留」這個選項。** |
 | `docs.mirror_site` | 物件 | ─ | 精裝站（mkdocs 之類）。**整段缺席＝不建精裝站。** |
 | `docs.mirror_site.enabled` | 布林 | ✅（有本段時） | 顯式 `false`＝設定保留、暫時關閉；與整段缺席的差別只在於保不保留下面幾欄。 |
 | `docs.mirror_site.trigger` | 枚舉 | ✅（`enabled: true` 時） | 何時重建：`tag`｜`merge`（合併進 main 即發）｜`manual`（人工執行）。 |
@@ -164,6 +127,15 @@ MYL-52 只把目標面的值改成**明確的目標面名稱**：原草稿寫 `p
 
 寫入者：使用者，或經使用者核可的計畫。`foundry-init` **目前不詢問本段**，導入的專案預設整段缺席
 （＝只有源頭、沒有投影面）；要投影時再補寫。
+
+**怎麼執行**（MYL-52 增訂）：本段只宣告「投影到哪」，實際動作是抽象動詞 `publish_docs`
+（`SKILL.md` §3.9）。載入哪份對照文檔由**宿主平台**決定，判定方式同上面的合法性規則
+（`mirror_platform` 有值取它、否則取 `platform`）——例如宿主是 `github` 時，
+`primary: wiki` 與 `mirror_site` 兩個面的具體指令都在 `adapters/github.md` 的 `publish_docs` 一節。
+上面那句「投影前先確認現況就是上次推上去的內容」在該節有具體的比對依據，不是原則宣示。
+
+⚠️ 本段只宣告**已開通的管道**。開通投影面本身（啟用 wiki、新建公開 repo、開 Pages）
+是關卡 C（`gates.external_actions: user`，不可調降），不因為寫進本段而獲得授權。
 
 ## 合法性總則
 

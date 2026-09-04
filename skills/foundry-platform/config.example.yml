@@ -51,10 +51,9 @@ push:
 #    是關卡 C，不因為寫進這裡而獲得授權。
 # docs:
 #   source: docs/handbook/    # 來源目錄，相對 repo 根、以 / 結尾
-#   primary: github-wiki      # 主閱讀面：github-wiki | repo（不投影、直接讀 repo）| none
+#   primary: wiki             # 主閱讀面：wiki | repo（不投影、直接讀 repo）| none
 #   link_policy: absolute     # 指向 repo 內部路徑的連結：absolute（改寫成絕對 URL）| plain（拆為純文字）
 #   mirror_site:              # 整段省略＝不建精裝站
 #     enabled: true           # 顯式 false＝保留設定但暫時關閉
-#     target: mkdocs-mirror   # 目前只有這一個
 #     trigger: tag            # tag | merge（合併進 main 即發）| manual
 #     tag_pattern: 'handbook-v*'   # 只在 trigger: tag 時有意義

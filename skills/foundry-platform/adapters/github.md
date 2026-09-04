@@ -282,16 +282,19 @@ gh issue list --state all --limit 500 --json number,state,body \
 本檔除了是執行層 adapter，也承載 `publish_docs`（SKILL.md §3.9）的兩個目標面。
 **這一節與上面的執行層動詞互相獨立**：`docs` 段選這裡，`platform` 選上面，
 一個專案可以只用其中一邊（MYL-52 裁定，理由見 SKILL.md §5）。
+本節在「宿主平台是 github」時適用——宿主的判定同 `../config-schema.md` 的 `docs` 合法性規則：
+`mirror_platform` 有值取它、否則取 `platform`。本 repo 屬後者之外的情況（`platform: paperclip`
+而文檔面在 github），所以要靠 `mirror_platform: github` 或在工單裡明講，別靠讀者猜。
 
-| 目標面 | 指令 | 定位 | 觸發時機 |
+| 設定 | 指令 | 定位 | 觸發時機 |
 | --- | --- | --- | --- |
-| `github-wiki` | `bash scripts/publish-wiki.sh` | **主閱讀面**：合併 main 即同步 | `on_merge_main` |
-| `mkdocs-mirror` | `bash scripts/publish-handbook.sh` | 精裝面：公開鏡像 repo ＋ Pages | `manual`（tag 觸發屬 MYL-39 N5，尚未做） |
+| `docs.primary: wiki` | `bash scripts/publish-wiki.sh` | **主閱讀面**：合併 main 即同步 | `merge` |
+| `docs.mirror_site` | `bash scripts/publish-handbook.sh` | 精裝面：公開鏡像 repo ＋ Pages | `manual`（`tag` 觸發屬 MYL-39 N5，尚未做） |
 
 兩者共用同一道前置閘門 `scripts/lib/publish-gate.sh`（MYL-24 審查證據 ＋ MYL-44 戳記旁路）。
 閘門可單獨執行以排查：`bash scripts/lib/publish-gate.sh <repo 根>`——只判斷，不 clone 不 push。
 
-### github-wiki 的轉換規則
+### `primary: wiki` 的轉換規則
 
 wiki 是**另一個 git repo**（`<repo>.wiki.git`），頁面是平的、沒有目錄層級。
 轉換由 `tools/publish-docs/project_docs.py` 執行，四條規則全部是載體差異逼出來的：
@@ -301,12 +304,12 @@ wiki 是**另一個 git repo**（`<repo>.wiki.git`），頁面是平的、沒有
 | 1 | `index.md` → `Home.md`，其餘章節同名平移 | wiki 的首頁頁名固定是 `Home` |
 | 2 | 章間連結去掉 `.md`（`04-x.md` → `04-x`） | wiki 頁面 URL 是 `.../wiki/<頁名>`，沒有副檔名。去掉之後是**單純的相對 URL 解析**，不倚賴 wiki 專屬的連結改寫魔法——這點重要，因為本機驗不了 wiki 渲染（`X4`） |
 | 3 | 錨點由 mkdocs slug 換算成 GitHub slug | Python-Markdown 預設 slugify 丟掉非 ASCII（`## 3. HITL 發卡` → `#3-hitl`），GitHub 保留 CJK（`#3-hitl-發卡`）。**照抄過去必然全斷** |
-| 4 | 指向 repo 內部路徑（`skills/`、`templates/`、`docs/pilot/`）的相對連結依 `--link-policy` 改寫 | 相對路徑在 wiki 一定失效。`absolute`＝改寫成 `https://github.com/<repo>/blob/main/<路徑>`；`plain`＝比照公開鏡像拆成純文字 |
+| 4 | 指向 repo 內部路徑（`skills/`、`templates/`、`docs/pilot/`）的相對連結依 `docs.link_policy` 改寫 | 相對路徑在 wiki 一定失效。`absolute`＝改寫成 `https://github.com/<repo>/blob/main/<路徑>`；`plain`＝比照公開鏡像拆成純文字 |
 
 側欄 `_Sidebar.md` **由私有 `mkdocs.yml` 的 nav 轉寫**，不另手寫一份——
 手寫就會變成 known-drift 記的「兩份 nav」再加一份。頁尾 `_Footer.md` 放「請勿直接編輯」與來源 commit。
 
-### github-wiki 的防手改偵測
+### `primary: wiki` 的防手改偵測
 
 投影 commit 的訊息帶兩行 trailer：
 
