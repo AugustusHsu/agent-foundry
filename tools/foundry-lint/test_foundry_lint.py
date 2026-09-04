@@ -702,6 +702,32 @@ class HandbookStampTest(unittest.TestCase):
         self.assertFalse(only)
         self.assertIn("偷渡的一句話", offending)
 
+    def test_旁路_首次掛戳記帶進的空行不算實質內容(self):
+        """戳記的錨點是「標題／空行／戳記／空行／引言」，首次掛上必然多一個空行。"""
+        name = foundry_lint.STAMPED_CHAPTERS[0]
+        path = self.chapter(name)
+        kept = [ln for ln in path.read_text(encoding="utf-8").splitlines()
+                if not foundry_lint.STAMP_RE.match(ln)]
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        self.commit("拆掉戳記，回到沒掛戳記的狀態")
+        base = self.git("rev-parse", "HEAD")
+        self.set_stamp(name, self.protocol_sha())
+        self.commit("📝 首次掛上戳記")
+        only, _, offending = foundry_lint.handbook_diff_is_stamp_only(self.root, base)
+        self.assertTrue(only, offending)
+
+    def test_旁路_刪掉一段內文仍擋下(self):
+        """放行空白行不能連帶放行『把內容刪光只留空行』。"""
+        base = self.git("rev-parse", "HEAD")
+        path = self.chapter(foundry_lint.STAMPED_CHAPTERS[0])
+        kept = [ln for ln in path.read_text(encoding="utf-8").splitlines()
+                if ln != "本章內文。"]
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        self.commit("刪掉一段內文")
+        only, _, offending = foundry_lint.handbook_diff_is_stamp_only(self.root, base)
+        self.assertFalse(only)
+        self.assertIn("本章內文", offending)
+
     def test_旁路_刪掉整章不算戳記變更(self):
         base = self.git("rev-parse", "HEAD")
         self.chapter(foundry_lint.STAMPED_CHAPTERS[0]).unlink()

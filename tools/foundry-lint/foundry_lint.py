@@ -723,7 +723,11 @@ def handbook_diff_is_stamp_only(root: Path, base_sha: str) -> tuple:
         # `+++`／`---` 是檔名行，長得像變更行但不是。
         if line.startswith(("+++", "---")) or line[:1] not in ("+", "-"):
             continue
-        if not STAMP_RE.match(line[1:]):
+        content = line[1:]
+        # 空白行一併放行：戳記的錨點形狀是「標題／空行／戳記／空行／既有引言」，
+        # 首次掛上時必然連帶新增一個空行。空行不帶進任何可見內容，放行它不開洞
+        # ——真要夾帶東西，那幾行帶著文字，落不進這個條件。
+        if content.strip() and not STAMP_RE.match(content):
             offending = line
             break
     _, log = git_run(root, "log", "--format=%h %s", f"{base_sha}..HEAD",
