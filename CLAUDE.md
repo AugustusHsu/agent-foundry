@@ -94,6 +94,7 @@ agent-foundry/
 | `skills/foundry-browser/SKILL.md` | 只在要驗畫面時讀；先 `make browser` 判級，再讀對應層級那一節 |
 | `docs/pilot/pilot-log.md` | 歷史紀錄，除非要查典故否則不必讀 |
 | `skills/foundry-init/SKILL.md` | 只在導入全新專案時讀 |
+| `skills/foundry-platform/adapters/github.md` | 兩種用途各佔一半：`platform: github` 的動詞對照，與「鏡像模式」規格。要哪一個讀哪一節 |
 | `skills/foundry-platform/adapters/paperclip.md` | 未達門檻但一樣別整份載：只讀當前平台那一份，不要三份都載 |
 <!-- FOUNDRY:BIG-FILES:END -->
 
