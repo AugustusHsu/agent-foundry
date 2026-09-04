@@ -178,8 +178,10 @@ STAMPED_CHAPTERS = (
     "03-workflow.md", "04-decision-points.md",
     "06-org-structure.md", "07-workflows.md",
 )
-#: 戳記行形狀：`> 最後對照 protocol \`<sha>\`（YYYY-MM-DD）`。
-#: 寫成 blockquote 是為了在 mkdocs 上與正文區隔；sha 允許短碼（至少 7 碼）。
+#: 戳記行形狀：`> 最後對照 protocol \`<sha>\`（YYYY-MM-DD）`；sha 允許短碼（至少 7 碼）。
+#: 寫成 blockquote 原意是在 mkdocs 上與正文區隔，實際上四章有三章的引言本身也是
+#: blockquote，mkdocs 會把兩塊併成同一條豎線（known-drift `X4`，MYL-49 實測）。
+#: MYL-44 判定不修——改形式的連動成本大於一條豎線的價值。要動這條正則前先讀 `X4`。
 STAMP_RE = re.compile(
     r"^>\s*最後對照 protocol\s*`([0-9a-fA-F]{7,40})`\s*（(\d{4}-\d{2}-\d{2})）\s*$"
 )
