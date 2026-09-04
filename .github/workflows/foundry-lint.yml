@@ -6,6 +6,10 @@
 #
 # 跑的內容與本機 `make check`、pre-commit hook 完全相同，
 # 所以 CI 紅燈一定能在本機重現，不會出現「只有 CI 會壞」的情況。
+#
+# ⚠️ 這個保證有前提：**checkout 的 clone 形狀要跟本機一樣**。MYL-44 踩過一次——
+# 自檢新增了吃 git 歷史的項目，而 checkout 還停在淺 clone，於是 CI 紅、本機綠。
+# 動 `fetch-depth` 前先確認沒有自檢要讀歷史（現在有，見下方）。
 
 name: foundry-lint
 
@@ -24,9 +28,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # nav-sync 與 rule-ids 要讀整個 repo 的檔案，不需要歷史；
-          # 預設的 fetch-depth: 1 就夠，抓全部歷史只是浪費時間。
-          fetch-depth: 1
+          # `handbook-stamp`（MYL-44）要解出四章戳記指到的歷史 commit，並問
+          # 「那顆之後動過 protocol 的 commit 有沒有手冊變更同行」——**需要完整歷史**。
+          # 淺 clone 裡只有 tip 一顆 commit 物件，任何戳記 sha 都解不出來，
+          # 四章會全部誤報「不是本 repo 的 commit」（MYL-44 D1 退回：main 連四紅）。
+          # 原註解「不需要歷史」在 MYL-36 P8 當時成立，被 MYL-44 的新自檢推翻了。
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:

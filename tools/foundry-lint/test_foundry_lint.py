@@ -524,11 +524,26 @@ class HandbookStampTest(unittest.TestCase):
         self.commit("掛上戳記")
 
     # ── 輔助 ──────────────────────────────────────────────────────────
-    def git(self, *args):
-        proc = subprocess.run(("git", "-C", str(self.root)) + args,
-                              capture_output=True, text=True)
+    def git(self, *args, cwd=None):
+        """對臨時 repo 跑 git。
+
+        `env` 不能省：從 worktree 裡 commit 時，git 會匯出絕對路徑的
+        `GIT_DIR`／`GIT_INDEX_FILE`，它們蓋過 `-C`，於是這一整組測試會改去
+        操作**外層真正的 repo**——本組 24 個測試會一起倒在 setUp，而訊息是
+        「No .pre-commit-config.yaml file was found」，看不出跟 git 有關。
+        """
+        proc = subprocess.run(("git", "-C", str(cwd or self.root)) + args,
+                              capture_output=True, text=True,
+                              env=foundry_lint.git_env())
         self.assertEqual(proc.returncode, 0, proc.stderr)
         return proc.stdout.strip()
+
+    def clone(self, name, *extra):
+        """把臨時 repo clone 出來；`extra` 給 `--depth=1` 之類的形狀參數。"""
+        dst = Path(self._tmp.name) / name
+        self.git("clone", "-q", *extra, f"file://{self.root}", str(dst),
+                 "-b", "main", cwd=self.root)
+        return dst
 
     def chapter(self, name):
         return self.root / foundry_lint.HANDBOOK_REL / name
@@ -644,6 +659,34 @@ class HandbookStampTest(unittest.TestCase):
         res = self.stamp_check()
         self.assertFalse(res.passed)
         self.assertTrue(any("少了一份" in f for f in res.failures), res.failures)
+
+    def test_淺_clone_擋下且指向_fetch_depth_而不是誤報戳記寫錯(self):
+        """`fetch-depth: 1` 的 CI 上，戳記 sha 一律解不出來。
+
+        MYL-44 `D1`：這個情境讓 main 連四顆 commit 的 CI 全紅，而訊息說的是
+        「戳記 sha 不是本 repo 的 commit」——四章各報一次，把排查引向手冊，
+        真正要改的卻是 checkout 設定。訊息錯誤的成本在這裡是三個 run。
+
+        所以本測試盯的不只是「有擋下」，還有**擋下的理由要對**：一則訊息、
+        指向 `fetch-depth`、且不得再出現那句誤導的「不是本 repo 的 commit」。
+        """
+        dst = self.clone("shallow", "--depth=1")
+        self.assertEqual(
+            self.git("rev-parse", "--is-shallow-repository", cwd=dst), "true",
+            "前提沒成立：這個 clone 根本不淺，後面的斷言就沒有意義了")
+
+        res = foundry_lint.check_handbook_stamp(dst)
+        self.assertFalse(res.passed, "淺 clone 驗不了落後，不可以靜靜通過")
+        self.assertEqual(len(res.failures), 1, res.failures)
+        self.assertIn("fetch-depth", res.failures[0])
+        self.assertFalse(any("不是本 repo 的 commit" in f for f in res.failures),
+                         res.failures)
+
+    def test_完整_clone_不觸發淺_clone_那條(self):
+        """反例：同樣是 clone，帶了歷史就該照常過——別把所有 clone 都擋掉。"""
+        dst = self.clone("full")
+        res = foundry_lint.check_handbook_stamp(dst)
+        self.assertTrue(res.passed, res.failures)
 
     # ── 層 0：pre-commit 觸發器 ───────────────────────────────────────
     def test_層0_改了_protocol_沒動手冊_擋下且說得出下一步(self):
