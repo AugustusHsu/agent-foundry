@@ -21,12 +21,13 @@ repos:
   - repo: local
     hooks:
       - id: foundry-selfcheck
-        name: foundry-lint --selfcheck（雙入口／手冊 nav／錨點／規則 ID）
+        name: foundry-lint --selfcheck（雙入口／手冊 nav／錨點／規則 ID／大檔清單）
         entry: python3 tools/foundry-lint/foundry_lint.py --selfcheck
         language: system
         pass_filenames: false
-        # 這四項檢查的輸入散落在 repo 各處（入口檔、手冊、mkdocs.yml、
-        # 發佈腳本、protocol），任何一處變動都可能讓其中一項失效，故全域觸發。
+        # 這些檢查的輸入散落在 repo 各處（入口檔、手冊、mkdocs.yml、發佈腳本、
+        # protocol，以及任何一個會長大的 .md），任何一處變動都可能讓其中一項失效，
+        # 故全域觸發。
         always_run: true
 
       - id: foundry-tests

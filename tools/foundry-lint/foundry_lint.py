@@ -120,11 +120,14 @@ def render_json(result: CheckResult) -> str:
 
 # ══════════════════════ selfcheck：repo 規範自檢（MYL-36） ══════════════════════
 #
-# 四項檢查，每一項都對應一個實際發生過的缺陷——不是預想的風險：
+# 每一項檢查都對應一個實際發生過的缺陷——不是預想的風險：
 #   entry-sync  雙入口 CLAUDE.md／AGENTS.md 共用正文漂移
 #   nav-sync    手冊章節與兩份 nav 不同步 → 公開站漏章（MYL-31）
 #   anchors     中文錨點與 mkdocs slug 不符 → 點了不跳轉（MYL-25）
 #   rule-ids    引用了不存在的規則 ID（protocol 第 11 節）
+#   big-files   入口檔的大檔清單漏列 → 接手者整份載入（MYL-42）
+#
+# （這裡刻意不寫「共 N 項」——那種數字沒有人會回來改，正是 MYL-42 要收掉的漂移。）
 
 SHARED_BEGIN = "<!-- FOUNDRY:SHARED-BODY:BEGIN -->"
 SHARED_END = "<!-- FOUNDRY:SHARED-BODY:END -->"
@@ -140,6 +143,19 @@ INLINE_CODE_RE = re.compile(r"`([^`]*)`")
 EMPHASIS_RE = re.compile(r"\*{1,3}([^*]+)\*{1,3}")
 MD_LINK_TARGET_RE = re.compile(r"\]\(([^)\s]+)\)")
 CHAPTER_FILE_RE = re.compile(r"(\d{2}-[a-z0-9-]+\.md)")
+
+#: 入口檔 §4 大檔清單的界線。用標記而非節號，因為節號會隨增訂變動。
+BIG_BEGIN = "<!-- FOUNDRY:BIG-FILES:BEGIN -->"
+BIG_END = "<!-- FOUNDRY:BIG-FILES:END -->"
+#: 達此大小的 .md 就必須在入口檔列名。改這個常數要連帶改入口檔那句話——
+#: `check_big_files` 會核對兩者一致，不讓程式與散文各說各話。
+BIG_FILE_BYTES = 12 * 1024
+#: 掃描範圍：全 repo 共用的規則與說明。不含 `docs/features/`——那是各模組
+#: 自己的交付物，只在做該模組時讀，列進入口檔只會讓它隨模組數無限膨脹。
+BIG_SCAN_DIRS = ("skills", "docs")
+BIG_SKIP_PREFIXES = (("docs", "features"),)
+#: 清單裡的路徑一律寫成 `反引號包住的 .md 路徑`。
+MD_PATH_RE = re.compile(r"`([^`\n]+\.md)`")
 
 
 @dataclass
@@ -397,7 +413,78 @@ def check_rule_ids(root: Path) -> SelfcheckResult:
     return res
 
 
-SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids)
+def scan_big_files(root: Path) -> list:
+    """掃描範圍內所有達門檻的 .md，回傳 repo 相對路徑（POSIX 形式），已排序。"""
+    found = []
+    for top in BIG_SCAN_DIRS:
+        base = root / top
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*.md"):
+            rel = path.relative_to(root)
+            if any(rel.parts[: len(skip)] == skip for skip in BIG_SKIP_PREFIXES):
+                continue
+            if path.stat().st_size >= BIG_FILE_BYTES:
+                found.append(rel.as_posix())
+    return sorted(found)
+
+
+def check_big_files(root: Path) -> SelfcheckResult:
+    """入口檔的大檔清單要涵蓋所有達門檻的檔案，且列出的路徑都還在。
+
+    MYL-42：舊版清單把每個檔的 KB 數寫死在散文裡，沒有任何機械驗證——
+    數字漂了（宣稱 13KB／實際 12KB），清單本身也漏了兩份後來長大的檔。
+    現在改成不寫大小、只寫路徑，由本檢查兜住「漏列」與「路徑失效」兩個方向。
+
+    只擋這兩個方向是刻意的：門檻以下的檔案要不要一併列出屬編輯判斷
+    （例如當前平台的 adapter），那是判斷不是漂移，不該讓機械檢查來管。
+    """
+    res = SelfcheckResult("big-files", "入口檔大檔清單涵蓋所有達門檻檔案")
+    kb = BIG_FILE_BYTES // 1024
+
+    block = None
+    for name in ("CLAUDE.md", "AGENTS.md"):
+        path = root / name
+        if not path.exists():
+            res.failures.append(f"{name} 不存在——repo 根缺少接手入口檔")
+            continue
+        text = read_text(path)
+        if BIG_BEGIN not in text or BIG_END not in text:
+            res.failures.append(
+                f"{name} 缺少 {BIG_BEGIN} / {BIG_END} 標記——大檔清單無法機械核對"
+            )
+            continue
+        if block is None:
+            # 兩檔的標記都在共用正文內，內容一致由 entry-sync 保證，取一份即可。
+            block = text[text.index(BIG_BEGIN) : text.index(BIG_END)]
+    if block is None:
+        return res
+
+    if f"{kb}KB" not in block:
+        res.failures.append(
+            f"入口檔的大檔清單沒有寫出 {kb}KB 這個門檻，"
+            f"但 BIG_FILE_BYTES 就是 {kb}KB——程式與散文對不上，改了常數要順手改那句話"
+        )
+
+    listed = set(MD_PATH_RE.findall(block))
+    over_threshold = scan_big_files(root)
+    for rel in over_threshold:
+        if rel not in listed:
+            res.failures.append(
+                f"{rel} 已達 {kb}KB 門檻，但入口檔的大檔清單沒有列它"
+                "——接手者不會知道這份不該整份載入"
+            )
+    for rel in sorted(listed):
+        if not (root / rel).exists():
+            res.failures.append(
+                f"入口檔的大檔清單列了 {rel}，但這個路徑不存在——檔案已刪或改名，清單沒跟上"
+            )
+    res.summary += f"（門檻 {kb}KB，達標 {len(over_threshold)} 份）"
+    return res
+
+
+SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
+              check_big_files)
 
 
 def run_selfcheck(root: Path) -> list:
@@ -447,7 +534,7 @@ def parse_args(argv):
     parser.add_argument(
         "--selfcheck",
         action="store_true",
-        help="跑 repo 規範自檢（雙入口同步、手冊 nav、錨點、規則 ID），不需 --type／file",
+        help="跑 repo 規範自檢（雙入口同步、手冊 nav、錨點、規則 ID、大檔清單），不需 --type／file",
     )
     parser.add_argument("--repo-root", default=None, help="自檢的 repo 根目錄，預設為本檔上溯兩層")
     parser.add_argument("file", nargs="?")

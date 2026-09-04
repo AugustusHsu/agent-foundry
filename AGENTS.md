@@ -20,14 +20,33 @@
 ## 2. 開場必讀順序
 
 1. **`skills/foundry-protocol/SKILL.md`** — 全隊硬規則，每個 agent 必掛。
-   ⚠️ 41KB，**不要整份讀**（見 §4）。先 `grep -n '^#\{1,3\} '` 取標題地圖，再讀需要的節。
+   ⚠️ 全 repo 最大的一份，**不要整份讀**（見 §4）。先 `grep -n '^#\{1,3\} '` 取標題地圖，再讀需要的節。
 2. **`docs/standards/known-drift.md`** — 已知漂移與反悔錄。**動手前讀這份**：
    哪些 API 會 403、哪些提案已經被否決過、哪些缺口是使用者知情下保留的。
    不讀這份，很容易花一整輪去重踩一個已經有結論的坑。
 3. **自己的角色 skill**（`skills/roles/<角色>/SKILL.md`，約 60–120 行）——只寫該角色獨有的判準。
 4. `.foundry/config.yml` — 本專案的關卡與 push 授權設定（**agent 不得自行改動**）。
 
-## 3. 地圖
+## 3. 地圖：我想要…→前往
+
+先從**意圖**找入口；不確定某樣東西放在哪，再看下面的目錄結構。
+每一格只給去處，不給規則——規則以該處的文件為準。
+
+| 我想要… | 前往 |
+| --- | --- |
+| 改全隊硬規則（改了會改變每個 agent 的行為） | `skills/foundry-protocol/SKILL.md`。新增條款要同步在第 11 節登記規則 ID，否則 `--selfcheck` 擋下 |
+| 改某個角色獨有的判準 | `skills/roles/<角色>/SKILL.md`。跨角色共通的規則屬 protocol，別寫進角色 skill |
+| 改使用手冊 | `docs/handbook/`，並照 §7 走完發佈四步；新增章節要改**兩份** nav |
+| 加一項機械檢查 | `tools/foundry-lint/foundry_lint.py` 的 `SELFCHECKS` ＋同目錄測試（每項檢查都要配一個擋得住的反例），`make check` 驗 |
+| 把 Foundry 導入一個專案 | 全新專案走 `skills/foundry-init/`；已有開發活動的走 `skills/foundry-adopt/` |
+| 調關卡粒度（哪一關要誰簽） | `skills/foundry-gates/` ＋ `.foundry/config.yml`（agent 不得自行改；`G-C` 不可調降） |
+| 查「這個坑是不是已經有結論」 | `docs/standards/known-drift.md`——動手前必讀，別重踩已經有裁定的事 |
+| 換某個角色的模型供應商 | `skills/foundry-model-routing/`；先 `make providers` 盤點，別憑印象回答 |
+| 讓 agent 看得到畫面／驗前端 | `skills/foundry-browser/`；先 `make browser` 判級，三把鑰匙見 §5 |
+| 寫 BRD／PRD／HLD／LLD／測試計畫 | `templates/` 取對應模板，寫完跑 `make lint-doc TYPE=… FILE=…` |
+| 知道換到別的平台這步怎麼做 | `skills/foundry-platform/` ＋當前平台的 adapter（只讀一份，見 §4） |
+
+### 目錄結構
 
 ```
 agent-foundry/
@@ -58,14 +77,25 @@ agent-foundry/
 
 ## 4. Context 預算（protocol 第 10 節 `C1`～`C5`）
 
-**超過 20KB 的檔案禁止整份載入**，先 `grep -n` 定位再局部讀。本 repo 目前的大檔：
+**超過 20KB 的檔案禁止整份載入**，先 `grep -n` 定位再局部讀。
 
-| 檔案 | 大小 | 備註 |
-| --- | --- | --- |
-| `skills/foundry-protocol/SKILL.md` | ~41KB | 整份讀約 1.2 萬 tokens。多數工單只需要其中一到兩節 |
-| `skills/foundry-adopt/SKILL.md` | ~15KB | |
-| `docs/pilot/pilot-log.md` | ~13KB | 歷史紀錄，除非要查典故否則不必讀 |
-| `skills/foundry-platform/adapters/paperclip.md` | ~12KB | 只讀當前平台那一份，不要三份都載 |
+<!-- FOUNDRY:BIG-FILES:BEGIN -->
+下表**故意不寫每個檔案幾 KB**——寫死在散文裡的數字沒有人會回來改，只會愈漂愈遠；
+要現值自己 `ls -l`。清單本身則是機械維護的：`--selfcheck` 的 `big-files` 會掃
+`skills/` 與 `docs/`（不含 `docs/features/`，那是各模組自己的交付物），
+**每個 12KB 以上的 .md 都必須列在下表**，漏列或路徑失效就擋下。
+門檻以下的檔案要不要一併列出，屬編輯判斷。
+
+| 檔案 | 通常只需要哪一部分 |
+| --- | --- |
+| `skills/foundry-protocol/SKILL.md` | 全 repo 最大的一份。先 `grep -n '^#\{1,3\} '` 取標題地圖；多數工單只需要其中一到兩節 |
+| `docs/standards/known-drift.md` | 動手前必讀，但依分類取用：L＝平台限制、S＝API 形狀、R＝反悔錄、X＝併發競態 |
+| `skills/foundry-adopt/SKILL.md` | 只在導入既有專案時讀，讀當前模組那一節即可 |
+| `skills/foundry-browser/SKILL.md` | 只在要驗畫面時讀；先 `make browser` 判級，再讀對應層級那一節 |
+| `docs/pilot/pilot-log.md` | 歷史紀錄，除非要查典故否則不必讀 |
+| `skills/foundry-init/SKILL.md` | 只在導入全新專案時讀 |
+| `skills/foundry-platform/adapters/paperclip.md` | 未達門檻但一樣別整份載：只讀當前平台那一份，不要三份都載 |
+<!-- FOUNDRY:BIG-FILES:END -->
 
 **減法原則**：先給最小必要上下文跑一輪，不滿意再補。不要為了「準備完整」而預先載入整個 `docs/`。
 
@@ -92,7 +122,7 @@ agent-foundry/
 # 文件是否符合模板必備章節（type: brd|prd|hld|lld|review-report|test-plan）
 python3 tools/foundry-lint/foundry_lint.py --type prd docs/features/<模組>/PRD.md
 
-# repo 規範自檢（規則 ID 引用、手冊 nav 一致性、錨點、雙入口同步）
+# repo 規範自檢（雙入口同步、手冊 nav 一致性、錨點、規則 ID 引用、大檔清單）
 python3 tools/foundry-lint/foundry_lint.py --selfcheck
 
 # 測試

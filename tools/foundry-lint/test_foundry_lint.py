@@ -300,7 +300,7 @@ class SelfcheckTest(unittest.TestCase):
         results = foundry_lint.run_selfcheck(self.root)
         return next(r for r in results if r.name == name)
 
-    def test_真實_repo_四項全過_exit_0(self):
+    def test_真實_repo_全部通過_exit_0(self):
         proc = self._run()
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
         self.assertIn("全部通過", proc.stdout)
@@ -365,6 +365,55 @@ class SelfcheckTest(unittest.TestCase):
         res = self._named("rule-ids")
         self.assertTrue(res.passed, res.failures)
 
+    def _big(self, rel):
+        """在副本裡放一個超過門檻的 .md，回傳它的 repo 相對路徑。"""
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x" * (foundry_lint.BIG_FILE_BYTES + 1), encoding="utf-8")
+        return rel
+
+    def test_大檔沒列進入口檔清單被擋下(self):
+        self._big("skills/foundry-plenty/SKILL.md")
+        res = self._named("big-files")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("skills/foundry-plenty/SKILL.md" in f and "沒有列它" in f
+                            for f in res.failures))
+
+    def test_清單列了不存在的路徑被擋下(self):
+        (self.root / "docs" / "pilot" / "pilot-log.md").unlink()
+        res = self._named("big-files")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("docs/pilot/pilot-log.md" in f and "路徑不存在" in f
+                            for f in res.failures))
+
+    def test_門檻以下的檔案不必列(self):
+        p = self.root / "skills" / "foundry-tiny.md"
+        p.write_text("x" * (foundry_lint.BIG_FILE_BYTES - 1), encoding="utf-8")
+        self.assertTrue(self._named("big-files").passed)
+
+    def test_docs_features_不納入掃描(self):
+        """各模組交付物不該逼入口檔隨模組數膨脹。"""
+        self._big("docs/features/某模組/HLD.md")
+        self.assertTrue(self._named("big-files").passed)
+
+    def test_缺少大檔清單標記被擋下(self):
+        p = self.root / "CLAUDE.md"
+        p.write_text(p.read_text(encoding="utf-8").replace(foundry_lint.BIG_BEGIN, ""),
+                     encoding="utf-8")
+        res = self._named("big-files")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("CLAUDE.md 缺少" in f for f in res.failures))
+
+    def test_門檻常數與入口檔散文不一致被擋下(self):
+        """改了 BIG_FILE_BYTES 卻沒改那句話，程式與散文就各說各話。"""
+        p = self.root / "CLAUDE.md"
+        kb = foundry_lint.BIG_FILE_BYTES // 1024
+        p.write_text(p.read_text(encoding="utf-8").replace(f"{kb}KB", f"{kb + 4}KB"),
+                     encoding="utf-8")
+        res = self._named("big-files")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("門檻" in f and "對不上" in f for f in res.failures))
+
     def test_json_格式可解析且與_exit_code_一致(self):
         (self.root / "AGENTS.md").unlink()
         proc = run_cli("--selfcheck", "--repo-root", str(self.root),
@@ -373,7 +422,8 @@ class SelfcheckTest(unittest.TestCase):
         data = json.loads(proc.stdout)
         self.assertFalse(data["passed"])
         self.assertEqual({c["name"] for c in data["checks"]},
-                         {"entry-sync", "nav-sync", "anchors", "rule-ids"})
+                         {"entry-sync", "nav-sync", "anchors", "rule-ids",
+                          "big-files"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()
