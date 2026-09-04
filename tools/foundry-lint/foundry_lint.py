@@ -574,6 +574,24 @@ def check_big_files(root: Path) -> SelfcheckResult:
 # 「看過了」與「沒看過」因此不再靠自我申報。
 
 
+# git 在 hook 裡會匯出這幾個「指向哪個 repo」的變數，而它們的優先序高於 `-C`。
+# 從**一般 checkout** commit 時它們是相對路徑（`GIT_INDEX_FILE=.git/index`、
+# 沒有 `GIT_DIR`），`-C` 照常生效；從 **worktree** commit 時兩者都是絕對路徑，
+# 於是 `git -C <別的目錄>` 會被悄悄導回外層 repo——查的對象整個換掉而且不報錯。
+# `git_run` 的契約是「對 root 跑 git」，所以這裡清掉它們，讓 `-C` 說了算。
+# 清掉 `GIT_INDEX_FILE` 是安全的：git 會改用 `-C` 找到的那個 git dir 底下的
+# `index`，跟被清掉的那個變數指的是同一個檔案（兩種形狀都實測過）。
+GIT_LOCATION_ENV = (
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+    "GIT_PREFIX", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+)
+
+
+def git_env() -> dict:
+    """去掉會蓋過 `-C` 的 git 環境變數；測試也用這份，免得兩邊各清各的。"""
+    return {k: v for k, v in os.environ.items() if k not in GIT_LOCATION_ENV}
+
+
 def git_run(root: Path, *args) -> tuple:
     """跑 git，回傳 `(ok, stdout)`；git 不存在或不是 repo 時 `ok` 為 False。
 
@@ -584,7 +602,7 @@ def git_run(root: Path, *args) -> tuple:
     try:
         proc = subprocess.run(
             ("git", "-C", str(root)) + args,
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, check=False, env=git_env(),
         )
     except OSError:
         return False, ""
@@ -628,6 +646,18 @@ def check_handbook_stamp(root: Path) -> SelfcheckResult:
     """
     res = SelfcheckResult("handbook-stamp", "手冊四章戳記不落後於 protocol")
     has_git, _ = git_run(root, "rev-parse", "--verify", "HEAD")
+    # 淺 clone 是「有 git 但沒有歷史」——戳記 sha 一律解不出來，於是四章一起偽裝成
+    # 「戳記寫錯了」。那個訊息把人指向手冊，真正該改的卻是 checkout 的 fetch-depth
+    # （MYL-44 D1：main 連四顆 commit 的 CI 全紅，排查繞了三個 run）。這裡擋一次並
+    # 說出真正的處置。**不是靜靜略過**——略過等於閘門在淺 clone 下無聲失效。
+    _, shallow = git_run(root, "rev-parse", "--is-shallow-repository")
+    is_shallow = has_git and shallow == "true"
+    if is_shallow:
+        res.failures.append(
+            "這是淺 clone（`--depth`），戳記指到的歷史 commit 解不出來，落後與否"
+            "驗不了——CI 把 checkout 的 `fetch-depth` 設成 `0`，本機用完整 clone。"
+            "（戳記的字面格式仍照驗）"
+        )
     for name in STAMPED_CHAPTERS:
         rel = f"{HANDBOOK_REL}/{name}"
         path = root / HANDBOOK_REL / name
@@ -645,7 +675,7 @@ def check_handbook_stamp(root: Path) -> SelfcheckResult:
                 " `> 最後對照 protocol `<sha>`（YYYY-MM-DD）`"
             )
             continue
-        if not has_git:
+        if not has_git or is_shallow:
             continue
         sha = m.group(1)
         ok, _ = git_run(root, "rev-parse", "--verify", f"{sha}^{{commit}}")

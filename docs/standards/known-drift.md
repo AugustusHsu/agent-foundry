@@ -117,7 +117,7 @@
 
 ## 5. 併發與競態：多個 run 共用同一個 workspace
 
-本 repo 的 workspace 是**共用**的，heartbeat run 可能併行；`X3` 起也一併收「mkdocs 渲染出來的東西跟來源字面不一樣」這一類踩點。以下每一條都真的發生過。
+本 repo 的 workspace 是**共用**的，heartbeat run 可能併行；`X3` 起也一併收**「工具跑出來的結果跟來源字面不一樣」**這一類踩點——`X3`／`X4` 是 mkdocs 的渲染，`X5`／`X6` 是 CI 的 checkout 形狀與 git hook 的環境變數。共通的形狀是：**來源沒錯，錯的是它被放進了哪個環境**，所以錯誤訊息往往指向錯的地方。以下每一條都真的發生過。
 
 - `X1` **commit 落到別人的分支。** 兩個 run 併行時 checkout 會互相干擾（MYL-23 的 commit 曾落到 MYL-27 的分支）。
   → **commit 前先驗 `git symbolic-ref --short HEAD`**，不要假設分支還是你切的那條。
@@ -128,6 +128,12 @@
 - `X4` **兩塊連續的 blockquote 會被 mkdocs 併成同一塊，空行擋不住。** Python-Markdown 的 blockquote 處理器看的是「前一個兄弟節點是不是 blockquote」，是就往裡面接。所以「`>` 戳記 → 空行 → `>` 章引言」渲染出來是**單一 `<blockquote>` 內含兩個 `<p>`**，視覺上一條左側豎線同時包住戳記與引言。MYL-49 在公開站實測 `04`／`06`／`07` 三章皆如此；`03-workflow` 沒事只是因為它戳記後面接的是一般段落，不是錨點挑得比較好。
   → **MYL-44 判定不修**（2026-09-04）：戳記的功能目的（讀者看得到最後對照的 protocol sha）已達成，`handbook-stamp` 要驗的東西全部成立，嚴重度純視覺。改戳記形式（例如換成斜體段落）會連動 `STAMP_RE`、pre-commit 觸發器、protocol 第 7 節條文、四章來源檔，還要再走一次發佈循環與一次視覺覆驗——為一條豎線不值得。**下一個看到的人請不要順手「修好」它**，要動先在工單裡把上面這串連動成本重新算一次。
   → 連帶的環境事實：**agent 在本機驗不了渲染。** 這個 workspace 的 `python3` 沒有 `markdown`、沒有 `mkdocs`，也沒有 `pip`（CLAUDE.md 第 6 節列的 `mkdocs serve` 是給使用者的，不是 agent 跑得動的）。⇒ 任何「這樣寫渲染出來會長怎樣」的假設，都只能靠公開站實測驗證，而那得先發佈——順序是反的。動手改渲染相關的東西前先認清這件事：你手上沒有便宜的驗證手段。
+- `X5` **淺 clone 讓 `handbook-stamp` 必然失敗，而且訊息指向錯的地方。** CI 的 checkout 停在 `fetch-depth: 1` 時，戳記指到的歷史 commit 在淺 clone 裡不存在，四章一起報「戳記 sha 不是本 repo 的 commit」——看起來像手冊寫錯，實際要改的是 workflow。main 為此連四顆 commit 全紅（MYL-53 發現，`D1` 退回 MYL-44）。
+  → 已修：`fetch-depth: 0`，並在 `check_handbook_stamp` 加淺 clone 偵測，改報一則直指 `fetch-depth` 的訊息。**擋下而不是略過**——略過等於閘門在淺 clone 下無聲失效。
+  → 更一般的教訓：**「CI 跑的內容與本機 `make check` 相同」不等於「CI 與本機等價」**。相同的是指令，不同的是 checkout 形狀。新增吃 git 歷史的自檢時要一併看 `fetch-depth`。
+- `X6` **從 worktree 裡 commit，會讓所有「開臨時 git repo」的測試改去操作外層真正的 repo。** git 跑 hook 時匯出 `GIT_DIR` 與 `GIT_INDEX_FILE`，而它們的優先序高於 `-C`。從**一般 checkout** commit 時兩者是相對路徑（`GIT_INDEX_FILE=.git/index`、沒有 `GIT_DIR`），`-C` 照常生效；從 **worktree** commit 時兩者都是絕對路徑，於是 `git -C <臨時目錄>` 被悄悄導回外層 repo。症狀是 `HandbookStampTest` 24 個測試一起倒在 `setUp`，錯誤訊息卻是「No .pre-commit-config.yaml file was found」，看不出跟 git 有關（MYL-44 `D1` 修復時踩到）。
+  → 已修：`git_run()` 與測試的 `git()` 共用 `foundry_lint.git_env()`，把 `GIT_LOCATION_ENV` 那幾個變數清掉，讓 `-C` 說了算。
+  → **用 worktree 迴避 `X1` 是對的**（HEAD 不會被併行 run 移走），但要知道它會換掉 hook 的環境。任何「shell out 去跑 git」的新程式碼都要走 `git_env()`。
 
 ### 兩份 nav 的結構性漂移
 
