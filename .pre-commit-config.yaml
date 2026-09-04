@@ -21,7 +21,7 @@ repos:
   - repo: local
     hooks:
       - id: foundry-selfcheck
-        name: foundry-lint --selfcheck（雙入口／手冊 nav／錨點／規則 ID／大檔清單）
+        name: foundry-lint --selfcheck（雙入口／手冊 nav／錨點／規則 ID／大檔清單／相對連結）
         entry: python3 tools/foundry-lint/foundry_lint.py --selfcheck
         language: system
         pass_filenames: false
