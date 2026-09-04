@@ -20,8 +20,17 @@ repos:
 
   - repo: local
     hooks:
+      - id: foundry-handbook-sync
+        name: 手冊同步觸發器（改了 protocol 卻沒動 docs/handbook/ → 擋下）
+        entry: python3 tools/foundry-lint/foundry_lint.py --staged-handbook-sync
+        language: system
+        pass_filenames: false
+        # MYL-44 三層閘門的層 0。看的是 index（`git diff --cached`）而不是工作區，
+        # 所以不能靠 `files:` 過濾——那只決定 hook 跑不跑，不決定它看到什麼。
+        always_run: true
+
       - id: foundry-selfcheck
-        name: foundry-lint --selfcheck（雙入口／手冊 nav／錨點／規則 ID／大檔清單／相對連結）
+        name: foundry-lint --selfcheck（雙入口／手冊 nav／錨點／規則 ID／大檔清單／相對連結／手冊戳記）
         entry: python3 tools/foundry-lint/foundry_lint.py --selfcheck
         language: system
         pass_filenames: false

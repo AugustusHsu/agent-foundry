@@ -1,5 +1,7 @@
 # 6. 團隊是怎麼編制的？
 
+> 最後對照 protocol `8433b97`（2026-09-04）
+
 > 本章記錄 MYL-12 討論、MYL-14 落地的組織結構決議。規則本體在 [`skills/foundry-protocol/SKILL.md`](../../skills/foundry-protocol/SKILL.md) 第 9 節；本章解釋它對你（使用者）的意義。
 
 ## 組織圖
