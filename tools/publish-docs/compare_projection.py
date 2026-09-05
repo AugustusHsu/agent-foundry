@@ -179,8 +179,9 @@ def render_table(reports: list, global_problems: list) -> str:
         total_anchors = sum(r.anchors_to_verify for r in reports)
         lines.append(
             f"**全綠**：{len(reports)} 章全部搬到，標題／節數／連結目標／戳記皆相符。"
-            f"其中 {total_anchors} 個錨點的**實際渲染**待 wiki 實站點過才算數"
-            "（本機沒有渲染器，見 known-drift `X4`）。"
+            f"其中 {total_anchors} 個錨點是**依 GitHub 的 slug 演算法重算**的，"
+            "本機驗不了實際渲染（沒有渲染器，見 known-drift `X4`）——要驗就抓實站的 "
+            '`id="user-content-…"` 比對；判準與已驗結果見 known-drift `L16`。'
         )
     return "\n".join(lines)
 
