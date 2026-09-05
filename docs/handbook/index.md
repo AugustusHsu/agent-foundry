@@ -29,7 +29,7 @@
 手冊是「怎麼用」；「規則本體」在 skill 與模板：
 
 - [`skills/foundry-protocol/SKILL.md`](../../skills/foundry-protocol/SKILL.md) — 核心規範：工單骨架、狀態機、交接格式、HITL 閘門、commit／分支規則。
-- `skills/roles/<角色>/SKILL.md` — 六個角色各自的判準。
+- `skills/roles/<角色>/SKILL.md` — 各角色各自的判準（目錄底下有幾份就是幾個角色，這裡不寫數量）。
 - `skills/foundry-platform/` — 平台 adapter 介面與 github／local-md 對照文檔、`.foundry/config.yml` schema。
 - `skills/foundry-gates/`、`skills/foundry-init/`、`skills/foundry-adopt/` — 關卡調整與新／舊專案導入的跨平台 workflow（見[第 8 章](08-cross-platform.md)）。
 - [`templates/`](../../templates/) — BRD／PRD／HLD／LLD／測試計畫／審查報告的共用骨架。
