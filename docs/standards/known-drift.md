@@ -12,7 +12,8 @@
 
 ## 1. 平台限制：撞了就是撞了，重試無用
 
-這些不是 bug，是權限邊界。遇到時依 `H6` 發卡請使用者執行，**不要換寫法重試、不要指數退避**。
+這些不是 bug，是**權限邊界或平台能力邊界**——後者常見的形狀是「API 根本沒有那個設定點，只有 UI 有」。
+遇到時依 `H6` 發卡請使用者執行，**不要換寫法重試、不要指數退避**。
 
 | # | 動作 | 結果 | 正解 |
 | --- | --- | --- | --- |
@@ -27,6 +28,10 @@
 | L8 | 工作區未信任時的 `.claude/settings.json` 的 `permissions.allow` | **整份被忽略**，harness 印 `Ignoring N permissions.allow entries ... this workspace has not been trusted` | 設計如此，不讓 clone 來的 repo 自己開權限。`~/.claude.json` 的 `projects[<路徑>].hasTrustDialogAccepted` 為 true 才生效；`.claude/settings.local.json` **不受此限**。Paperclip materialize 的 workspace 從沒被互動式開啟過，**預設一律未信任**。⇒ 版控那份要能用得靠使用者設信任旗標（`H6`，agent 不得自行改 `~/.claude.json`），要立刻能用就複製一份到 local。偵測：`make browser` 回報 `allowed_but_untrusted`。**本 repo 的 workspace 已於 2026-09-04（MYL-37 卡 `myl37:handover:v1` 選 `set_trust` 並授權代設）設為 true**——但**信任是綁「絕對路徑」的**，換 project／換機器／Paperclip 換一條 materialize 路徑，新路徑一律從未信任重來 |
 | L9 | 把任何 Paperclip 管理的 MCP 連線授權給某 agent | 該 agent 的**專案 `.mcp.json` 整份失效**，瀏覽器工具無聲消失 | claude_local adapter 在「該 agent 拿得到 ≥1 個平台 MCP server」時才加 `--mcp-config <run 檔> --strict-mcp-config`（`adapter-claude-local/dist/server/execute.js:663`），而 `--strict-mcp-config` 的語意是 CLI 明載的「**只用 --mcp-config 的 server，忽略其他所有 MCP 設定**」。⇒ 閘道不是「額外加上去」，是**換掉整個 MCP 來源**。作用範圍是 per-agent（`getEffectiveProfilesForAgent`），但 gallery 連線的 finish 步驟預設 `access: "all_agents"`，等於全員生效。**日後掛 GitHub／Slack／Linear 之類遠端 app 前，先想這件事** |
 | L10 | 想用工具閘道把 stdio 型 MCP（`npx chrome-devtools-mcp`／`@playwright/mcp`）綁給單一 agent | **送不進 agent session** | 只有 `transport === "mcp_remote"` 的連線會被組成 runtime MCP server 交給 adapter（`server/dist/services/heartbeat.js:2313` 的 filter），`local_stdio` 直接被濾掉。stdio server 只會在 Paperclip 的 runtime slot 跑起來、供**外部** MCP client 經 gateway URL 取用。另外 gallery 只有 7 個可連的 app（zapier／github／slack／notion／linear／google-sheets／context7，`shared/dist/app-definitions.js:2`），**沒有任何瀏覽器 app**。⇒ 見 `GAP-5`：閘道關不掉那個缺口 |
+| L11 | 用 `createProjectV2View` 建 Projects v2 的 view，期望它帶入專案的自訂欄位 | view 建得出來，但 `visibleFieldIds` **一律是 GitHub 出廠預設**（`Title, Assignees, Status, Linked pull requests, Sub-issues progress`）；自訂欄位即使有值也不會出現在畫面上 | 建完再呼叫一次 `updateProjectV2View` 補 `visibleFieldIds`，這是兩步不是一步。另外 **view 只能走 GraphQL**：`gh project` 的子命令只到 project／field／item／link 層級，沒有任何 view 子命令（2026-09-05 覆核）。（2026-09-04 MYL-43 實測） |
+| L12 | 把 `L11` 的補救套到 Roadmap view 上：對 ROADMAP_LAYOUT 呼叫 `updateProjectV2View` 補 `visibleFieldIds` | `UNPROCESSABLE: "Roadmap views do not support visible fields."` | Roadmap 沒有「欄位可見性」這個概念，別在這裡重試。Roadmap 畫不出東西的真正原因見 `L13`——**不是**欄位沒顯示。（2026-09-04 MYL-43 實測） |
+| L13 | 純用 API 建出 Roadmap view，然後去看畫面 | **時間軸必定空白**：格線與月份標尺正常、左側列得出項目，但時間軸區域不畫任何條狀區間或里程碑點 | **兩個獨立成因，各自都足以造成空白，只修一個畫面照樣是空的**——這是本條最容易被寫漏的部分。**成因 A（UI 專屬，API 無設定點）**：view 的 Start／Target date 指向「無」。全 schema 掃過：ProjectV2 相關 mutation 共 32 個，動 view 的只有 `updateProjectV2View`，其 `ProjectV2ViewConfigurationInput` **只有 `visibleFieldIds` 一個欄位**，讀取型別 `ProjectV2ViewConfiguration` 也只有 `visibleFields`；設定入口只在 UI 的 `Roadmap` → `Date fields`，依 `H6` 發卡請使用者按。**成因 B（可自動化）**：項目的日期欄位根本沒有值——`updateProjectV2ItemFieldValue` 寫得進去。MYL-43 撤回後 39 張手抄 draft card 換成真 issue，原本帶的目標日沒有人補回來，於是 GraphQL 查 `fieldValues` 只回 `Status`，一筆 `ProjectV2ItemFieldDateValue` 都沒有。⚠️ **診斷時不要相信 `Date fields` 按鈕上那句提示**「*Your project needs at least one date or iteration field to get started.*」——它與事實不符：GraphQL 查得該專案 `目標日` 的 `dataType` 就是 `DATE`（`PVTF_lAHOAVyI0c4BiTdozhhU4zo`），研判是登出訪客沒按過 `Got it!` 的新手引導殘留。⇒ 本條是本 repo 目前**「機械驗證會騙人」最乾淨的樣板**：欄位在、值在、view 在、layout 正確，所有 `gh api` 斷言全綠，畫面就是空的。**視覺驗證不可被 API 斷言取代**，要舉例時舉這一條。（成因 A 與 schema 掃描：2026-09-04 MYL-43；成因 B、提示文字與畫面現況：2026-09-05 MYL-48 登出實測，附截圖） |
+| L14 | 從「repo 是 public」推論「掛在它上面的 Projects v2 看板也是 public」 | **推論不成立**。Projects v2 是帳號層物件，可見性與 repo 各自獨立；MYL-48 兩次「以為開了窗口」都栽在這裡 | 判定可見性**只能用登出瀏覽器實跑**，不要看設定畫面、也不要從 repo 可見性推。登出態的自我證明手法：頁首出現 `Sign in`／`Sign up`（`ref_loc=header+logged+out`）即排除「其實還登著」的假陽性；看板為 private 時同一網址回 404，該 404 同時證明 private 與登出兩件事。同一個根源還有另一個表現：**v2 看板只屬於帳號、不屬於 repo**，建好不會自動掛上去，要另外 `gh project link`；要確認掛上了沒有，查 GraphQL 的 `repository.projectsV2` 而不是 REST 的 `has_projects`（MYL-57 實測）。（2026-09-05 MYL-48 實測） |
 
 ## 2. API 形狀陷阱：會回 4xx 但錯誤訊息不會告訴你原因
 
@@ -38,6 +43,7 @@
 | S4 | 開單時直接設 `status: in_progress` → 被別的 heartbeat 搶走 checkout，隨後自己發卡回 409 `Issue run ownership conflict` | 先建成 `todo`／`backlog`，**發完卡再轉狀態** |
 | S5 | `PATCH /api/issues/{id}` 的 `unblockDescriptor.owner` 填別的 agentId → 整個 PATCH 靜默不生效（`status`、`blockedByIssueIds` 一併沒寫入） | `owner` 只能填自己。要別的 agent 解鎖就用一級 blocker 掛該 agent 的工單。⚠️ **2026-09-05（MYL-52）補測：填自己的 agentId（且自己就是 `assigneeAgentId`）也一樣整包靜默不生效**——`{"unblockDescriptor":{"owner":"<自己>","action":"…"}}` 送出去回 200、欄位全 null、`status` 沒變；把 `unblockDescriptor` 拿掉只送 `{"status":"blocked"}` 就成功。`openapi.json` 對這個欄位**沒有任何 schema**（同 `S3` 的空 requestBody），所以正確形狀無從查證。⇒ **要轉 `blocked` 就只送 `status`，解除路徑寫在工單留言**，不要為了填這個欄位反覆試——試錯會讓 `status` 一起寫不進去，看起來像「狀態改不動」 |
 | S6 | agent 把工單 PATCH 成 `in_review` → `invalid_issue_disposition` | 需先存在真實審查路徑（pending 的互動卡）。順序：**先發卡、再改狀態** |
+| S7 | 想把自己開的子單推進 `in_progress` → `in_progress issues require an assignee`；補上 `assigneeAgentId` 之後**再也 PATCH 不動那張單**，回 409 `Issue run ownership conflict` | **指派＝喚醒**，即使指派給「正在跑的自己」也一樣：Paperclip 會為那張子單另開一個併行 run，該 run 一 checkout 就成為單的擁有者，父 run 從此不能改它的狀態、也不能 `release`。而 `POST /api/heartbeat-runs/{id}/cancel` 是 **board-only（403）**，父 run 收不回來。⇒ 子單只要會被推進 `in_progress`，就**當成會生出一個併行 run 來設計**：先把它的描述與留言寫到足以讓那個 run 獨立完成，並明確寫出它**不該**碰什麼（尤其 git——共用 workspace 見 §5 `X1`）。不需要它跑起來就別指派，把單留在 `todo`。（2026-09-05 MYL-54 實測） |
 
 ## 3. 反悔錄：試過、放棄、不要改回去
 
@@ -117,7 +123,7 @@
 
 ## 5. 併發與競態：多個 run 共用同一個 workspace
 
-本 repo 的 workspace 是**共用**的，heartbeat run 可能併行；`X3` 起也一併收「mkdocs 渲染出來的東西跟來源字面不一樣」這一類踩點。以下每一條都真的發生過。
+本 repo 的 workspace 是**共用**的，heartbeat run 可能併行；`X3` 起也一併收**「工具跑出來的結果跟來源字面不一樣」**這一類踩點——`X3`／`X4` 是 mkdocs 的渲染，`X5`／`X6` 是 CI 的 checkout 形狀與 git hook 的環境變數。共通的形狀是：**來源沒錯，錯的是它被放進了哪個環境**，所以錯誤訊息往往指向錯的地方。以下每一條都真的發生過。
 
 - `X1` **commit 落到別人的分支。** 兩個 run 併行時 checkout 會互相干擾（MYL-23 的 commit 曾落到 MYL-27 的分支）。
   → **commit 前先驗 `git symbolic-ref --short HEAD`**，不要假設分支還是你切的那條。
@@ -128,6 +134,12 @@
 - `X4` **兩塊連續的 blockquote 會被 mkdocs 併成同一塊，空行擋不住。** Python-Markdown 的 blockquote 處理器看的是「前一個兄弟節點是不是 blockquote」，是就往裡面接。所以「`>` 戳記 → 空行 → `>` 章引言」渲染出來是**單一 `<blockquote>` 內含兩個 `<p>`**，視覺上一條左側豎線同時包住戳記與引言。MYL-49 在公開站實測 `04`／`06`／`07` 三章皆如此；`03-workflow` 沒事只是因為它戳記後面接的是一般段落，不是錨點挑得比較好。
   → **MYL-44 判定不修**（2026-09-04）：戳記的功能目的（讀者看得到最後對照的 protocol sha）已達成，`handbook-stamp` 要驗的東西全部成立，嚴重度純視覺。改戳記形式（例如換成斜體段落）會連動 `STAMP_RE`、pre-commit 觸發器、protocol 第 7 節條文、四章來源檔，還要再走一次發佈循環與一次視覺覆驗——為一條豎線不值得。**下一個看到的人請不要順手「修好」它**，要動先在工單裡把上面這串連動成本重新算一次。
   → 連帶的環境事實：**agent 在本機驗不了渲染。** 這個 workspace 的 `python3` 沒有 `markdown`、沒有 `mkdocs`，也沒有 `pip`（CLAUDE.md 第 6 節列的 `mkdocs serve` 是給使用者的，不是 agent 跑得動的）。⇒ 任何「這樣寫渲染出來會長怎樣」的假設，都只能靠公開站實測驗證，而那得先發佈——順序是反的。動手改渲染相關的東西前先認清這件事：你手上沒有便宜的驗證手段。
+- `X5` **淺 clone 讓 `handbook-stamp` 必然失敗，而且訊息指向錯的地方。** CI 的 checkout 停在 `fetch-depth: 1` 時，戳記指到的歷史 commit 在淺 clone 裡不存在，四章一起報「戳記 sha 不是本 repo 的 commit」——看起來像手冊寫錯，實際要改的是 workflow。main 為此連四顆 commit 全紅（MYL-53 發現，`D1` 退回 MYL-44）。
+  → 已修：`fetch-depth: 0`，並在 `check_handbook_stamp` 加淺 clone 偵測，改報一則直指 `fetch-depth` 的訊息。**擋下而不是略過**——略過等於閘門在淺 clone 下無聲失效。
+  → 更一般的教訓：**「CI 跑的內容與本機 `make check` 相同」不等於「CI 與本機等價」**。相同的是指令，不同的是 checkout 形狀。新增吃 git 歷史的自檢時要一併看 `fetch-depth`。
+- `X6` **從 worktree 裡 commit，會讓所有「開臨時 git repo」的測試改去操作外層真正的 repo。** git 跑 hook 時匯出 `GIT_DIR` 與 `GIT_INDEX_FILE`，而它們的優先序高於 `-C`。從**一般 checkout** commit 時兩者是相對路徑（`GIT_INDEX_FILE=.git/index`、沒有 `GIT_DIR`），`-C` 照常生效；從 **worktree** commit 時兩者都是絕對路徑，於是 `git -C <臨時目錄>` 被悄悄導回外層 repo。症狀是 `HandbookStampTest` 24 個測試一起倒在 `setUp`，錯誤訊息卻是「No .pre-commit-config.yaml file was found」，看不出跟 git 有關（MYL-44 `D1` 修復時踩到）。
+  → 已修：`git_run()` 與測試的 `git()` 共用 `foundry_lint.git_env()`，把 `GIT_LOCATION_ENV` 那幾個變數清掉，讓 `-C` 說了算。
+  → **用 worktree 迴避 `X1` 是對的**（HEAD 不會被併行 run 移走），但要知道它會換掉 hook 的環境。任何「shell out 去跑 git」的新程式碼都要走 `git_env()`。
 
 - `X5` **git 呼叫 hook 時會設 `GIT_DIR`，而它勝過 `git -C <路徑>`。** 於是「在臨時目錄造一個 repo 來測」這種測試，在 pre-commit 底下跑會被拉回**外層 repo**：臨時 repo 根本沒建起來，接著的 commit 觸發外層 hook、在臨時目錄找不到 `.pre-commit-config.yaml` 而整組紅。
   症狀極難認：**單獨跑 `make test` 全過，`git commit` 觸發同一組測試時全敗**，而且 `foundry-tests` 這個 hook 只在 staged 檔案含 `tools/` 時才觸發，所以它平常隱形，只在動到 `tools/` 的那次 commit 現形（MYL-52 撞上，當時 22 項全紅）。

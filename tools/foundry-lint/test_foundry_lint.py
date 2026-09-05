@@ -11,9 +11,16 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import foundry_lint
 from foundry_lint import LintError, build_rules, check_file, extract_headings
+
+# 測試一律不連線。`mirror-recon` 啟用後會打 GitHub 與 Paperclip API，
+# 讓單元測試依賴線上狀態，等於讓它隨時可能因為與程式無關的原因變紅。
+# 連線那一段改用注入假資料驗（見 MirrorReconTest），這裡只關掉真的出網。
+# 用 setdefault：想驗真實連線行為時，從外面設別的值就能覆寫。
+os.environ.setdefault(foundry_lint.MIRROR_OFFLINE_ENV, "1")
 
 SCRIPT = Path(__file__).resolve().with_name("foundry_lint.py")
 REPO_ROOT = SCRIPT.parent.parent.parent
@@ -35,9 +42,7 @@ REAL_PRD = REPO_ROOT / "docs" / "features" / "foundry-lint" / "PRD.md"
 for _leaked in [k for k in os.environ if k.startswith("GIT_")]:
     del os.environ[_leaked]
 
-CLEAN_GIT_ENV = dict(os.environ)
-
-FAKE_TEMPLATE = "# 模板\n\n## 1. 概述\n\n內文\n\n## 2. 需求\n\n## 3. 未決事項\n"
+FAKE_TEMPLATE ="# 模板\n\n## 1. 概述\n\n內文\n\n## 2. 需求\n\n## 3. 未決事項\n"
 
 
 def run_cli(*args, cwd=None):
@@ -500,7 +505,8 @@ class SelfcheckTest(unittest.TestCase):
         self.assertFalse(data["passed"])
         self.assertEqual({c["name"] for c in data["checks"]},
                          {"entry-sync", "nav-sync", "anchors", "rule-ids",
-                          "big-files", "internal-links", "handbook-stamp"})
+                          "big-files", "internal-links", "handbook-stamp",
+                          "mirror-recon"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()
@@ -542,11 +548,26 @@ class HandbookStampTest(unittest.TestCase):
         self.commit("掛上戳記")
 
     # ── 輔助 ──────────────────────────────────────────────────────────
-    def git(self, *args):
-        proc = subprocess.run(("git", "-C", str(self.root)) + args,
-                              capture_output=True, text=True, env=CLEAN_GIT_ENV)
+    def git(self, *args, cwd=None):
+        """對臨時 repo 跑 git。
+
+        `env` 不能省：從 worktree 裡 commit 時，git 會匯出絕對路徑的
+        `GIT_DIR`／`GIT_INDEX_FILE`，它們蓋過 `-C`，於是這一整組測試會改去
+        操作**外層真正的 repo**——本組 24 個測試會一起倒在 setUp，而訊息是
+        「No .pre-commit-config.yaml file was found」，看不出跟 git 有關。
+        """
+        proc = subprocess.run(("git", "-C", str(cwd or self.root)) + args,
+                              capture_output=True, text=True,
+                              env=foundry_lint.git_env())
         self.assertEqual(proc.returncode, 0, proc.stderr)
         return proc.stdout.strip()
+
+    def clone(self, name, *extra):
+        """把臨時 repo clone 出來；`extra` 給 `--depth=1` 之類的形狀參數。"""
+        dst = Path(self._tmp.name) / name
+        self.git("clone", "-q", *extra, f"file://{self.root}", str(dst),
+                 "-b", "main", cwd=self.root)
+        return dst
 
     def chapter(self, name):
         return self.root / foundry_lint.HANDBOOK_REL / name
@@ -663,6 +684,34 @@ class HandbookStampTest(unittest.TestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("少了一份" in f for f in res.failures), res.failures)
 
+    def test_淺_clone_擋下且指向_fetch_depth_而不是誤報戳記寫錯(self):
+        """`fetch-depth: 1` 的 CI 上，戳記 sha 一律解不出來。
+
+        MYL-44 `D1`：這個情境讓 main 連四顆 commit 的 CI 全紅，而訊息說的是
+        「戳記 sha 不是本 repo 的 commit」——四章各報一次，把排查引向手冊，
+        真正要改的卻是 checkout 設定。訊息錯誤的成本在這裡是三個 run。
+
+        所以本測試盯的不只是「有擋下」，還有**擋下的理由要對**：一則訊息、
+        指向 `fetch-depth`、且不得再出現那句誤導的「不是本 repo 的 commit」。
+        """
+        dst = self.clone("shallow", "--depth=1")
+        self.assertEqual(
+            self.git("rev-parse", "--is-shallow-repository", cwd=dst), "true",
+            "前提沒成立：這個 clone 根本不淺，後面的斷言就沒有意義了")
+
+        res = foundry_lint.check_handbook_stamp(dst)
+        self.assertFalse(res.passed, "淺 clone 驗不了落後，不可以靜靜通過")
+        self.assertEqual(len(res.failures), 1, res.failures)
+        self.assertIn("fetch-depth", res.failures[0])
+        self.assertFalse(any("不是本 repo 的 commit" in f for f in res.failures),
+                         res.failures)
+
+    def test_完整_clone_不觸發淺_clone_那條(self):
+        """反例：同樣是 clone，帶了歷史就該照常過——別把所有 clone 都擋掉。"""
+        dst = self.clone("full")
+        res = foundry_lint.check_handbook_stamp(dst)
+        self.assertTrue(res.passed, res.failures)
+
     # ── 層 0：pre-commit 觸發器 ───────────────────────────────────────
     def test_層0_改了_protocol_沒動手冊_擋下且說得出下一步(self):
         self.write_protocol("初版規範\n新增一條\n")
@@ -773,6 +822,319 @@ class HandbookStampTest(unittest.TestCase):
         bad = run_cli("--stamp-only-since", base, "--repo-root", str(self.root))
         self.assertEqual(bad.returncode, 1)
         self.assertIn("戳記以外", bad.stderr)
+
+
+class ConfigParserTest(unittest.TestCase):
+    """`.foundry/config.yml` 的迷你 parser：只支援本檔用得到的子集。"""
+
+    def test_巢狀與註解與引號(self):
+        cfg = foundry_lint.parse_config(
+            "# 開頭註解\n"
+            "foundry: 1\n"
+            "platform: paperclip   # 行尾註解\n"
+            "mirror_platform: github\n"
+            "platform_options:\n"
+            "  github:\n"
+            "    project_owner: '@me'\n"
+            "    mirror_since: \"MYL-58\"\n"
+            "  paperclip:\n"
+            "    project_id: abc-123\n"
+            "gates:\n"
+            "  external_actions: user\n"
+        )
+        self.assertEqual(cfg["platform"], "paperclip")
+        self.assertEqual(cfg["mirror_platform"], "github")
+        self.assertEqual(cfg["platform_options"]["github"]["project_owner"], "@me")
+        self.assertEqual(cfg["platform_options"]["github"]["mirror_since"], "MYL-58")
+        self.assertEqual(cfg["platform_options"]["paperclip"]["project_id"], "abc-123")
+        self.assertEqual(cfg["gates"]["external_actions"], "user")
+
+    def test_離開巢狀後回到頂層(self):
+        cfg = foundry_lint.parse_config(
+            "platform_options:\n  github:\n    a: 1\npush:\n  main_push: user\n")
+        self.assertEqual(cfg["push"]["main_push"], "user")
+        self.assertNotIn("push", cfg["platform_options"])
+
+    def test_真實設定檔讀得出_platform(self):
+        cfg = foundry_lint.read_config(REPO_ROOT)
+        self.assertEqual(cfg.get("platform"), "paperclip")
+
+
+class MirrorMarkerTest(unittest.TestCase):
+    """對應標記是唯一權威，解析錯了整個對帳就沒有基準。"""
+
+    def test_正常標記(self):
+        self.assertEqual(
+            foundry_lint.parse_mirror_marker("Foundry-Source: paperclip/MYL-58\n\n正文"),
+            ("paperclip", "MYL-58"))
+
+    def test_網頁編輯過的_CRLF_行尾(self):
+        self.assertEqual(
+            foundry_lint.parse_mirror_marker("Foundry-Source: paperclip/MYL-58\r\n\r\n正文"),
+            ("paperclip", "MYL-58"))
+
+    def test_空_body_不中斷(self):
+        # API 對沒有內文的 issue 回的是 null；少擋這一層，整個對帳會被一張
+        # 沒內文的 issue 中斷，而錯誤訊息不會說是哪一張。
+        self.assertIsNone(foundry_lint.parse_mirror_marker(None))
+        self.assertIsNone(foundry_lint.parse_mirror_marker(""))
+
+    def test_標記不在首行不算(self):
+        self.assertIsNone(
+            foundry_lint.parse_mirror_marker("前言\nFoundry-Source: paperclip/MYL-58"))
+
+    def test_人手開的_issue_沒有標記(self):
+        self.assertIsNone(foundry_lint.parse_mirror_marker("一般 issue 的內文"))
+
+
+class MirrorScopeTest(unittest.TestCase):
+    """`mirror_since` 界線：本單只鏡像新單，舊單回填要另外核可。"""
+
+    def test_界線含自己(self):
+        self.assertTrue(foundry_lint.in_mirror_scope("MYL-58", "MYL-58"))
+        self.assertTrue(foundry_lint.in_mirror_scope("MYL-59", "MYL-58"))
+        self.assertFalse(foundry_lint.in_mirror_scope("MYL-57", "MYL-58"))
+
+    def test_序號比大小不是字串比大小(self):
+        self.assertTrue(foundry_lint.in_mirror_scope("MYL-100", "MYL-58"))
+
+    def test_沒設界線時全部納入(self):
+        self.assertTrue(foundry_lint.in_mirror_scope("MYL-1", ""))
+
+    def test_形狀不符時寧可誤報不要漏報(self):
+        self.assertTrue(foundry_lint.in_mirror_scope("怪名字", "MYL-58"))
+        self.assertTrue(foundry_lint.in_mirror_scope("ABC-1", "MYL-58"))
+
+
+def _src(ref, status, skipped=False):
+    return foundry_lint.SourceIssue(ref=ref, status=status, mirror_skipped=skipped)
+
+
+def _mir(number, ref, state, status="Todo", platform="paperclip"):
+    return foundry_lint.MirrorIssue(number=number, source_platform=platform,
+                                    ref=ref, state=state, status=status)
+
+
+class MirrorReconTest(unittest.TestCase):
+    """對帳的反例：每一種不同步都要有一個擋得住它的案例。
+
+    「永遠會通過的檢查」等於沒有檢查——對帳尤其容易寫成這樣，因為它平常
+    本來就該是綠的。
+    """
+
+    def recon(self, sources, mirrors, platform="paperclip"):
+        return foundry_lint.reconcile_mirror(sources, mirrors, platform)
+
+    def test_完全同步時沒有紅燈(self):
+        self.assertEqual(self.recon(
+            [_src("MYL-58", "in_progress"), _src("MYL-59", "done")],
+            [_mir(1, "MYL-58", "open", "In Progress"),
+             _mir(2, "MYL-59", "closed", "Done")]), [])
+
+    def test_漏建被擋下(self):
+        fails = self.recon([_src("MYL-58", "todo")], [])
+        self.assertEqual(len(fails), 1)
+        self.assertIn("漏建", fails[0])
+        self.assertIn("MYL-58", fails[0])
+
+    def test_標了_Mirror_skipped_就不算漏建(self):
+        self.assertEqual(self.recon([_src("MYL-58", "todo", skipped=True)], []), [])
+
+    def test_孤兒被擋下(self):
+        fails = self.recon([], [_mir(7, "MYL-999", "open")])
+        self.assertEqual(len(fails), 1)
+        self.assertIn("孤兒", fails[0])
+
+    def test_沒有標記的_issue_不算孤兒(self):
+        # fetch 階段就把沒標記的濾掉了：那是人手開的單，不歸鏡像管，
+        # 當殘骸清掉會誤傷。這裡驗的是「濾掉之後對帳確實安靜」。
+        self.assertEqual(self.recon([], []), [])
+
+    def test_一對多被擋下(self):
+        fails = self.recon([_src("MYL-58", "todo")],
+                           [_mir(1, "MYL-58", "open"), _mir(2, "MYL-58", "open")])
+        self.assertTrue(any("一對多" in f for f in fails))
+        self.assertTrue(any("#1" in f and "#2" in f for f in fails))
+
+    def test_狀態不同步被擋下(self):
+        fails = self.recon([_src("MYL-58", "in_review")],
+                           [_mir(1, "MYL-58", "open", "Todo")])
+        self.assertEqual(len(fails), 1)
+        self.assertIn("狀態不同步", fails[0])
+        self.assertIn("In Review", fails[0])
+
+    def test_開關狀態不同步被擋下(self):
+        fails = self.recon([_src("MYL-58", "done")],
+                           [_mir(1, "MYL-58", "open", "Done")])
+        self.assertEqual(len(fails), 1)
+        self.assertIn("開關狀態不同步", fails[0])
+
+    def test_cancelled_也該是關閉(self):
+        self.assertEqual(self.recon([_src("MYL-58", "cancelled")],
+                                    [_mir(1, "MYL-58", "closed", "Cancelled")]), [])
+        self.assertTrue(self.recon([_src("MYL-58", "cancelled")],
+                                   [_mir(1, "MYL-58", "open", "Cancelled")]))
+
+    def test_沒掛進_project_被擋下(self):
+        fails = self.recon([_src("MYL-58", "todo")],
+                           [_mir(1, "MYL-58", "open", status="")])
+        self.assertEqual(len(fails), 1)
+        self.assertIn("沒有掛進 project", fails[0])
+
+    def test_六態外的來源狀態報紅而不是自行推導(self):
+        # Paperclip 實際有 `backlog`，六態對照表沒有它。這裡刻意不猜
+        # 「backlog 大概等於 Todo」——猜出來的對照沒有人核可過。
+        fails = self.recon([_src("MYL-58", "backlog")],
+                           [_mir(1, "MYL-58", "open", "Todo")])
+        self.assertEqual(len(fails), 1)
+        self.assertIn("不在六態對照表上", fails[0])
+        self.assertIn("不得在這裡自行推導", fails[0])
+
+    def test_來源平台標記不符被擋下(self):
+        fails = self.recon([_src("MYL-58", "todo")],
+                           [_mir(1, "MYL-58", "open", "Todo", platform="linear")])
+        self.assertEqual(len(fails), 1)
+        self.assertIn("linear", fails[0])
+
+    def test_六態全部有對照(self):
+        for status, expected in foundry_lint.SIX_STATE_TO_GH_STATUS.items():
+            with self.subTest(status=status):
+                state = ("closed" if status in foundry_lint.MIRROR_CLOSED_STATES
+                         else "open")
+                self.assertEqual(
+                    self.recon([_src("MYL-58", status)],
+                               [_mir(1, "MYL-58", state, expected)]), [])
+
+
+#: 讓 `check_mirror_recon` 走完「憑證齊備」那條路的最小環境。值是假的——
+#: 這幾個測試都把 fetch 換成假資料，不會真的送出請求；env 齊備只是為了不讓
+#: 檢查在憑證那一關就跳過（CI 上本來就沒有這幾個變數）。
+_ONLINE_ENV = {
+    foundry_lint.MIRROR_OFFLINE_ENV: "",
+    "PAPERCLIP_API_URL": "https://example.invalid/api",
+    "PAPERCLIP_API_KEY": "fake-key",
+}
+
+
+class MirrorReconCheckTest(unittest.TestCase):
+    """`check_mirror_recon` 的三種姿態：未啟用、跳過、真的對帳。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        (self.root / ".foundry").mkdir()
+
+    def write_config(self, text):
+        (self.root / ".foundry" / "config.yml").write_text(text, encoding="utf-8")
+
+    ENABLED = ("platform: paperclip\nmirror_platform: github\n"
+               "platform_options:\n"
+               "  github:\n    mirror_since: MYL-58\n"
+               "  paperclip:\n    company_id: fake-company\n")
+
+    def test_未設定_mirror_platform_是通過不是跳過(self):
+        self.write_config("platform: paperclip\n")
+        res = foundry_lint.check_mirror_recon(self.root)
+        self.assertTrue(res.passed)
+        self.assertEqual(res.skipped, "")
+        self.assertIn("不鏡像", res.summary)
+
+    def test_離線旗標下是跳過不是通過(self):
+        self.write_config(self.ENABLED)
+        with mock.patch.dict(os.environ, {foundry_lint.MIRROR_OFFLINE_ENV: "1"}):
+            res = foundry_lint.check_mirror_recon(self.root)
+        self.assertTrue(res.passed)      # 跳過不擋 commit
+        self.assertTrue(res.skipped)     # 但絕不印成 ✅
+        rendered = foundry_lint.render_selfcheck_text([res])
+        self.assertIn("⏭", rendered)
+        self.assertIn("1 項跳過未檢查", rendered)
+        self.assertNotIn("✅", rendered)
+
+    def test_沒有對帳實作的鏡像平台是跳過(self):
+        self.write_config("platform: paperclip\nmirror_platform: local-md\n")
+        res = foundry_lint.check_mirror_recon(self.root)
+        self.assertTrue(res.skipped)
+
+    def test_讀不到鏡像端是跳過不是紅燈(self):
+        # `gh` 沒裝／沒登入／網路不通都不是鏡像漂移。報成紅燈只會讓人
+        # 學會忽略這一項，真的漂移時也一起忽略掉。
+        self.write_config(self.ENABLED)
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(foundry_lint, "fetch_mirror_issues",
+                                  return_value=(None, "`gh` CLI 不在 PATH 上")):
+            res = foundry_lint.check_mirror_recon(self.root)
+        self.assertTrue(res.passed)
+        self.assertIn("gh", res.skipped)
+
+    def test_鏡像端撈到上限視為可能截斷而報紅(self):
+        # 截斷過的對帳會把漏建報成「全過」，比不對帳更危險。
+        self.write_config(self.ENABLED)
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(foundry_lint, "fetch_mirror_issues",
+                                  return_value=(([], True), "")), \
+                mock.patch.object(foundry_lint, "fetch_source_issues",
+                                  return_value=([], "")):
+            res = foundry_lint.check_mirror_recon(self.root)
+        self.assertFalse(res.passed)
+        self.assertIn("截斷", res.failures[0])
+
+    def test_接得起來的完整路徑會抓到不同步(self):
+        self.write_config(self.ENABLED)
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(
+                    foundry_lint, "fetch_mirror_issues",
+                    return_value=(([_mir(1, "MYL-58", "open", "Todo")], False), "")), \
+                mock.patch.object(
+                    foundry_lint, "fetch_source_issues",
+                    return_value=([_src("MYL-58", "done")], "")):
+            res = foundry_lint.check_mirror_recon(self.root)
+        self.assertFalse(res.passed)
+        self.assertEqual(len(res.failures), 2)   # Status 與開關狀態各一
+        self.assertIn("來源端 1 張、鏡像端 1 張", res.summary)
+
+
+class FetchMirrorIssuesTest(unittest.TestCase):
+    """`fetch_mirror_issues` 撈兩份清單，**兩份都會截斷**。"""
+
+    ISSUE = {"number": 2, "state": "OPEN", "body": "Foundry-Source: paperclip/MYL-58\n\n內文"}
+
+    def fake_gh(self, issues, items):
+        def gh(root, *args):
+            if args[0] == "issue":
+                return issues, ""
+            if args[0] == "project" and args[1] == "list":
+                return {"projects": [{"number": 1, "title": "Foundry"}]}, ""
+            return {"items": items}, ""
+        return gh
+
+    def run_fetch(self, issues, items):
+        with mock.patch.object(foundry_lint, "gh_json",
+                               side_effect=self.fake_gh(issues, items)):
+            return foundry_lint.fetch_mirror_issues(Path("/x"), "Foundry", "@me")
+
+    def test_兩份清單都沒滿時不報截斷(self):
+        (issues, truncated), why = self.run_fetch(
+            [self.ISSUE], [{"content": {"number": 2}, "status": "Todo"}])
+        self.assertEqual(why, "")
+        self.assertFalse(truncated)
+        self.assertEqual([(m.ref, m.status) for m in issues], [("MYL-58", "Todo")])
+
+    def test_看板項目撈到上限也算截斷(self):
+        # 反例：只看 issue 清單的話這裡會回 truncated=False，於是查不到的
+        # Status 變成空字串、每張都報成「狀態不同步」——紅燈理由是錯的。
+        items = [{"content": {"number": n}, "status": "Todo"}
+                 for n in range(foundry_lint.MIRROR_LIST_LIMIT)]
+        (_, truncated), why = self.run_fetch([self.ISSUE], items)
+        self.assertEqual(why, "")
+        self.assertTrue(truncated)
+
+    def test_issue_清單撈到上限算截斷(self):
+        issues = [dict(self.ISSUE, number=n)
+                  for n in range(foundry_lint.MIRROR_LIST_LIMIT)]
+        (_, truncated), why = self.run_fetch(issues, [])
+        self.assertEqual(why, "")
+        self.assertTrue(truncated)
 
 
 if __name__ == "__main__":

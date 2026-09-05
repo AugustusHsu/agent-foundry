@@ -189,11 +189,19 @@ STAMP_RE = re.compile(
 
 @dataclass
 class SelfcheckResult:
-    """單項自檢結果。`failures` 每一則都要能讓讀者直接知道去改哪裡。"""
+    """單項自檢結果。`failures` 每一則都要能讓讀者直接知道去改哪裡。
+
+    `skipped` 是 MYL-54 加的第三種姿態：本項**沒有實際檢查**（缺憑證、缺工具、
+    刻意離線）。它不算失敗——CI 拿不到來源端憑證是常態，讓它紅等於逼所有人
+    習慣性忽略紅字；但它**更不能算通過**：把「沒查」印成 ✅，讀者會以為鏡像
+    已經對過帳。因此 `skipped` 有值時印 ⏭ 並在總結行另報跳過數，
+    `passed` 仍然只看 `failures`（跳過不擋 commit）。
+    """
 
     name: str
     summary: str
     failures: list = field(default_factory=list)
+    skipped: str = ""
 
     @property
     def passed(self) -> bool:
@@ -574,6 +582,24 @@ def check_big_files(root: Path) -> SelfcheckResult:
 # 「看過了」與「沒看過」因此不再靠自我申報。
 
 
+# git 在 hook 裡會匯出這幾個「指向哪個 repo」的變數，而它們的優先序高於 `-C`。
+# 從**一般 checkout** commit 時它們是相對路徑（`GIT_INDEX_FILE=.git/index`、
+# 沒有 `GIT_DIR`），`-C` 照常生效；從 **worktree** commit 時兩者都是絕對路徑，
+# 於是 `git -C <別的目錄>` 會被悄悄導回外層 repo——查的對象整個換掉而且不報錯。
+# `git_run` 的契約是「對 root 跑 git」，所以這裡清掉它們，讓 `-C` 說了算。
+# 清掉 `GIT_INDEX_FILE` 是安全的：git 會改用 `-C` 找到的那個 git dir 底下的
+# `index`，跟被清掉的那個變數指的是同一個檔案（兩種形狀都實測過）。
+GIT_LOCATION_ENV = (
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+    "GIT_PREFIX", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+)
+
+
+def git_env() -> dict:
+    """去掉會蓋過 `-C` 的 git 環境變數；測試也用這份，免得兩邊各清各的。"""
+    return {k: v for k, v in os.environ.items() if k not in GIT_LOCATION_ENV}
+
+
 def git_run(root: Path, *args) -> tuple:
     """跑 git，回傳 `(ok, stdout)`；git 不存在或不是 repo 時 `ok` 為 False。
 
@@ -584,7 +610,7 @@ def git_run(root: Path, *args) -> tuple:
     try:
         proc = subprocess.run(
             ("git", "-C", str(root)) + args,
-            capture_output=True, text=True, check=False,
+            capture_output=True, text=True, check=False, env=git_env(),
         )
     except OSError:
         return False, ""
@@ -628,6 +654,18 @@ def check_handbook_stamp(root: Path) -> SelfcheckResult:
     """
     res = SelfcheckResult("handbook-stamp", "手冊四章戳記不落後於 protocol")
     has_git, _ = git_run(root, "rev-parse", "--verify", "HEAD")
+    # 淺 clone 是「有 git 但沒有歷史」——戳記 sha 一律解不出來，於是四章一起偽裝成
+    # 「戳記寫錯了」。那個訊息把人指向手冊，真正該改的卻是 checkout 的 fetch-depth
+    # （MYL-44 D1：main 連四顆 commit 的 CI 全紅，排查繞了三個 run）。這裡擋一次並
+    # 說出真正的處置。**不是靜靜略過**——略過等於閘門在淺 clone 下無聲失效。
+    _, shallow = git_run(root, "rev-parse", "--is-shallow-repository")
+    is_shallow = has_git and shallow == "true"
+    if is_shallow:
+        res.failures.append(
+            "這是淺 clone（`--depth`），戳記指到的歷史 commit 解不出來，落後與否"
+            "驗不了——CI 把 checkout 的 `fetch-depth` 設成 `0`，本機用完整 clone。"
+            "（戳記的字面格式仍照驗）"
+        )
     for name in STAMPED_CHAPTERS:
         rel = f"{HANDBOOK_REL}/{name}"
         path = root / HANDBOOK_REL / name
@@ -645,7 +683,7 @@ def check_handbook_stamp(root: Path) -> SelfcheckResult:
                 " `> 最後對照 protocol `<sha>`（YYYY-MM-DD）`"
             )
             continue
-        if not has_git:
+        if not has_git or is_shallow:
             continue
         sha = m.group(1)
         ok, _ = git_run(root, "rev-parse", "--verify", f"{sha}^{{commit}}")
@@ -737,8 +775,391 @@ def handbook_diff_is_stamp_only(root: Path, base_sha: str) -> tuple:
     return (not offending), (log.splitlines() if log else []), offending
 
 
+# ══════════════════ 工單鏡像對帳（MYL-54） ══════════════════
+#
+# 規格：`skills/foundry-platform/adapters/github.md`「鏡像模式 → 對帳」。
+# 分工：**同步本身是【自律】**（agent 建單／改狀態／結案時自己要做），
+#       **本檢查是【機械】兜底**——但它是**延遲偵測，不是即時防護**：
+#       只在 `make check`／pre-commit／CI 跑，而工單狀態變動不一定伴隨 commit，
+#       所以漏同步會等到「下一次有人 commit」才被抓到。
+#
+# 而且在 CI 上它**一定是跳過的**——CI 沒有來源端憑證。真正跑得到完整對帳的
+# 只有同時握有 `gh` 登入與 `PAPERCLIP_API_KEY` 的本機 `make check`。
+# 這不是缺陷，是這個檢查能力的實際邊界；寫在這裡是為了不讓人高估它。
+
+#: 鏡像 issue body 首行的對應標記。經網頁編輯過的 body 行尾可能是 CRLF，先剝 `\r`。
+MIRROR_MARK_RE = re.compile(r"^Foundry-Source: ([a-z-]+)/(\S+)$")
+#: 來源工單上的「這張刻意不鏡像」聲明。有這行就不算漏建。
+MIRROR_SKIPPED_RE = re.compile(r"^Mirror-skipped:\s*\S", re.MULTILINE)
+#: 六態 → GitHub project 的 Status 選項名（adapter `update_status` 的同一張表）。
+SIX_STATE_TO_GH_STATUS = {
+    "todo": "Todo", "in_progress": "In Progress", "in_review": "In Review",
+    "blocked": "Blocked", "done": "Done", "cancelled": "Cancelled",
+}
+#: 來源端為這兩態時鏡像 issue 應為關閉，其餘應為開啟。
+MIRROR_CLOSED_STATES = frozenset({"done", "cancelled"})
+#: `gh issue list` 的單次上限。撈到剛好等於上限就當作可能截斷並報紅——
+#: 截斷過的對帳會把漏建報成「全過」，比不對帳更危險。
+MIRROR_LIST_LIMIT = 500
+#: 工單編號形狀 `<前綴>-<序號>`，用來與 `mirror_since` 比大小。
+ISSUE_REF_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*)-(\d+)$")
+#: 設了就整項跳過（測試與離線環境用）。跳過印 ⏭ 不印 ✅，見 `SelfcheckResult`。
+MIRROR_OFFLINE_ENV = "FOUNDRY_LINT_OFFLINE"
+
+CONFIG_REL = ".foundry/config.yml"
+
+
+@dataclass(frozen=True)
+class SourceIssue:
+    """來源端（真相端）的一張工單。"""
+
+    ref: str            # 例 `MYL-54`
+    status: str         # 六態之一；不在表上時對帳報紅而不是自行推導對照
+    mirror_skipped: bool = False
+
+
+@dataclass(frozen=True)
+class MirrorIssue:
+    """鏡像端的一張 issue（**已確認帶對應標記**；沒標記的不進來，見下）。"""
+
+    number: int
+    source_platform: str
+    ref: str
+    state: str          # `open` / `closed`
+    status: str = ""    # project 的 Status 選項名；空字串＝沒掛進 project
+
+
+def parse_config(text: str) -> dict:
+    """把 `.foundry/config.yml` 讀成巢狀 dict。**刻意只支援本檔用得到的子集**。
+
+    支援：`鍵: 純量`、`鍵:`（開一層巢狀）、`#` 註解、值兩側的引號。
+    不支援：陣列、多行字串、錨點、流式寫法。踩到不支援的寫法時該鍵被忽略，
+    而不是拋例外——這個 parser 的用途只有「取出幾個已知欄位」，不是驗整份設定檔。
+
+    為什麼不用 PyYAML：`.github/workflows/foundry-lint.yml` 明寫 foundry-lint
+    只用標準函式庫，讓閘門在任何環境都跑得起來。為了讀三個欄位引入依賴，
+    等於拿掉那個保證。
+    """
+    root: dict = {}
+    stack = [(-1, root)]
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].rstrip() if not raw.lstrip().startswith("#") else ""
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if ":" not in line:
+            continue
+        key, _, value = line.strip().partition(":")
+        key, value = key.strip(), value.strip().strip("'\"")
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        if not stack:
+            stack = [(-1, root)]
+        parent = stack[-1][1]
+        if value:
+            parent[key] = value
+        else:
+            child: dict = {}
+            parent[key] = child
+            stack.append((indent, child))
+    return root
+
+
+def read_config(root: Path) -> dict:
+    path = root / CONFIG_REL
+    return parse_config(read_text(path)) if path.exists() else {}
+
+
+def parse_mirror_marker(body: str):
+    """從鏡像 issue 的 body 首行取 `(來源平台, issue_ref)`；沒有標記回 `None`。
+
+    `body` 為 `None`（空內文的 issue，API 回的就是 null）時視同沒有標記——
+    這是 adapter 的對帳指令特地寫兩層 `// ""` 要擋的那個中斷點。
+    """
+    first = (body or "").split("\n", 1)[0].rstrip("\r")
+    m = MIRROR_MARK_RE.match(first)
+    return (m.group(1), m.group(2)) if m else None
+
+
+def ref_sort_key(ref: str):
+    """`MYL-54` → `('MYL', 54)`；形狀不符回 `None`（無從比大小）。"""
+    m = ISSUE_REF_RE.match(ref)
+    return (m.group(1).upper(), int(m.group(2))) if m else None
+
+
+def in_mirror_scope(ref: str, since: str) -> bool:
+    """`ref` 是否落在鏡像範圍內（`since` 起、含 `since` 本身）。
+
+    `since` 是 MYL-54 的界線：本單只鏡像**新單**，既有舊單的回填屬批次對外
+    動作、要另外核可。沒有這條界線，對帳一啟用就會把 50 幾張舊單全報成漏建，
+    於是整項檢查在第一天就被當成雜訊關掉。
+    """
+    if not since:
+        return True
+    a, b = ref_sort_key(ref), ref_sort_key(since)
+    if a is None or b is None or a[0] != b[0]:
+        return True     # 比不出大小時一律納入：寧可誤報，不要漏報
+    return a[1] >= b[1]
+
+
+def reconcile_mirror(sources: list, mirrors: list, source_platform: str) -> list:
+    """純函式對帳：比對單號、狀態、開關狀態，回傳 failure 訊息清單。
+
+    三種紅燈都**只回報、不自動修**（見 adapter「對帳」節）：漏建、孤兒、一對多。
+    修法牽涉建單或關單，那是對外動作（`G-C`），對帳自己不動手。
+    """
+    failures = []
+    by_ref: dict = {}
+    for m in mirrors:
+        by_ref.setdefault(m.ref, []).append(m)
+
+    source_refs = {s.ref for s in sources}
+
+    for ref, group in sorted(by_ref.items()):
+        if len(group) > 1:
+            nums = "、".join(f"#{m.number}" for m in sorted(group, key=lambda x: x.number))
+            failures.append(
+                f"一對多：`{ref}` 對到 {len(group)} 張鏡像 issue（{nums}）"
+                "——關掉多餘的那張屬對外動作，要使用者核可，對帳不自己動手"
+            )
+        if ref not in source_refs:
+            failures.append(
+                f"孤兒：鏡像 issue #{group[0].number} 的標記指到 `{ref}`，"
+                "來源端沒有這張單——來源單被刪或標記打錯"
+            )
+
+    for s in sorted(sources, key=lambda x: ref_sort_key(x.ref) or (x.ref, 0)):
+        group = by_ref.get(s.ref, [])
+        if not group:
+            if not s.mirror_skipped:
+                failures.append(
+                    f"漏建：來源端 `{s.ref}` 在鏡像端找不到對應標記，"
+                    "且來源工單沒有 `Mirror-skipped:` 留言"
+                )
+            continue
+        m = min(group, key=lambda x: x.number)
+
+        if m.source_platform != source_platform:
+            failures.append(
+                f"`{s.ref}`：鏡像 issue #{m.number} 的標記寫的來源平台是 "
+                f"`{m.source_platform}`，設定檔的 `platform` 是 `{source_platform}`"
+            )
+
+        expected_status = SIX_STATE_TO_GH_STATUS.get(s.status)
+        if expected_status is None:
+            failures.append(
+                f"`{s.ref}`：來源端狀態 `{s.status}` 不在六態對照表上，無從換算 "
+                "Status——要嘛補 adapter 的對照表（經核可），要嘛把這張單改回六態；"
+                "**不得在這裡自行推導一個對應**"
+            )
+        elif not m.status:
+            failures.append(
+                f"`{s.ref}`：鏡像 issue #{m.number} 沒有掛進 project（讀不到 Status），"
+                f"來源端是 `{s.status}`——建單時漏了 `gh project item-add`"
+            )
+        elif m.status != expected_status:
+            failures.append(
+                f"`{s.ref}`：狀態不同步——來源端 `{s.status}`（應為 "
+                f"`{expected_status}`），鏡像端 Status 是 `{m.status}`"
+            )
+
+        expected_state = "closed" if s.status in MIRROR_CLOSED_STATES else "open"
+        if m.state != expected_state:
+            failures.append(
+                f"`{s.ref}`：開關狀態不同步——來源端 `{s.status}`（應為 "
+                f"{expected_state}），鏡像 issue #{m.number} 是 {m.state}"
+            )
+    return failures
+
+
+def gh_json(root: Path, *args):
+    """跑 `gh` 並解析 JSON 輸出；失敗回 `(None, 原因)`。
+
+    失敗一律當「查不到」而不是「不同步」：`gh` 沒裝、沒登入、網路不通都不是
+    鏡像漂移，報成紅燈只會讓人學會忽略這一項。
+    """
+    try:
+        proc = subprocess.run(("gh",) + args, capture_output=True, text=True,
+                              check=False, cwd=str(root))
+    except OSError:
+        return None, "`gh` CLI 不在 PATH 上"
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).strip().splitlines()
+        return None, f"`gh {' '.join(args[:2])}` 失敗：{detail[0] if detail else '未知錯誤'}"
+    try:
+        return json.loads(proc.stdout or "null"), ""
+    except json.JSONDecodeError:
+        return None, f"`gh {' '.join(args[:2])}` 的輸出不是 JSON"
+
+
+def fetch_mirror_issues(root: Path, project_title: str, project_owner: str):
+    """撈鏡像端。回傳 `(issues, 跳過原因)`——原因非空時 `issues` 不可用。
+
+    **沒有對應標記的 issue 不進結果**：那是人手開的，不歸鏡像管，
+    當成孤兒清掉會誤傷。
+
+    截斷旗標**兩份清單都要看**：issue 清單決定有哪些鏡像單，看板項目清單決定
+    它們的 Status。後者被截斷時查不到的 Status 會變成空字串，於是每一張都報成
+    「狀態不同步」——紅燈方向是安全的，但理由是錯的，讀者會去追一個不存在的漂移。
+    """
+    raw, why = gh_json(root, "issue", "list", "--state", "all",
+                       "--limit", str(MIRROR_LIST_LIMIT),
+                       "--json", "number,state,body")
+    if raw is None:
+        return None, why
+    truncated = len(raw) >= MIRROR_LIST_LIMIT
+
+    projects, why = gh_json(root, "project", "list", "--owner", project_owner,
+                            "--format", "json")
+    if projects is None:
+        return None, why
+    number = next((p["number"] for p in projects.get("projects", [])
+                   if p.get("title") == project_title), None)
+    if number is None:
+        return None, f"找不到標題為 `{project_title}` 的 project（owner `{project_owner}`）"
+
+    items, why = gh_json(root, "project", "item-list", str(number),
+                         "--owner", project_owner, "--format", "json",
+                         "--limit", str(MIRROR_LIST_LIMIT))
+    if items is None:
+        return None, why
+    truncated = truncated or len(items.get("items", [])) >= MIRROR_LIST_LIMIT
+    status_by_number = {
+        it["content"]["number"]: it.get("status") or ""
+        for it in items.get("items", [])
+        if isinstance(it.get("content"), dict) and "number" in it["content"]
+    }
+
+    issues = []
+    for it in raw:
+        mark = parse_mirror_marker(it.get("body"))
+        if mark is None:
+            continue
+        issues.append(MirrorIssue(
+            number=it["number"], source_platform=mark[0], ref=mark[1],
+            state=str(it.get("state", "")).lower(),
+            status=status_by_number.get(it["number"], ""),
+        ))
+    return (issues, truncated), ""
+
+
+def api_get(base: str, path: str, token: str):
+    """Paperclip API 的 GET。回傳 `(資料, 錯誤訊息)`。"""
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(
+        f"{base}{path}", headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8")), ""
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, ValueError) as e:
+        return None, f"`GET {path}` 失敗：{e}"
+
+
+def fetch_source_issues(base: str, token: str, company_id: str, project_id: str,
+                        since: str, mirrored_refs: set):
+    """撈來源端。`mirrored_refs` 用來省下留言查詢：只有看起來漏建的才去翻留言。
+
+    翻留言是為了找 `Mirror-skipped:`。對每張單都翻等於 N 次 API 呼叫，
+    而絕大多數單都對得上——只查對不上的那幾張。
+
+    來源端**沒有分頁**：`GET /api/companies/{id}/issues` 在 openapi 上只吃
+    `companyId` 與 `view` 兩個參數，一次回全部（2026-09-04 實測 56 張）。
+    所以這裡不像鏡像端那樣需要截斷防護。**這是實測結論不是假設**——哪天
+    這個端點加了分頁，這裡會開始靜默漏單，而漏掉的單看起來就像沒有漂移。
+    """
+    data, why = api_get(base, f"/api/companies/{company_id}/issues", token)
+    if data is None:
+        return None, why
+    if not isinstance(data, list):
+        return None, "來源端 issues 端點沒有回陣列"
+
+    out = []
+    for it in data:
+        if project_id and it.get("projectId") != project_id:
+            continue
+        if it.get("hiddenAt"):
+            continue
+        ref = it.get("identifier") or ""
+        if not ref or not in_mirror_scope(ref, since):
+            continue
+        skipped = False
+        if ref not in mirrored_refs:
+            comments, _ = api_get(base, f"/api/issues/{it['id']}/comments", token)
+            skipped = any(
+                MIRROR_SKIPPED_RE.search(c.get("body") or "")
+                for c in (comments or []) if isinstance(c, dict)
+            )
+        out.append(SourceIssue(ref=ref, status=it.get("status") or "",
+                               mirror_skipped=skipped))
+    return out, ""
+
+
+def check_mirror_recon(root: Path) -> SelfcheckResult:
+    """來源端與鏡像端的單號／狀態／開關狀態要一致（MYL-54）。
+
+    `mirror_platform` 整段缺席＝不鏡像＝本項無事可做（schema 明訂缺席是預設
+    狀態、不是設定缺漏），直接通過。
+    """
+    res = SelfcheckResult("mirror-recon", "工單鏡像與來源端對得上帳")
+    cfg = read_config(root)
+    mirror_platform = cfg.get("mirror_platform", "")
+    if not mirror_platform:
+        res.summary += "（`mirror_platform` 未設定＝不鏡像，無事可對）"
+        return res
+    if mirror_platform != "github":
+        res.skipped = f"`mirror_platform: {mirror_platform}` 目前沒有對帳實作（只有 github 有）"
+        return res
+
+    if os.environ.get(MIRROR_OFFLINE_ENV):
+        res.skipped = f"{MIRROR_OFFLINE_ENV} 已設，本次不連線對帳"
+        return res
+
+    source_platform = cfg.get("platform", "")
+    opts = cfg.get("platform_options", {})
+    gh_opts = opts.get("github", {}) if isinstance(opts, dict) else {}
+    pc_opts = opts.get("paperclip", {}) if isinstance(opts, dict) else {}
+
+    fetched, why = fetch_mirror_issues(
+        root, gh_opts.get("project_title", "Foundry"),
+        gh_opts.get("project_owner", "@me"))
+    if fetched is None:
+        res.skipped = f"讀不到鏡像端：{why}"
+        return res
+    mirrors, truncated = fetched
+    if truncated:
+        res.failures.append(
+            f"鏡像端 issue 或看板項目數達 `--limit {MIRROR_LIST_LIMIT}` 上限，結果可能被截斷"
+            "——截斷過的對帳會把漏建報成全過，先把上限提高或改分頁再跑"
+        )
+
+    base = (os.environ.get("PAPERCLIP_API_URL") or "").rstrip("/")
+    base = base[:-4] if base.endswith("/api") else base
+    token = os.environ.get("PAPERCLIP_API_KEY") or ""
+    company_id = pc_opts.get("company_id", "")
+    if company_id.startswith("${") and company_id.endswith("}"):
+        company_id = os.environ.get(company_id[2:-1], "")
+    if not (base and token and company_id):
+        res.skipped = ("讀不到來源端：缺 `PAPERCLIP_API_URL`／`PAPERCLIP_API_KEY`／"
+                       "company id（CI 上必然如此，見本節註解）")
+        return res
+
+    sources, why = fetch_source_issues(
+        base, token, company_id, pc_opts.get("project_id", ""),
+        gh_opts.get("mirror_since", ""), {m.ref for m in mirrors})
+    if sources is None:
+        res.skipped = f"讀不到來源端：{why}"
+        return res
+
+    res.failures.extend(reconcile_mirror(sources, mirrors, source_platform))
+    res.summary += f"（來源端 {len(sources)} 張、鏡像端 {len(mirrors)} 張）"
+    return res
+
+
 SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
-              check_big_files, check_internal_links, check_handbook_stamp)
+              check_big_files, check_internal_links, check_handbook_stamp,
+              check_mirror_recon)
 
 
 def run_selfcheck(root: Path) -> list:
@@ -748,14 +1169,19 @@ def run_selfcheck(root: Path) -> list:
 def render_selfcheck_text(results: list) -> str:
     lines = []
     for r in results:
-        mark = "✅" if r.passed else "❌"
+        mark = "❌" if r.failures else ("⏭" if r.skipped else "✅")
         lines.append(f"{mark} [{r.name}] {r.summary}")
+        if r.skipped:
+            lines.append(f"  - 跳過（未實際檢查）：{r.skipped}")
         lines.extend(f"  - {f}" for f in r.failures)
     bad = sum(len(r.failures) for r in results)
+    skipped = sum(1 for r in results if r.skipped)
+    # 跳過數要跟在總結行後面：只印「全部通過」會讓沒查過的項目看起來查過了。
+    tail = f"，{skipped} 項跳過未檢查" if skipped else ""
     lines.append(
-        "foundry-lint --selfcheck：全部通過"
+        f"foundry-lint --selfcheck：全部通過{tail}"
         if not bad
-        else f"foundry-lint --selfcheck：{bad} 項未通過"
+        else f"foundry-lint --selfcheck：{bad} 項未通過{tail}"
     )
     return "\n".join(lines)
 
@@ -765,7 +1191,8 @@ def render_selfcheck_json(results: list) -> str:
         {
             "passed": all(r.passed for r in results),
             "checks": [
-                {"name": r.name, "passed": r.passed, "failures": r.failures}
+                {"name": r.name, "passed": r.passed, "failures": r.failures,
+                 "skipped": r.skipped or None}
                 for r in results
             ],
         },
@@ -789,7 +1216,7 @@ def parse_args(argv):
         "--selfcheck",
         action="store_true",
         help="跑 repo 規範自檢（雙入口同步、手冊 nav、錨點、規則 ID、大檔清單、"
-             "相對連結、手冊戳記），不需 --type／file",
+             "相對連結、手冊戳記、鏡像對帳），不需 --type／file",
     )
     parser.add_argument(
         "--staged-handbook-sync",

@@ -25,6 +25,7 @@
 | --- | --- | --- | --- |
 | `platform_options.github.project_title` | 字串 | `Foundry` | GitHub ProjectV2 的標題，adapter 據此查 project 編號。 |
 | `platform_options.github.project_owner` | 字串 | `@me` | project 擁有者（org 專案填 org 名）。 |
+| `platform_options.github.mirror_since` | 字串 | ─ | **只在鏡像模式下有意義**（MYL-54）：鏡像從這個 `issue_ref` 起算（含本身），之前的單不對帳。缺席＝全部納入。存在的理由是啟用鏡像時舊單通常沒有回填，而回填是批次對外動作、要另外核可；沒有這條界線，對帳一啟用就把所有舊單報成漏建，於是整項檢查在第一天就被當成雜訊。**調低它等於宣告那些舊單已回填**——回填做完才改，不是想少看幾條紅燈就改。 |
 | `platform_options.local-md.id_prefix` | 字串 | `FND` | 工單編號前綴（`<前綴>-<序號>`）。設定後不得變更——已發出的 issue_ref 會失效。 |
 | `platform_options.paperclip.company_id` | 字串 | `${PAPERCLIP_COMPANY_ID}` | 公司 UUID。省略時取執行環境的同名環境變數；label 是公司層資源，adapter 據此查建。 |
 | `platform_options.paperclip.project_id` | 字串 | ─ | 專案 UUID。省略時 `create_issue` 需由呼叫端指定，`list_issues` 不做專案過濾。 |
