@@ -1,6 +1,6 @@
 # 4. 我要在哪幾個點做決定？
 
-> 最後對照 protocol `6d28021`（2026-09-05）
+> 最後對照 protocol `e62e42c`（2026-09-05）
 
 > 本章自 MYL-9（跨平台流程）起改用「3 關卡」視角描述：你要做的決定收斂為三個抽象關卡＋一種觸發式追問。規則本體在 [`foundry-protocol` 第 4 節](../../skills/foundry-protocol/SKILL.md)。
 
