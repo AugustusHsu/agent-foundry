@@ -93,8 +93,9 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    - `tools/publish-docs/`（全目錄）——**這一項與 `docs` 段開不開無關**，它是被 `Makefile` 綁進來的：
      步驟 2.5 會把 `Makefile` 整份複製過去，而它的 `test:` target 逐一 `unittest discover`
      上面每一個 `tools/` 目錄。少任何一個，目標專案第一次跑 `make check` 就掛——而 `make check`
-     正是入口檔叫每個新 session 跑的那一行。⚠️ **這個對應關係目前沒有任何自檢在管**
-     （MYL-78 發現，`Makefile` 的 `test:` 上方已加維護提示；機械化另立單）。
+     正是入口檔叫每個新 session 跑的那一行。這個對應關係由 `--selfcheck` 的
+     `init-copy-list` 管著（MYL-86）：它掃**整份 `Makefile`** 引用到的 `tools/` 目錄，
+     逐一驗本清單有列——所以 `providers`／`browser` 那幾個 target 指到的目錄同樣受管。
    - `skills/roles/`（全目錄）——**要建團隊時才複製**。兩個 workflow 各自的觸發點：
      init＝步驟 1 Q4 答「要建團隊」；adopt＝使用者在 §2 卡上勾了 M4（`foundry-adopt` §3.4）。
      理由是 `org.yml` 每個角色的 `skills[]` 都指向這裡，而 `org-sync` 會逐條驗路徑存在：
