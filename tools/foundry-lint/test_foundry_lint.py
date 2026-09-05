@@ -435,8 +435,8 @@ class SelfcheckTest(unittest.TestCase):
         這則同時釘住「不能只比對行尾後綴」：顛倒後的尾巴正好是合法的
         `【自律】`，用 `endswith` 判會放行，而它讀起來剛好少掉機械那一半。
         """
-        self._sub_protocol("歸人為判斷。`【自律】`＋`【機械】`",
-                           "歸人為判斷。`【機械】`＋`【自律】`")
+        self._sub_protocol("那點失誤。`【自律】`＋`【機械】`",
+                           "那點失誤。`【機械】`＋`【自律】`")
         res = self._named("rule-marks")
         self.assertFalse(res.passed)
         self.assertTrue(any("不是合法字面" in f for f in res.failures),

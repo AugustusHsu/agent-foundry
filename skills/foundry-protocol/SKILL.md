@@ -357,7 +357,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 2. **寫審查記錄**：用 `templates/publish-review.md` 建 `docs/publish-reviews/<工單編號>.md`，逐項自檢 P2 三前提（來源已合併進 main／範圍僅限 `docs/handbook/`／私有連結改寫輸出無異常）＋公開適切性（機敏資訊、內部路徑、連結可達性）。三前提全成立才填 `verdict: APPROVED`。
 3. **commit 審查記錄**：`handbook_commit` 欄填 `git log -1 --format=%H -- docs/handbook` 的完整 sha。
 4. **同步主閱讀面**：執行 `docs.primary` 指到的那個投影（本 repo＝`bash scripts/publish-wiki.sh`）。腳本的證據閘門會核對記錄，通過才 push。**P2，執行者自行**。
-5. **（可選）發一版精裝站**：`docs.mirror_site.trigger: tag` 時，打 `handbook-v<N>` tag 並 push，CI 用 `mike` 建出帶版本選擇器的 Pages 站。**這一步是使用者專屬**，見下方 `V1`。⚠️ 本 repo 另有一條 `handbook-version-tags` tag ruleset 擋住 `handbook-v*` 的建立，**擋的是所有人、包含使用者本人**：推 tag 前要先到 Settings → Rules → Rulesets 把它切成 Disabled，推完切回 Active。那不是多一道關卡，是 `V1` 換到「防誤推＋留痕」所付的代價，理由見下方違反段。
+5. **（可選）發一版精裝站**：`docs.mirror_site.trigger: tag` 時，打 `handbook-v<a>.<b>.<c>.<d>` tag（形狀見 `V4`）並 push，CI 用 `mike` 建出帶版本選擇器的 Pages 站。**這一步是使用者專屬**，見下方 `V1`。⚠️ 本 repo 另有一條 `handbook-version-tags` tag ruleset 擋住 `handbook-v*` 的建立，**擋的是所有人、包含使用者本人**：推 tag 前要先到 Settings → Rules → Rulesets 把它切成 Disabled，推完切回 Active。那不是多一道關卡，是 `V1` 換到「防誤推＋留痕」所付的代價，理由見下方違反段。
 
 規則：
 
@@ -369,15 +369,21 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 **違反：**兩支投影腳本共用的 `scripts/lib/publish-gate.sh` 會拒跑——找不到對應這版手冊 sha 的 `APPROVED` 記錄、或 `handbook_commit` 與 `git log -1 -- docs/handbook` 對不上，都直接擋下，公開面停在舊版。**這是本文少數真的擋得住的規則之一**；但閘門只管「有沒有跑腳本」，繞過腳本手動推公開面它攔不到，那條路的後果是公開面與 repo 不一致而無人察覺。`【機械】`
 
-### 手冊版本 tag（MYL-55 增訂，MYL-63 補 `V3`）
+### 手冊版本 tag（MYL-55 增訂，MYL-63 補 `V3`，MYL-68 補 `V4`）
 
 精裝站（`.foundry/config.yml` 的 `docs.mirror_site`）**打 tag 才發**。手冊因此第一次有了「我讀的是哪一版規則」：`mike` 把每個版本各自留在 Pages 上，站台有版本選擇器，舊版不會被新版蓋掉。
 
-- `V1` **tag 規範與時機**：tag 名為 `handbook-v<N>`，**只標手冊版本、不動 repo 全域版本號**；且必須在該版手冊的發佈審查 `verdict: APPROVED` **之後**才打——先打 tag 等於發佈一個還沒過審的版本，而版本一旦上站就有人引用得到。打 tag 與 push tag 屬第 9 節分級表「push main、force-push、**tag 發佈**」那一列，**使用者專屬、逐次同意，無常設授權**；agent 不得自行 `git tag` 後 push。
+- `V1` **tag 規範與時機**：tag 名為 `handbook-v<a>.<b>.<c>.<d>`（形狀與遞增規則見 `V4`），**只標手冊版本、不動 repo 全域版本號**；且必須在該版手冊的發佈審查 `verdict: APPROVED` **之後**才打——先打 tag 等於發佈一個還沒過審的版本，而版本一旦上站就有人引用得到。打 tag 與 push tag 屬第 9 節分級表「push main、force-push、**tag 發佈**」那一列，**使用者專屬、逐次同意，無常設授權**；agent 不得自行 `git tag` 後 push。
 - `V2` **開關要真的關得掉**：`docs.mirror_site.enabled: false` 時，**即使打了符合 `tag_pattern` 的 tag 也不發佈**。判斷的權威是設定檔，不是 CI workflow 的 `on: push: tags:`——後者是寫死的靜態 glob，改 `tag_pattern` 不會讓它跟著變，所以它只是粗篩。實作在 `tools/publish-docs/site_docs.py` 的 `mirror_site_decision()`，由 CI 的 `gate` job 呼叫；`enabled` 不是 true 時 `deploy` job 整個不跑。
-- `V3` **已發佈的版本不重打**：一個 `handbook-v<N>` 發出去之後，**那個版本號的內容就定了**。手冊要修就打下一版（`handbook-v<N+1>`），不要移動、刪除或重打已發佈的 tag。理由是版本化站台的整個用途就是「我引用的那一版還在」——把 `v1` 的內容換掉，等於讓所有指向 `v1` 的引用悄悄指到別的東西，而且**沒有任何痕跡**：`mike deploy` 對同名版本是直接覆蓋 gh-pages 上那個目錄，不問也不警告。判斷實作在 `site_docs.py` 的 `republish_decision()`，由 `gate` job 在 `publish=true` 之後、`deploy` 之前呼叫，撞版本時以離開碼 3 擋下。**`workflow_dispatch` 的重建路徑刻意放行**——判準是「同一個版本號的內容有沒有變」，不是「跑過幾次 `mike deploy`」；重建同一顆 commit 產出同樣的位元組，而擋死它等於封掉唯一的重建手段。刪除已發佈版本（`mike delete`）不歸本條管，那是使用者專屬的破壞性動作，走 `G-C`。
+- `V3` **已發佈的版本不重打**：一個 `handbook-v<N>` 發出去之後，**那個版本號的內容就定了**。手冊要修就**遞增一位**打下一版（哪一位見 `V4`），不要移動、刪除或重打已發佈的 tag。理由是版本化站台的整個用途就是「我引用的那一版還在」——把 `v1` 的內容換掉，等於讓所有指向 `v1` 的引用悄悄指到別的東西，而且**沒有任何痕跡**：`mike deploy` 對同名版本是直接覆蓋 gh-pages 上那個目錄，不問也不警告。判斷實作在 `site_docs.py` 的 `republish_decision()`，由 `gate` job 在 `publish=true` 之後、`deploy` 之前呼叫，撞版本時以離開碼 3 擋下。**`workflow_dispatch` 的重建路徑刻意放行**——判準是「同一個版本號的內容有沒有變」，不是「跑過幾次 `mike deploy`」；重建同一顆 commit 產出同樣的位元組，而擋死它等於封掉唯一的重建手段。刪除已發佈版本（`mike delete`）不歸本條管，那是使用者專屬的破壞性動作，走 `G-C`。
+- `V4` **版本號的形狀與遞增規則**：四位十進位整數 `handbook-v<a>.<b>.<c>.<d>`，遞增採**進位歸零**——動 `a` 則 `b`／`c`／`d` 歸零，動 `b` 則 `c`／`d` 歸零，動 `c` 則 `d` 歸零，動 `d` 只加 `d`。形狀刻意**與本流程的來源專案同形**（SuperOD `scripts/tag_release.py` 的 `v<a>.<b>.<c>.<d>`＋同一條進位歸零規則）：`V1`／`V3` 本來就是從那份 `git_flow.md` 的 `T1`～`T3`／`T5` 移植過來的，版本號形狀是七條裡唯一沒帶走的一條，本條把它補齊，讓兩邊的心智模型可以互換。四位各自的判準是**「讀者要付出什麼代價」**，不是「改了多少字」：
+  - `a` **主版號**——**照舊版做事會變成違規**：既有規則 ID 的語意變更或移除、關卡與 push 分級調整。這一位一跳，舊版的心智模型就不能再沿用。此判準與 `.foundry/config.yml` 的 `foundry` schema 版本同義（都是「只在不相容變更時遞增」），差別只在那一欄是相容性契約標記（答「我還解析得動嗎」），本條是發行快照（答「我引用的那一版還在嗎」）。
+  - `b` **次版號**——**純新增**：新規則 ID、新章節、新流程，舊版做法照樣合規，讀者只需要知道多了什麼。
+  - `c` **修訂號**——**敘述變了但判準沒動**：補例子、修錯字、改寫得更清楚。⚠️ 這一位**不是**日常修訂的出口——錯字修正走主閱讀面（wiki）隨時更新，根本不必發版；只有在「已發佈的那一版敘述會誤導人」時才為它定一版。
+  - `d` **建置號**——**手冊一字未改，產出卻不同**：`mkdocs`／`mike`／主題升版後重建。這一位補上 `V3` 裡「重建同一顆 commit 產出同樣的位元組」那句話的角落——那句話只在建置環境沒變時成立，環境變了就該用新的 `d` 發一版，而不是拿 `workflow_dispatch` 去覆蓋舊版。
+- **本條定死在 protocol，不開成設定旋鈕**：這是全隊的版本號語意，不是每個專案各自調的參數。要換形狀的專案改 `docs.mirror_site.tag_pattern` 這個既有欄位即可，不必動本條。
 
-**違反：**`V1` 沒有機械後盾中的「時機」那半——CI 不知道審查是哪一天過的，它只核對 tag 指到的那份手冊有沒有對應的 APPROVED 記錄（`publish-gate.sh`），所以「審查前就先打 tag」擋得住的前提是那時還沒寫審查記錄；審查記錄先寫好、tag 晚一點才打則本來就合規。真正擋不住的是 agent 自己 `git tag` 再 push——沒有任何 hook 攔 tag push，那條線純靠自律，而它的後果是使用者沒同意過的版本出現在公開站上。**而且這一段在本 repo 機械化不了，不是「還沒做」**：要擋住它得能分辨「誰在推」，但本 repo 是個人帳號底下的 repo，使用者與所有 agent 共用同一個 GitHub 身分，於是 tag ruleset 的「限制建立者」只塌得成兩種極端——bypass 放 Repository admin 等於一條都擋不住，bypass 留空則連使用者自己也推不了（`docs/standards/known-drift.md` `L22`，與同檔 `R5` 同根：單一 git 身分封死的是**任何以 actor 為單位的授權設計**）。**本 repo 據此仍設了一條 ruleset，但要清楚它買到的是什麼**（MYL-62 裁定 A）：`handbook-version-tags`，target `tag`、enforcement `active`、bypass **留空**、只放 `creation` 一條規則、include `refs/tags/handbook-v*`。它擋的不是「誰」，而是「所有人」——包含使用者本人。買到的是兩項：**防誤推**（`git push --tags`／`--follow-tags` 掃到本地 tag 會被遠端以 `GH013` 拒收，而自律規則抓不到這種失誤）與**留痕**（要違規得先把一條看得見的 guard 切成 Disabled）。**買不到的是限制身分**：agent 這把 token 的 `repo` scope 就改得動 ruleset 本身（`PUT …/rulesets/{id}` 實測改得動 enforcement，`PATCH` 不支援、回 404），所以它是速度墊不是牆，`V1` 的標記**維持 `【自律】`**——別把「有一條 ruleset」讀成有了機械後盾。`V2` 有完整機械後盾（`gate` job ＋ `test_site_docs.py` 的反例測試）。`V3` 的機械後盾**是後盾不是前擋**：它擋在 `deploy` 之前，所以站上那一版原封不動，但 tag 在 git 上已經被移走了。`handbook-version-tags` 替它補了**半格**前擋：已發佈的 tag 被刪掉之後**再也建不回來**（`creation` 命中）。只有半格是因為那條 ruleset **刻意只放 `creation`**——**移動既有 tag（`push --force`）與刪除 tag 都不在規則內**，所以買到的是「不能重建」而不是「不能動」；要補滿得加 `update`／`deletion`，那是改既有 ruleset 的範圍，屬 `G-C`，沒有使用者裁定不要自己加。至於完整的前擋（分辨得出是誰在推）在本 repo 仍然做不出來，理由如上一段。另有一道**刻意留著的缺口**：`workflow_dispatch` 路徑不驗「tag 是否仍指向原本那顆 commit」，先移動 tag 再用 dispatch 重建仍會覆蓋。要擋得住得把來源 sha 記在 gh-pages 上，而 `mike` 的 `versions.json` 只有 `version`／`title`／`aliases`，不帶那個欄位；dispatch 只有具寫入權的人按得動，這一段因此歸人為判斷。`【自律】`＋`【機械】`
+**違反：**`V1` 沒有機械後盾中的「時機」那半——CI 不知道審查是哪一天過的，它只核對 tag 指到的那份手冊有沒有對應的 APPROVED 記錄（`publish-gate.sh`），所以「審查前就先打 tag」擋得住的前提是那時還沒寫審查記錄；審查記錄先寫好、tag 晚一點才打則本來就合規。真正擋不住的是 agent 自己 `git tag` 再 push——沒有任何 hook 攔 tag push，那條線純靠自律，而它的後果是使用者沒同意過的版本出現在公開站上。**而且這一段在本 repo 機械化不了，不是「還沒做」**：要擋住它得能分辨「誰在推」，但本 repo 是個人帳號底下的 repo，使用者與所有 agent 共用同一個 GitHub 身分，於是 tag ruleset 的「限制建立者」只塌得成兩種極端——bypass 放 Repository admin 等於一條都擋不住，bypass 留空則連使用者自己也推不了（`docs/standards/known-drift.md` `L22`，與同檔 `R5` 同根：單一 git 身分封死的是**任何以 actor 為單位的授權設計**）。**本 repo 據此仍設了一條 ruleset，但要清楚它買到的是什麼**（MYL-62 裁定 A）：`handbook-version-tags`，target `tag`、enforcement `active`、bypass **留空**、只放 `creation` 一條規則、include `refs/tags/handbook-v*`。它擋的不是「誰」，而是「所有人」——包含使用者本人。買到的是兩項：**防誤推**（`git push --tags`／`--follow-tags` 掃到本地 tag 會被遠端以 `GH013` 拒收，而自律規則抓不到這種失誤）與**留痕**（要違規得先把一條看得見的 guard 切成 Disabled）。**買不到的是限制身分**：agent 這把 token 的 `repo` scope 就改得動 ruleset 本身（`PUT …/rulesets/{id}` 實測改得動 enforcement，`PATCH` 不支援、回 404），所以它是速度墊不是牆，`V1` 的標記**維持 `【自律】`**——別把「有一條 ruleset」讀成有了機械後盾。`V2` 有完整機械後盾（`gate` job ＋ `test_site_docs.py` 的反例測試）。`V3` 的機械後盾**是後盾不是前擋**：它擋在 `deploy` 之前，所以站上那一版原封不動，但 tag 在 git 上已經被移走了。`handbook-version-tags` 替它補了**半格**前擋：已發佈的 tag 被刪掉之後**再也建不回來**（`creation` 命中）。只有半格是因為那條 ruleset **刻意只放 `creation`**——**移動既有 tag（`push --force`）與刪除 tag 都不在規則內**，所以買到的是「不能重建」而不是「不能動」；要補滿得加 `update`／`deletion`，那是改既有 ruleset 的範圍，屬 `G-C`，沒有使用者裁定不要自己加。至於完整的前擋（分辨得出是誰在推）在本 repo 仍然做不出來，理由如上一段。另有一道**刻意留著的缺口**：`workflow_dispatch` 路徑不驗「tag 是否仍指向原本那顆 commit」，先移動 tag 再用 dispatch 重建仍會覆蓋。要擋得住得把來源 sha 記在 gh-pages 上，而 `mike` 的 `versions.json` 只有 `version`／`title`／`aliases`，不帶那個欄位；dispatch 只有具寫入權的人按得動，這一段因此歸人為判斷。`V4` **只有形狀那半有後盾，遞增規則那半完全沒有**：`tag_pattern: 'handbook-v*.*.*.*'` 讓位數不足的 tag（`handbook-v1`／`v1.1`／`v1.1.1`）判 `publish=false`、`deploy` job 整個不跑，那是真的擋得住的一格；但 `fnmatch` 只數點不看內容，**多一位（`handbook-v0.0.0.1.2`）與非數字（`handbook-v0.0.0.x`）都通得過**，而「這次該動哪一位」「進位有沒有歸零」更是一個字都驗不到——`d` 打成 `c` 不會有任何東西出聲，錯了又受 `V3` 保護改不掉。本 repo **刻意不補**來源專案那支互動選號腳本（`tag_release.py`）：那支的價值在多系列、高頻率打包，手冊一年發不了幾版，多一支要跟著 `V4` 一起維護的腳本，成本高過它擋得住的那點失誤。`【自律】`＋`【機械】`
 
 ### push：跨平台專案的權限設定（MYL-9／MYL-27 增訂）
 
@@ -569,7 +575,7 @@ Context 是**有限且共用**的資源：載進來的每一段都排擠了後�
 | `P1`～`P3` | push 權限分級 | 第 7、9 節 |
 | `M1`～`M6` | 模型升級規則（`M1`～`M3`）與供應商路由（`M4`～`M6`） | 第 8 節 |
 | `C1`～`C5` | 上下文預算與減法原則 | 第 10 節 |
-| `V1`～`V3` | 手冊版本 tag、精裝站開關、已發佈版本不重打 | 第 7 節 |
+| `V1`～`V4` | 手冊版本 tag、精裝站開關、已發佈版本不重打、版本號形狀與遞增 | 第 7 節 |
 
 規則：
 

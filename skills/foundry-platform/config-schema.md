@@ -127,7 +127,7 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 | `docs.mirror_site` | 物件 | ─ | 精裝站（mkdocs 之類）。**整段缺席＝不建精裝站。** |
 | `docs.mirror_site.enabled` | 布林 | ✅（有本段時） | 顯式 `false`＝設定保留、暫時關閉；與整段缺席的差別只在於保不保留下面幾欄。 |
 | `docs.mirror_site.trigger` | 枚舉 | ✅（`enabled: true` 時） | 何時重建：`tag`｜`merge`（合併進 main 即發）｜`manual`（人工執行）。 |
-| `docs.mirror_site.tag_pattern` | 字串 | ✅（`trigger: tag` 時） | tag 名的 glob，例 `handbook-v*`。其他 trigger 下本欄無意義，讀取者忽略。 |
+| `docs.mirror_site.tag_pattern` | 字串 | ✅（`trigger: tag` 時） | tag 名的 glob，例 `handbook-v*.*.*.*`（配 protocol `V4` 的四碼版本號）。要換版本號形狀的專案改這一欄，`V4` 本身不開旋鈕。其他 trigger 下本欄無意義，讀取者忽略。 |
 
 合法性（違反時同下方總則，整檔拒用）：
 

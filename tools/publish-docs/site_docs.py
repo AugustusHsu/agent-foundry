@@ -50,7 +50,7 @@ DEFAULT_REPO_BLOB_URL = "https://github.com/AugustusHsu/agent-foundry/blob/main"
 SITE_NOTE = (
     '!!! note "本站是機械投影"\n'
     "    本站由內部規則層 repo `agent-foundry` 的 `docs/handbook/` 產生，"
-    "推 `handbook-v*` tag 時由 CI 建置並以 `mike` 版本化發佈。"
+    "推 `handbook-v<a>.<b>.<c>.<d>` tag 時由 CI 建置並以 `mike` 版本化發佈。"
     "唯一可寫的真相是那個目錄，**在本站看到的任何內容都不要回頭改站台**。"
     "文中指向 `skills/`、`templates/`、`docs/pilot/` 的連結會帶你回 repo。\n"
 )

@@ -16,8 +16,8 @@
 #    本腳本只做已開通管道的例行同步，且必須先過發佈審查證據閘門（MYL-24）。
 #
 # 用法：
-#   bash scripts/publish-site.sh --tag handbook-v1          # 完整發佈
-#   bash scripts/publish-site.sh --tag handbook-v1 --dry-run # 只判斷＋建置，不 push
+#   bash scripts/publish-site.sh --tag handbook-v0.0.0.1         # 完整發佈
+#   bash scripts/publish-site.sh --tag handbook-v0.0.0.1--dry-run # 只判斷＋建置，不 push
 #
 # 前提（CI 已備妥；本機跑要自己裝）：python3、mkdocs-material、mike。
 set -euo pipefail
@@ -36,7 +36,7 @@ while [ $# -gt 0 ]; do
     *) echo "未知參數：$1" >&2; exit 2 ;;
   esac
 done
-[ -n "$TAG" ] || { echo "用法：bash scripts/publish-site.sh --tag <handbook-vN> [--dry-run]" >&2; exit 2; }
+[ -n "$TAG" ] || { echo "用法：bash scripts/publish-site.sh --tag <handbook-va.b.c.d> [--dry-run]" >&2; exit 2; }
 
 # ── 步驟 1：設定閘門（AC2 的執行點）───────────────────────────────────────
 # `.foundry/config.yml` 的 `docs.mirror_site` 說了算。workflow 的

@@ -65,4 +65,7 @@ docs:
     # 不必動 workflow 裡 `on: push: tags:` 的 glob（那是粗篩，權威在這裡）。
     enabled: true            # 精裝站（mkdocs）：本專案開
     trigger: tag             # tag | merge | manual
-    tag_pattern: 'handbook-v*'
+    # 四碼版本號（protocol `V4`，MYL-68）。這個 glob 是 `V4` 唯一擋得住的那一格：
+    # 位數不足的 `handbook-v1`／`v1.1`／`v1.1.1` 一律判 publish=false。它只數點、
+    # 不看內容——多一位或非數字仍會通過，遞增規則更是驗不到，別把它讀成全套後盾。
+    tag_pattern: 'handbook-v*.*.*.*'

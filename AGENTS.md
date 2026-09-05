@@ -151,7 +151,7 @@ mkdocs serve
 動到 `docs/handbook/` 的工單，結案前必須走完 protocol 第 7 節「手冊發佈審查」四步：
 **合併進 main → 用 `templates/publish-review.md` 寫審查記錄 → commit（`handbook_commit` 填實際 sha）→ 同步主閱讀面（`scripts/publish-wiki.sh`）**。
 腳本有證據閘門會核對記錄，繞不過去。這一段**沒有使用者介入點**（P2 常設授權），但漏做就是公開面與 repo 不一致。
-還有可選的第五步：打 `handbook-v<N>` tag 發一版精裝站（`V1`）——**那一步是使用者專屬**，agent 不得自行 tag，也不是結案條件。
+還有可選的第五步：打 `handbook-v<a>.<b>.<c>.<d>` tag 發一版精裝站（版本號形狀見 `V4`）——**那一步是使用者專屬**（`V1`），agent 不得自行 tag，也不是結案條件。
 
 ⚠️ 新增手冊章節只要改 `mkdocs.yml` 一份 nav——wiki 側欄與精裝站的 nav 都是**轉寫**它（MYL-55 收掉了第二份）。
 反過來，**不要再在腳本裡手寫第三份**：`--selfcheck` 的 `nav-sync` 會掃 `scripts/` 與 `.github/workflows/` 把它擋下。

@@ -364,11 +364,15 @@ pages:
   artifacts:
     paths: [public]
   rules:
-    - if: $CI_COMMIT_TAG =~ /^handbook-v/   # 對應 docs.mirror_site.tag_pattern
+    - if: $CI_COMMIT_TAG =~ /^handbook-v\d+\.\d+\.\d+\.\d+$/   # 對應 docs.mirror_site.tag_pattern
 ```
 
-- `tag_pattern` 的 glob（`handbook-v*`）要手工翻成 GitLab 的正則（`/^handbook-v/`）——
-  **兩種語法，不是同一個字串**，照抄 glob 進 `=~` 不會報錯，只會永遠不命中。
+- `tag_pattern` 的 glob（`handbook-v*.*.*.*`，四碼版本號見 protocol `V4`）要手工翻成
+  GitLab 的正則——**兩種語法，不是同一個字串**，照抄 glob 進 `=~` 不會報錯，只會永遠不命中。
+- ⚠️ 翻過去之後**兩邊的嚴格程度不一樣，而且是正則這邊比較嚴**：`fnmatch` 只數點不看內容，
+  `handbook-v0.0.0.1.2`（多一位）與 `handbook-v0.0.0.x`（非數字）在 GitHub 側是通得過的
+  （protocol `V4` 違反段列的兩個已知缺口），上面的 `\d+` 版正則則會擋下。**這不是 bug，
+  但要知道它在**：同一個 tag 在兩個平台上的發佈結果可能不同，跨平台對照時別假設兩邊等價。
 - ⚠️ **`rules:` 少了 `if:` 的 catch-all 會在 MR 事件也命中**，於是同一份 commit 跑出兩條管線
   （來源專案 `.gitlab-ci.yml` 就為此在註解裡留了警告）。每條 rule 都要顯式夾條件。
 - 自架實例的 Pages 需要管理員先啟用（`gitlab_pages` 設定）；沒啟用時 job 會綠、站台不存在。
