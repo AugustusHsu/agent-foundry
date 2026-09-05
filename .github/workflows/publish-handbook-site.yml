@@ -1,0 +1,97 @@
+# 手冊精裝站：打 `handbook-v*` tag 才發佈 — MYL-55（MYL-39 計畫 v5 §2 第三層）
+#
+# 為什麼是 tag 而不是每次合併：手冊因此第一次有了「我讀的是哪一版規則」。
+# `mike` 把每個版本各自留在 gh-pages 上，站台有版本選擇器，舊版不會被新版蓋掉。
+#
+# ⚠️ **workflow 一律放本 repo，不放投影端**：`gh` token 沒有 `workflow` scope
+#    （實測為 `gist, project, read:org, repo`），往鏡像 repo 塞 workflow 檔會被拒。
+#
+# ⚠️ 下面 `on: push: tags:` 那份過濾器是**粗篩**，不是權威。權威是
+#    `.foundry/config.yml` 的 `docs.mirror_site`——`enabled: false` 之後再打 tag
+#    不會發佈（`V2`）。兩層是刻意的：YAML 裡的 glob 是寫死的靜態字串，改
+#    `tag_pattern` 不會讓它跟著變，所以真正的判斷交給讀設定檔的那一步。
+
+name: publish-handbook-site
+
+on:
+  push:
+    tags: ['handbook-v*']
+  # 手動觸發用來重建站台（例如 Pages 設定改過）。一樣要過設定閘門與證據閘門。
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要重建的手冊版本 tag（例：handbook-v1）'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+      version: ${{ steps.decide.outputs.version }}
+      reason: ${{ steps.decide.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # site_docs 只用標準函式庫，這一步不裝任何東西——與 foundry-lint 同一條設計，
+      # 讓「要不要發佈」這個判斷在任何環境都跑得起來。
+      - id: decide
+        name: 讀 .foundry/config.yml 決定要不要發佈
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          python3 tools/publish-docs/site_docs.py decide --tag "$TAG" | tee -a "$GITHUB_OUTPUT"
+
+      - name: 印出裁決
+        run: |
+          echo "tag=${{ inputs.tag || github.ref_name }}"
+          echo "publish=${{ steps.decide.outputs.publish }}"
+          echo "reason=${{ steps.decide.outputs.reason }}"
+
+  deploy:
+    needs: gate
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      # mike 把版本推到本 repo 的 gh-pages 分支，需要寫入權限。
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 發佈審查證據閘門要解歷史 commit、算 `git diff` 判戳記旁路，
+          # 而且要看得到 origin/main——淺 clone 會讓它全數誤判（known-drift `X5`）。
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安裝建站相依
+        # 版本釘死：mike 2.2.0 是計畫 v5 實測過的那一版（tag 觸發＋版本選擇器）。
+        run: pip install --quiet mkdocs-material 'mike==2.2.0'
+
+      - name: 設定 git 身分（mike 要 commit 到 gh-pages）
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: 過閘門、投影、建站、部署
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: bash scripts/publish-site.sh --tag "$TAG"
+
+      - name: 查證（腳本自己回報成功不算數，known-drift `X2`）
+        run: |
+          git fetch origin gh-pages --quiet
+          echo "== gh-pages 上的版本清單 =="
+          git show origin/gh-pages:versions.json
+          echo
+          echo "== 本次版本的章節數 =="
+          git ls-tree --name-only "origin/gh-pages:${{ needs.gate.outputs.version }}" | head -20

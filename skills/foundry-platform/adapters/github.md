@@ -320,7 +320,7 @@ gh issue list --state all --limit 500 --json number,state,body \
 | 設定 | 指令 | 定位 | 觸發時機 |
 | --- | --- | --- | --- |
 | `docs.primary: wiki` | `bash scripts/publish-wiki.sh` | **主閱讀面**：合併 main 即同步 | `merge` |
-| `docs.mirror_site` | `bash scripts/publish-handbook.sh` | 精裝面：公開鏡像 repo ＋ Pages | `manual`（`tag` 觸發屬 MYL-39 N5，尚未做） |
+| `docs.mirror_site` | CI：`.github/workflows/publish-handbook-site.yml` → `bash scripts/publish-site.sh --tag <tag>` | 精裝面：**本 repo** 的版本化 Pages（`mike`） | `tag`（`handbook-v*`） |
 
 兩者共用同一道前置閘門 `scripts/lib/publish-gate.sh`（MYL-24 審查證據 ＋ MYL-44 戳記旁路）。
 閘門可單獨執行以排查：`bash scripts/lib/publish-gate.sh <repo 根>`——只判斷，不 clone 不 push。
@@ -366,11 +366,44 @@ Foundry-Projection-Digest: <投影內容的 sha256>
 ⚠️ 對照表證得了「投影自我一致」，**證不了** GitHub 實際算出來的錨點字串等於我們算的那個。
 那件事本機沒有渲染器可驗（`X4`），只能在 wiki 實站點一遍。表格因此把錨點另列一欄標「待實站驗」。
 
+### `mirror_site` 的轉換規則與版本化（MYL-55）
+
+精裝面與 wiki 面最大的不同是**渲染器**：精裝站就是 mkdocs，跟來源手冊假設的那一個一樣。
+所以 wiki 的四條轉換規則在這裡只剩第 4 條——頁名、去 `.md`、錨點換算三項**照抄就是對的**，
+硬套 wiki 那份反而會把對的改成錯的。轉換由 `tools/publish-docs/site_docs.py` 執行。
+
+| # | 規則 | 為什麼 |
+| --- | --- | --- |
+| 1 | 章節平移，`index.md` 仍是 `index.md` | 站台的首頁就是 mkdocs 的 `index.md` |
+| 2 | 章間連結與錨點**原樣保留** | 目標面的渲染器與來源假設的是同一個 |
+| 3 | 指向 repo 內部路徑的相對連結依 `docs.link_policy` 改寫 | 站台只含手冊九章，相對路徑必失效。repo 是 public，`absolute` 讓它變成可點的 github.com 連結 |
+| 4 | 首頁插入固定的「本站是機械投影」提示 | 讀者要知道改站台是白改的 |
+
+站台的 `mkdocs.yml` **由私有 `mkdocs.yml` 轉寫**（連 `theme`、`markdown_extensions` 一起沿用），
+只置換 `site_url`、`nav`（攤平）、`edit_uri`、`strict` 與 `extra.version.provider: mike`。
+沿用渲染設定不是圖省事：本機預覽與公開站用不同的 extensions，錨點會算出不同的 slug 而且**沒有人會發現**。
+
+**版本化**：`mike` 2.2.0 把每個版本各自放在 gh-pages 的 `<version>/` 目錄，
+`latest` 是別名、根目錄是導向 `latest` 的跳轉頁，`versions.json` 餵版本選擇器。
+版本名由 tag 算出（`handbook-v1` → `v1`，見 `site_docs.version_of()`）。
+
+**觸發與開關是兩層**（protocol `V2`）：workflow 的 `on: push: tags: ['handbook-v*']` 是**粗篩**，
+`.foundry/config.yml` 的 `docs.mirror_site` 才是權威——`enabled: false` 之後打 tag 不會發佈。
+兩層並存是因為 `on:` 那份 glob 寫死在 YAML 裡，改 `tag_pattern` 不會讓它跟著變。
+
+⚠️ **workflow 檔一律放本 repo，不放投影端**：`gh` token 沒有 `workflow` scope
+（實測為 `gist, project, read:org, repo`），往別的 repo 塞 workflow 檔會被拒。
+
 ### 開通目標面不在本節授權內
 
 啟用 wiki（`has_wiki: true`）、新建公開鏡像 repo、開 Pages——都是**新開對外資源**，
 屬關卡 C（`gates.external_actions: user`，不可調降），發卡請使用者執行。
 本節的兩支腳本只負責**已開通管道**的例行同步（P2）。
+
+⚠️ **開 Pages 也有順序問題，而且與 wiki 相反**：Pages 的設定畫面只列得出**已存在的分支**，
+而 `gh-pages` 要等第一次 `mike deploy` 才會被建出來。所以順序是
+**先打 tag 讓 CI 跑一次（站台此時還是 404）→ 再開 Pages 選 `gh-pages` 分支**，
+不是「先開 Pages 再發佈」。卡要一次講完兩步，否則使用者會在設定畫面找不到分支而卡住。
 
 ⚠️ **開通 wiki 是兩步，不是一步**（`L15`，2026-09-05 MYL-52 實測）：
 `has_wiki: true` 只是開開關，wiki 的 git repo 要等**第一頁建立**才成形。

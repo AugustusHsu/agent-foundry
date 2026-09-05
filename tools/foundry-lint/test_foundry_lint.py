@@ -343,13 +343,27 @@ class SelfcheckTest(unittest.TestCase):
         self.assertFalse(res.passed)
         self.assertIn("AGENTS.md 不存在", res.failures[0])
 
-    def test_新增章節只改一份_nav_被擋下(self):
+    def test_新增章節沒改_nav_被擋下(self):
         (self.root / "docs" / "handbook" / "09-new.md").write_text(
             "# 9. 新章\n", encoding="utf-8")
         res = self._named("nav-sync")
         self.assertFalse(res.passed)
-        self.assertEqual(len(res.failures), 2)  # 兩份 nav 各報一次
-        self.assertTrue(all("09-new.md" in f for f in res.failures))
+        self.assertTrue(all("09-new.md" in f for f in res.failures), res.failures)
+
+    def test_腳本裡又內嵌一份_nav_被擋下(self):
+        """MYL-55：投影用的 nav 一律轉寫 mkdocs.yml，不准再手寫第二份。"""
+        (self.root / "scripts" / "sneaky.sh").write_text(
+            'cat > x <<EOF\nnav:\n  - 1. x: 01-first-run.md\nEOF\n', encoding="utf-8")
+        res = self._named("nav-sync")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("第二份 nav" in f for f in res.failures), res.failures)
+
+    def test_腳本只提到章節名而沒有_nav_不算第二份(self):
+        """反例：redirect 腳本列舊站頁名（沒有 `nav:`）不該被誤判。"""
+        (self.root / "scripts" / "innocent.sh").write_text(
+            'PAGES=(01-first-run 02-commands)\n', encoding="utf-8")
+        res = self._named("nav-sync")
+        self.assertTrue(res.passed, res.failures)
 
     def test_nav_指向不存在章節被擋下(self):
         (self.root / "docs" / "handbook" / "08-cross-platform.md").unlink()

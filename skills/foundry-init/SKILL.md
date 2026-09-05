@@ -93,7 +93,7 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
 1. **摘要**：平台、`<SRC>` commit sha、執行日期、執行者。
 2. **產出清單**：config 路徑與各欄最終值（gates 選定含確認卡識別碼或既有選定出處）、複製的檔案清單、`init_structure` 建立的平台側資源與查證結果。
 3. **待辦**：github 模式的人工步驟清單（§3 第 4 點）；其他未竟事項。
-4. **下一步指引**（連到說明層網站 foundry-handbook <https://augustushsu.github.io/foundry-handbook/>）：
+4. **下一步指引**（連到說明層網站 <https://augustushsu.github.io/agent-foundry/>；舊網址 `foundry-handbook` 自 MYL-55 起轉址過來）：
    - 首次上手與日常指令 → 第 1、2 章（first-run、commands）
    - 開發流程與工單骨架 → 第 3 章（workflow）
    - 三關卡與決策點對照 → 第 4 章（decision-points）
