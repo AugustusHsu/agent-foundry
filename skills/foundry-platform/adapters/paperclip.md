@@ -254,7 +254,7 @@ curl -s -X PATCH "${AUTH[@]}" \
 ```
 
 - ⚠️ **端點是 PATCH，但 `canCreateAgents` 與 `canAssignTasks` 兩個欄位是必填**（平台 OpenAPI 的 `required`）。漏送不是「保持原值」而是整筆被拒 → 一樣要 **read-modify-write**，和 `labelIds` 同一個紀律。
-- ⚠️ **寫入與稽核讀的不是同一組欄位**：寫 `permissions.*`，但讀回來時 `canAssignTasks` **不在 `permissions` 底下**，在 `access.canAssignTasks`（旁邊還有 `taskAssignSource`、`membership`、`grants`）。兩組欄位可能給出相反的答案，**稽核一律看 `access.*` ＋ `access.grants`**。`org.yml` 的 `permissions` 值域（`assign_tasks`／`create_agents`／`create_skills`）與這兩組欄位的對應寫在 `../config-schema.md`，不寫進 `org.yml`。
+- ⚠️ **寫入與稽核讀的不是同一組欄位**：寫 `permissions.*`，但讀回來時 `canAssignTasks` **不在 `permissions` 底下**，在 `access.canAssignTasks`（旁邊還有 `taskAssignSource`、`membership`、`grants`）。兩組欄位可能給出相反的答案，**`canAssignTasks` 的稽核一律看 `access.*` ＋ `access.grants`**。⚠️ **這條只管 `canAssignTasks`**：實測 `GET /api/agents/me`，兩組欄位**完全不重疊**——`access` 只有 `{canAssignTasks, taskAssignSource, membership, grants}`，而 `canCreateAgents`／`canCreateSkills` 只活在 `permissions` 底下。所以上面前置閘門要查的 `canCreateAgents` 就是讀 `permissions.canCreateAgents`（該表寫的那條），照「一律看 `access.*`」去查會查到空。`org.yml` 的 `permissions` 值域（`assign_tasks`／`create_agents`／`create_skills`）與這兩組欄位的對應寫在 `../config-schema.md`，不寫進 `org.yml`。
 - **查證**：`GET /api/agents/<AID> | jq '{permissions, access}'`。
 
 ### 步驟 3：掛 skill
@@ -318,7 +318,7 @@ curl -s -X PATCH "${AUTH[@]}" \
 | 已結案工單的一般留言／PATCH 為惰性 | 需要重啟後續工作時帶 `"resume": true`；狀態退回帶 `"reopen": true` |
 | 互動卡（`ask_user_questions`／`suggest_tasks`／`request_confirmation`）非本介面 8 動詞 | 屬 protocol 第 4 節關卡與閘門的執行手段，走 `POST /api/issues/<ID>/interactions`；本 adapter 不重複定義 |
 | `PATCH /api/agents/<AID>/permissions` 名為 PATCH，`canCreateAgents`／`canAssignTasks` 卻是必填 | read-modify-write（同 `labelIds`）。見「provision_team」步驟 2 |
-| agent 權限「寫 `permissions.*`、讀 `access.*`」，兩者可能相反 | 稽核一律看 `access.*` ＋ `access.grants`。見「provision_team」步驟 2 |
+| agent 權限「寫 `permissions.*`、讀 `access.*`」，兩者可能相反 | **限 `canAssignTasks`**——兩組欄位不重疊，`canCreateAgents`／`canCreateSkills` 只在 `permissions` 底下。該項稽核看 `access.*` ＋ `access.grants`。見「provision_team」步驟 2 |
 | 以 agent 身分讀**別的** agent，`adapterConfig` 回 `{}`；`GET /api/agents/<AID>/skills` 回 `deny_missing_membership` | 模型層與 skill 掛載跨 agent 驗不了，列為「未證實」由使用者確認。見「provision_team」查證一節 |
 
 ## 附錄 A：issue_ref（`MYL-12`）→ UUID

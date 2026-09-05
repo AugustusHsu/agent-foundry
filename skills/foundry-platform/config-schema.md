@@ -12,7 +12,7 @@
 | --- | --- | --- | --- |
 | `foundry` | 整數 | ✅ | schema 版本，目前固定 `2`。讀取者遇到不認得的版本應停下報錯，不得猜著解析。 |
 | `devtools_platform` | 枚舉 | ✅ | `github`｜`gitlab`｜`local-md`｜`paperclip`。決定載入哪份 adapter 對照文檔（`adapters/<值>.md`）。再新增平台時在此補枚舉值。⚠️ `gitlab` 的 adapter 已全覆蓋八個執行層動詞，但**尚未在真的 GitLab 專案上實跑過**（見 `adapters/gitlab.md` 附錄 B），且 `foundry-init`／`foundry-adopt` 的平台問卡還沒納入它——現在填這個值等於自己走一次首跑驗證。 |
-| `ai_platform` | 枚舉 | ─ | `paperclip`｜`claude-code`｜`codex`。**agent 實際在哪個 AI 平台上執行與被喚醒**（MYL-61 卡 `00ded0b2` Q1）。**整段缺席＝未宣告**，同 `model_routing`／`docs` 的「缺席＝未啟用」——是預設狀態，不是設定缺漏。⚠️ **仍然沒有任何動詞依它分派**，也不會有 `adapters/` 跟它對應——軸 A 沒有動詞，它的形狀是能力矩陣不是介面（MYL-78）。**能力對照表、降級規則與誠實上限一律以 `skills/foundry-ai-platform/SKILL.md` 為準**；本欄只負責宣告值，枚舉權威留在這裡。 |
+| `ai_platform` | 枚舉 | ─ | `paperclip`｜`claude-code`｜`codex`。**agent 實際在哪個 AI 平台上執行與被喚醒**（MYL-61 卡 `00ded0b2` Q1）。**整段缺席＝未宣告**，同 `model_routing`／`docs` 的「缺席＝未啟用」——是預設狀態，不是設定缺漏。⚠️ **依本欄分派的動詞只有一個：`provision_team`**（`skills/foundry-platform/SKILL.md` §8，MYL-77 增訂）；它的平台對照寫在 `adapters/paperclip.md` 的同名節——**那是四份 adapter 裡唯一同時承載軸 A 的一份**，其餘三份在該節寫明「本軸不適用」。**除它以外軸 A 沒有動詞**：軸 A 的主要形狀仍是能力矩陣而不是介面（MYL-78），**能力對照表、降級規則與誠實上限一律以 `skills/foundry-ai-platform/SKILL.md` 為準**；本欄只負責宣告值，枚舉權威留在這裡。 |
 | `mirror_platform` | 枚舉 | ─ | 對外可見面的鏡像平台，值域同 `devtools_platform`（MYL-39）。語意：**執行與喚醒仍在 `devtools_platform`，工單另單向鏡像到此平台供外部閱讀**。**整段缺席＝不鏡像**，同 `model_routing` 的「缺席＝未啟用」——是預設狀態，不是設定缺漏。 |
 | `platform_options` | 物件 | ─ | adapter 專屬選項，鍵為平台名。省略時各 adapter 用下述預設值。 |
 | `gates` | 物件 | ✅ | 三個抽象關卡的核可設定（HLD §4）。 |
