@@ -56,7 +56,7 @@ Pilot 時期你被問過 7 種決策點（本章舊版逐一記載）。它們�
 - 出現在任何**離開私有環境或覆水難收**的動作前：push main／force-push／tag、新開公開資源、擴大公開同步範圍、公司層 skill 匯入等平台動作。
 - 卡片附交付摘要（AC 對應／風險警告／驗證建議），你核可對外動作時一併驗收成果。
 - **這一關不可調降**：任何設定檔、任何 agent 都不能替你按下這個鈕。你也可以透過這一關給予**常設授權**（例：MYL-23 核可後，例行推送與手冊主閱讀面同步改為自動執行）——給予、擴大、收回常設授權本身永遠回到關卡 C。
-- **手冊「發一版」也在這一關**：精裝站是打 `handbook-v<N>` tag 才發的，而 tag 發佈屬你專屬、沒有常設授權。agent 會把審查記錄準備好、發卡請你打 tag；tag 一推，CI 就把那一版建上站，站上同時留住 `v1`、`v2`…與 `latest`。⚠️ **推之前要先解一道鎖**：repo 上有一條 `handbook-version-tags` 規則擋住 `handbook-v*` 的建立，而它擋的是**所有人、包含你自己**（這個 repo 裡你和所有 agent 共用同一個 GitHub 身分，規則分不出誰是誰）。路徑是 Settings → Rules → Rulesets → `handbook-version-tags` → 切 Disabled，推完 tag 再切回 Active；忘了切會看到 `GH013 … creations being restricted`。這條規則買到的不是「只有你能打 tag」，是**擋掉誤推**（`git push --tags` 順手把本地 tag 掃上去）**和留下痕跡**（要違規得先關掉一個看得見的開關）。**已經發出去的版本號不重打**——要修就發下一版，CI 會擋下重打（見[第 7 章](07-workflows.md)第 6 節）。日常的手冊修訂**不會**走到這一關——那條路只更新主閱讀面（wiki），是 P2。
+- **手冊「發一版」也在這一關**：精裝站是打 `handbook-v<a>.<b>.<c>.<d>` tag 才發的（四碼版本號怎麼進位見[第 7 章](07-workflows.md)第 6 節），而 tag 發佈屬你專屬、沒有常設授權。agent 會把審查記錄準備好、算出這次該動哪一位、發卡請你打 tag；tag 一推，CI 就把那一版建上站，站上每一版都留著，`latest` 指向最新那一版。⚠️ **推之前要先解一道鎖**：repo 上有一條 `handbook-version-tags` 規則擋住 `handbook-v*` 的建立，而它擋的是**所有人、包含你自己**（這個 repo 裡你和所有 agent 共用同一個 GitHub 身分，規則分不出誰是誰）。路徑是 Settings → Rules → Rulesets → `handbook-version-tags` → 切 Disabled，推完 tag 再切回 Active；忘了切會看到 `GH013 … creations being restricted`。這條規則買到的不是「只有你能打 tag」，是**擋掉誤推**（`git push --tags` 順手把本地 tag 掃上去）**和留下痕跡**（要違規得先關掉一個看得見的開關）。**已經發出去的版本號不重打**——要修就發下一版，CI 會擋下重打（見[第 7 章](07-workflows.md)第 6 節）。日常的手冊修訂**不會**走到這一關——那條路只更新主閱讀面（wiki），是 P2。
 
 ## 觸發式閘門（不定時，遇到才問）
 

@@ -149,6 +149,52 @@ class VersionTest(unittest.TestCase):
         self.assertEqual(site_docs.version_of("other-v1", "handbook-v*"), "other-v1")
 
 
+class 四碼版本號Test(unittest.TestCase):
+    """protocol `V4`：`handbook-v<a>.<b>.<c>.<d>` ＋ `handbook-v*.*.*.*` 的 glob。
+
+    `V4` 的判準（哪一位該動、進位有沒有歸零）機械上驗不到，這裡釘住的是**唯一
+    驗得到的那一格**：位數。連同兩個**擋不住**的形狀一起釘——那兩則不是待修的
+    bug，是 `V4` 違反段寫明的已知缺口，用測試把「我們知道它漏這裡」變成會回歸的
+    事實，免得日後有人看到 glob 就以為形狀已經全包了。
+    """
+
+    GLOB = "handbook-v*.*.*.*"
+
+    def cfg(self):
+        docs = site_docs.parse_nested_scalars(CONFIG_SAMPLE, "docs")
+        docs["mirror_site"]["tag_pattern"] = self.GLOB
+        return docs
+
+    def test_本_repo_真實設定用的就是四碼_glob(self):
+        """設定檔漂回 `handbook-v*` 的話，下面那些反例會全部失效而沒人發現。"""
+        text = (REPO_ROOT / ".foundry" / "config.yml").read_text(encoding="utf-8")
+        docs = site_docs.parse_nested_scalars(text, "docs")
+        self.assertEqual(docs["mirror_site"]["tag_pattern"], self.GLOB)
+
+    def test_位數不足的舊形狀一律不發佈(self):
+        for tag in ("handbook-v1", "handbook-v1.1", "handbook-v1.1.1"):
+            publish, _, reason = site_docs.mirror_site_decision(self.cfg(), tag)
+            self.assertFalse(publish, tag)
+            self.assertIn("tag_pattern", reason)
+
+    def test_四碼放行且版本名保留四碼(self):
+        publish, version, _ = site_docs.mirror_site_decision(
+            self.cfg(), "handbook-v0.0.0.1")
+        self.assertTrue(publish)
+        self.assertEqual(version, "v0.0.0.1")
+
+    def test_version_of_不必為四碼改實作(self):
+        """`version_of()` 只剝前綴、不解析版本，換形狀不用回去改它。"""
+        self.assertEqual(
+            site_docs.version_of("handbook-v0.0.5.7", self.GLOB), "v0.0.5.7")
+
+    def test_已知缺口_多一位與非數字都擋不住(self):
+        """`fnmatch` 只數點不看內容——這兩格靠 `V4` 的自律那半。"""
+        for tag in ("handbook-v0.0.0.1.2", "handbook-v0.0.0.x"):
+            publish, _, _ = site_docs.mirror_site_decision(self.cfg(), tag)
+            self.assertTrue(publish, f"{tag}：缺口的形狀變了就要回頭改 `V4` 違反段")
+
+
 VERSIONS_JSON = """\
 [
   {"version": "v1", "title": "v1", "aliases": ["latest"]},
