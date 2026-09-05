@@ -8,14 +8,29 @@
 
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
-| `foundry` | 整數 | ✅ | schema 版本，目前固定 `1`。讀取者遇到不認得的版本應停下報錯，不得猜著解析。 |
-| `platform` | 枚舉 | ✅ | `github`｜`gitlab`｜`local-md`｜`paperclip`。決定載入哪份 adapter 對照文檔（`adapters/<值>.md`）。再新增平台時在此補枚舉值。⚠️ `gitlab` 的 adapter 已全覆蓋八個執行層動詞，但**尚未在真的 GitLab 專案上實跑過**（見 `adapters/gitlab.md` 附錄 B），且 `foundry-init`／`foundry-adopt` 的平台問卡還沒納入它——現在填這個值等於自己走一次首跑驗證。 |
-| `mirror_platform` | 枚舉 | ─ | 對外可見面的鏡像平台，值域同 `platform`（MYL-39）。語意：**執行與喚醒仍在 `platform`，工單另單向鏡像到此平台供外部閱讀**。**整段缺席＝不鏡像**，同 `model_routing` 的「缺席＝未啟用」——是預設狀態，不是設定缺漏。 |
+| `foundry` | 整數 | ✅ | schema 版本，目前固定 `2`。讀取者遇到不認得的版本應停下報錯，不得猜著解析。 |
+| `devtools_platform` | 枚舉 | ✅ | `github`｜`gitlab`｜`local-md`｜`paperclip`。決定載入哪份 adapter 對照文檔（`adapters/<值>.md`）。再新增平台時在此補枚舉值。⚠️ `gitlab` 的 adapter 已全覆蓋八個執行層動詞，但**尚未在真的 GitLab 專案上實跑過**（見 `adapters/gitlab.md` 附錄 B），且 `foundry-init`／`foundry-adopt` 的平台問卡還沒納入它——現在填這個值等於自己走一次首跑驗證。 |
+| `ai_platform` | 枚舉 | ─ | `paperclip`｜`claude-code`｜`codex`。**agent 實際在哪個 AI 平台上執行與被喚醒**（MYL-61 卡 `00ded0b2` Q1）。**整段缺席＝未宣告**，同 `model_routing`／`docs` 的「缺席＝未啟用」——是預設狀態，不是設定缺漏。⚠️ 目前**沒有任何動詞依它分派**，也沒有 `adapters/` 對照文檔跟它對應：本欄現在只是把「agent 在哪裡跑」從隱含變成顯式。三家的能力對照、降級規則與 `foundry-init`／`foundry-adopt` 要不要多問一題，屬 MYL-78 範圍，在那之前**不要拿本欄的值去改變任何行為**。 |
+| `mirror_platform` | 枚舉 | ─ | 對外可見面的鏡像平台，值域同 `devtools_platform`（MYL-39）。語意：**執行與喚醒仍在 `devtools_platform`，工單另單向鏡像到此平台供外部閱讀**。**整段缺席＝不鏡像**，同 `model_routing` 的「缺席＝未啟用」——是預設狀態，不是設定缺漏。 |
 | `platform_options` | 物件 | ─ | adapter 專屬選項，鍵為平台名。省略時各 adapter 用下述預設值。 |
 | `gates` | 物件 | ✅ | 三個抽象關卡的核可設定（HLD §4）。 |
 | `push` | 物件 | ✅ | push 權限設定（HLD §5）。 |
 | `model_routing` | 物件 | ─ | 模型供應商路由（MYL-36）。**整段缺席＝路由未啟用**，全隊都用執行環境的預設供應商——這是預設狀態，不是設定缺漏。 |
 | `docs` | 物件 | ─ | 文檔投影（MYL-39）：來源目錄、主閱讀面、精裝站。**整段缺席＝不投影**——手冊仍在版控內，只是沒有任何機械產生的閱讀面。 |
+
+### 為什麼有兩個 `*_platform`（MYL-82 正名）
+
+本檔到 `foundry: 1` 為止只有一個欄位叫 `platform`，它同時被讀成兩件事：「工單／看板放在哪」與
+「agent 在哪裡跑」。兩者在本 repo 剛好都是 `paperclip`，所以混用一直沒有出過事——但它們是**兩條正交的軸**：
+
+| 軸 | 欄位 | 答的問題 | 值域 |
+| --- | --- | --- | --- |
+| 開發工具面 | `devtools_platform` | 工單／狀態／里程碑／看板這些**執行層動詞**打到哪個服務 | `github`｜`gitlab`｜`local-md`｜`paperclip` |
+| AI 平台面 | `ai_platform` | **agent 本身**在哪個平台上執行、被誰喚醒 | `paperclip`｜`claude-code`｜`codex` |
+
+`platform` 這個名字兩邊都套得上，於是誰讀誰對——這正是要正名的理由。
+`mirror_platform`／`platform_options` **維持原名**：前者鏡像的是工具面（值域同 `devtools_platform`），
+後者的鍵是工具面的平台名，兩者都沒有跨軸歧義。
 
 ## `platform_options`
 
@@ -37,21 +52,21 @@
 
 （MYL-39 計畫 v5 §3「T-2 雙軌鏡像」定案。）
 
-**這一段管的是「可見面在哪」，不是「工單在哪」**——後者是 `platform`。設這欄的唯一理由是一個硬約束：
+**這一段管的是「可見面在哪」，不是「工單在哪」**——後者是 `devtools_platform`。設這欄的唯一理由是一個硬約束：
 執行層平台的工單頁面不見得對外開放，而對外開放的那個平台**叫不動 agent**（例：GitHub issue 不會喚醒
 Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，外面就看不到進度。單向鏡像是這兩者之間唯一不製造第二份真相的解。
 
 | 語意 | 規定 |
 | --- | --- |
-| 方向 | **單向，`platform` → `mirror_platform`**。鏡像端唯讀：在鏡像端改狀態、留言、指派一律不回寫，且會在下一次同步被覆蓋。 |
-| 誰是真相 | 永遠是 `platform`。對帳發現兩邊不一致時修鏡像端，不修來源端。 |
+| 方向 | **單向，`devtools_platform` → `mirror_platform`**。鏡像端唯讀：在鏡像端改狀態、留言、指派一律不回寫，且會在下一次同步被覆蓋。 |
+| 誰是真相 | 永遠是 `devtools_platform`。對帳發現兩邊不一致時修鏡像端，不修來源端。 |
 | adapter 選項 | 沿用 `platform_options.<鏡像平台>`，不另開結構。 |
 | 怎麼鏡像 | 由 `adapters/<鏡像平台>.md` 的「鏡像模式」一節規定（三個時機、對應標記、對帳欄位）。 |
 
 合法性（違反時同下方總則，整檔拒用）：
 
-- 值不在 `platform` 的枚舉內 → 非法。
-- 值等於 `platform` → 非法。鏡像到自己沒有語意，多半是複製貼上錯誤。
+- 值不在 `devtools_platform` 的枚舉內 → 非法。
+- 值等於 `devtools_platform` → 非法。鏡像到自己沒有語意，多半是複製貼上錯誤。
 - 值指到的 adapter **沒有「鏡像模式」一節** → 非法：讀取者無從得知該怎麼鏡像，**不得自行推導**一套出來。目前只有 `github` 有。
 
 寫入者：使用者，或經使用者核可的計畫（同 `model_routing`）。**且不得早於鏡像實際可用就先寫**——
@@ -87,7 +102,7 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 
 規則本體在 foundry-protocol 第 8 節「供應商維度」（`M4`～`M6`）；本段只定義欄位。流程與盤點腳本見 `skills/foundry-model-routing/SKILL.md`。
 
-**這一段管的是「哪一家的模型」，不是「工單放在哪」**——後者是頂層的 `platform`。兩條軸互相獨立，別混。
+**這一段管的是「哪一家的模型」，不是「工單放在哪」**——後者是頂層的 `devtools_platform`。兩條軸互相獨立，別混。
 
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
@@ -131,7 +146,7 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 
 合法性（違反時同下方總則，整檔拒用）：
 
-- `primary: wiki` 但**投影面的宿主平台沒有 wiki** → 非法。宿主的判定：`mirror_platform` 有值時取它，否則取 `platform`；目前 `github` 與 `gitlab` 有 wiki，`local-md` 與 `paperclip` 皆無。⚠️ 兩個有 wiki 的宿主**載體不同**（頁面層級、首頁與側欄命名、錨點演算法都不一樣），各自的轉換規則寫在自己的 adapter，別互相照抄。
+- `primary: wiki` 但**投影面的宿主平台沒有 wiki** → 非法。宿主的判定：`mirror_platform` 有值時取它，否則取 `devtools_platform`；目前 `github` 與 `gitlab` 有 wiki，`local-md` 與 `paperclip` 皆無。⚠️ 兩個有 wiki 的宿主**載體不同**（頁面層級、首頁與側欄命名、錨點演算法都不一樣），各自的轉換規則寫在自己的 adapter，別互相照抄。
 - `source` 指到不存在的目錄 → 非法。這條可機械判定，不要留到發佈當下才炸。
 - `enabled: true` 而 `trigger` 缺席，或 `trigger: tag` 而 `tag_pattern` 缺席 → 缺必填，非法。
 
@@ -140,7 +155,7 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 
 **怎麼執行**（MYL-52 增訂）：本段只宣告「投影到哪」，實際動作是抽象動詞 `publish_docs`
 （`SKILL.md` §3.9）。載入哪份對照文檔由**宿主平台**決定，判定方式同上面的合法性規則
-（`mirror_platform` 有值取它、否則取 `platform`）——例如宿主是 `github` 時，
+（`mirror_platform` 有值取它、否則取 `devtools_platform`）——例如宿主是 `github` 時，
 `primary: wiki` 與 `mirror_site` 兩個面的具體指令都在 `adapters/github.md` 的 `publish_docs` 一節。
 上面那句「投影前先確認現況就是上次推上去的內容」在該節有具體的比對依據，不是原則宣示。
 
@@ -151,4 +166,23 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 
 - 未知欄位：忽略並警告（向前相容），但不得依未知欄位改變行為。
 - 缺必填欄位、枚舉值非法、或違反上述「只允許 `user`」約束：整檔視為非法，停止依賴本檔的操作並回報，不得帶預設值硬跑。
-- 本 schema 變更（加欄位、加枚舉值）走 CEO 提案＋使用者核可（protocol 第 9 節規範修訂流程），並遞增 `foundry` 版本號於不相容變更時。`mirror_platform` 與 `docs` 皆為選填且缺席＝關閉，舊設定檔照舊合法，屬相容變更 → `foundry` 維持 `1`。
+- 本 schema 變更（加欄位、加枚舉值）走 CEO 提案＋使用者核可（protocol 第 9 節規範修訂流程），並遞增 `foundry` 版本號於不相容變更時。`mirror_platform` 與 `docs` 皆為選填且缺席＝關閉，舊設定檔照舊合法，屬相容變更 → 當時 `foundry` 維持 `1`。
+
+### 版本沿革
+
+| `foundry` | 變更 | 相容性 |
+| --- | --- | --- |
+| `1` | 初版（MYL-9）。其後 `mirror_platform`（MYL-39）、`model_routing`（MYL-36）、`docs`（MYL-39／52）三段陸續加入，皆為選填且缺席＝關閉 ⇒ 相容變更，版本號不動。 | — |
+| `2` | **`platform` → `devtools_platform`**，另加選填的 `ai_platform`（MYL-82，依 MYL-61 卡 `00ded0b2` Q1）。 | **不相容** |
+
+`2` 為什麼是不相容變更：改的是**必填欄位的名字**。依上方「合法性總則」，未知欄位忽略並警告、
+缺必填欄位整檔視為非法——所以一份 `foundry: 1` 的舊設定檔拿到新讀取者面前，`platform` 會被當成未知欄位丟掉，
+而必填的 `devtools_platform` 缺席 ⇒ **整檔非法**。這不是「多數欄位還能用」的部分退化，是全有全無的失效，
+因此必須遞增版本號，讓讀取者停下報錯而不是帶著半份設定硬跑。
+
+反向也一樣：`foundry: 2` 的設定檔給只認得 `1` 的舊讀取者，同樣缺必填欄位。**沒有相容層、也刻意不寫相容層**——
+本 repo 是全世界唯一一份 `foundry` 設定檔，寫一個沒有使用者的遷移路徑只會多一份要跟著維護的分支邏輯。
+真的出現外部專案時，遷移動作是三行 `sed`，成本遠低於長期揹著雙欄位並存。
+
+新增的 `ai_platform` 本身是選填、缺席＝未宣告，**單獨看屬相容變更**；它跟著本次一起發，是因為
+正名的目的就是把兩條軸分開，只改名不給第二條軸一個落點，等於把同一件事做一半。

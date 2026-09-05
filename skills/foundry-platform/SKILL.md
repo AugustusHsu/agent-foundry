@@ -1,6 +1,6 @@
 ---
 name: foundry-platform
-description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（工單、狀態、里程碑、看板）做任何讀寫——開單、改狀態、留言、掛 label、查工單、建關聯、初始化平台骨架——或要把文檔投影到對外閱讀面（wiki、文檔站），先載入本文，依 .foundry/config.yml 的 platform／docs 欄位選定 adapter 對照文檔，再照對照文檔執行具體指令。不得繞過 adapter 直接對平台下未列於對照文檔的寫入操作。
+description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（工單、狀態、里程碑、看板）做任何讀寫——開單、改狀態、留言、掛 label、查工單、建關聯、初始化平台骨架——或要把文檔投影到對外閱讀面（wiki、文檔站），先載入本文，依 .foundry/config.yml 的 devtools_platform／docs 欄位選定 adapter 對照文檔，再照對照文檔執行具體指令。不得繞過 adapter 直接對平台下未列於對照文檔的寫入操作。
 ---
 
 # foundry-platform：平台 adapter 介面
@@ -9,21 +9,21 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 
 | 介面 | 動詞 | 由哪個設定欄位分派 | 管什麼 |
 | --- | --- | --- | --- |
-| **執行層** | §3.1–§3.8 共 8 個 | `platform` | 工單／狀態／里程碑／看板 |
-| **文檔投影** | §3.9 `publish_docs` | `docs`（宿主平台由 `mirror_platform`／`platform` 決定） | 源頭文檔 → 對外閱讀面 |
+| **執行層** | §3.1–§3.8 共 8 個 | `devtools_platform` | 工單／狀態／里程碑／看板 |
+| **文檔投影** | §3.9 `publish_docs` | `docs`（宿主平台由 `mirror_platform`／`devtools_platform` 決定） | 源頭文檔 → 對外閱讀面 |
 
 每個支援的平台有一份對照文檔（`adapters/<name>.md`）把動詞翻成具體指令。流程規範（foundry-protocol）只引用抽象動詞，不綁定平台——新增平台時只需新增一份對照文檔，介面與流程都不動。
 
-**兩條軸為什麼要分開**（MYL-52 裁定，理由見 §5）：一個專案的工單可以在 A 平台、文檔面在 B 平台，這不是假設性的——**本 repo 自己就是**：`platform: paperclip`，而手冊投影到 GitHub wiki。把 `publish_docs` 掛在 `platform` 上分派，本 repo 會被判成「不支援文檔投影」。同一個道理：`model_routing` 那段也是獨立軸（見 `config-schema.md`），別混。
+**兩條軸為什麼要分開**（MYL-52 裁定，理由見 §5）：一個專案的工單可以在 A 平台、文檔面在 B 平台，這不是假設性的——**本 repo 自己就是**：`devtools_platform: paperclip`，而手冊投影到 GitHub wiki。把 `publish_docs` 掛在 `devtools_platform` 上分派，本 repo 會被判成「不支援文檔投影」。同一個道理：`model_routing` 那段也是獨立軸（見 `config-schema.md`），別混。
 
 ## 1. 使用方式
 
-1. 讀專案根目錄的 `.foundry/config.yml`（schema 見 `config-schema.md`），取得 `platform` 欄位。
+1. 讀專案根目錄的 `.foundry/config.yml`（schema 見 `config-schema.md`），取得 `devtools_platform` 欄位。
 2. 依值載入對照文檔：`github` → `adapters/github.md`；`gitlab` → `adapters/gitlab.md`；`local-md` → `adapters/local-md.md`；`paperclip` → `adapters/paperclip.md`。**只讀當前平台那一份**；要看跨平台差異走 §7 的對照表，不要把四份都載進來。
 3. 要做的操作對應到下方哪個動詞，就照對照文檔中該動詞的指令執行。
 4. 對照文檔沒有涵蓋的平台寫入操作，一律不做——需要新操作時先開單擴充介面，不得私下直呼平台指令繞過。
 5. 找不到 `.foundry/config.yml` 時視為專案尚未導入 Foundry：停下，走 `foundry-init`（新專案）或 `foundry-adopt`（既有開發中專案），不得自行猜測平台。
-6. 要跑 `publish_docs` 時改讀 `docs` 段。對照文檔由**宿主平台**決定：`mirror_platform` 有值取它、否則取 `platform`（判定方式與 `config-schema.md` 的 `docs` 合法性規則同一條）——宿主是 `github` 時，`primary: wiki` 與 `mirror_site` 兩個面都在 `adapters/github.md` 的「§publish_docs」一節。`docs` 段缺席＝本專案不做文檔投影，此時 `publish_docs` 不可用，**這不是設定缺漏**。
+6. 要跑 `publish_docs` 時改讀 `docs` 段。對照文檔由**宿主平台**決定：`mirror_platform` 有值取它、否則取 `devtools_platform`（判定方式與 `config-schema.md` 的 `docs` 合法性規則同一條）——宿主是 `github` 時，`primary: wiki` 與 `mirror_site` 兩個面都在 `adapters/github.md` 的「§publish_docs」一節。`docs` 段缺席＝本專案不做文檔投影，此時 `publish_docs` 不可用，**這不是設定缺漏**。
 
 ## 2. 共通詞彙
 
@@ -125,7 +125,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 - 本文與兩份對照文檔皆為純 markdown＋YAML frontmatter，任何 agent runtime（Claude Code、Codex 等）或人類皆可直接閱讀照做，不依賴特定 runtime 專屬功能。
 - 對照文檔中的指令一律是可直接在 shell 執行的完整範例（含佔位符說明），不是偽代碼。
 - 新增平台（如 GitLab）：新增 `adapters/gitlab.md` **覆蓋該介面的全部動詞**＋在 `config-schema.md` 的對應枚舉補值，介面本文不改。做不到全覆蓋的不得上線——寧缺勿殘。
-  - 執行層平台（`platform` 的值）＝§3.1–§3.8 的 8 個動詞全覆蓋。
+  - 執行層平台（`devtools_platform` 的值）＝§3.1–§3.8 的 8 個動詞全覆蓋。
   - 文檔投影宿主（被 `docs` 段指到的平台）＝`publish_docs` 完整定義（轉換規則、防手改比對依據、逐章比對方式），且 `docs.primary` 用得到的面都要涵蓋。
   - **兩者互不蘊含**：只做執行層的平台不因為沒有 `publish_docs` 而殘缺，只做文檔面的目標也不必實作工單動詞。
 
@@ -134,8 +134,8 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
   加 `publish_docs` 時，本節原本寫的是「新增平台要覆蓋全部 8 個動詞」，字面上會讓 `github.md`／`paperclip.md`／`local-md.md` 當場全部不合格。三條路擺在眼前，選的是第三條——**改寫「全覆蓋」的定義**，理由如下：
 
   - **① 三份 adapter 全部補齊 `publish_docs`：否決。** Paperclip 沒有文檔面（它的 documents 掛在單張工單上，不是一本手冊），補出來的會是憑空發明的東西，而發明出來的規格沒有人驗得了。
-  - **② 把 `publish_docs` 標為選配動詞：否決。** 選配只是讓分派錯軸這件事靜默下來，沒有解決它。**本 repo 就是決定性反例**：`platform: paperclip`、文檔面卻在 GitHub wiki。若 `publish_docs` 跟著 `platform` 分派，本 repo 讀到的是 `adapters/paperclip.md`，得到「本平台不支援文檔投影」——而本 repo 正在做文檔投影。選配讓這個矛盾不報錯，不代表它不存在。
-  - **③ 改寫定義（採用）**：`publish_docs` 由 `docs` 段分派（宿主取 `mirror_platform`／`platform`），與執行層的 `platform` 正交；「全覆蓋」改為**每個介面各自全覆蓋**。既有三份 adapter 維持為執行層 adapter，全部仍然合格；`github.md` 另外多一個身分——它同時是 wiki 與 mkdocs 精裝站兩個文檔投影面的對照文檔。
+  - **② 把 `publish_docs` 標為選配動詞：否決。** 選配只是讓分派錯軸這件事靜默下來，沒有解決它。**本 repo 就是決定性反例**：`devtools_platform: paperclip`、文檔面卻在 GitHub wiki。若 `publish_docs` 跟著 `devtools_platform` 分派，本 repo 讀到的是 `adapters/paperclip.md`，得到「本平台不支援文檔投影」——而本 repo 正在做文檔投影。選配讓這個矛盾不報錯，不代表它不存在。
+  - **③ 改寫定義（採用）**：`publish_docs` 由 `docs` 段分派（宿主取 `mirror_platform`／`devtools_platform`），與執行層的 `devtools_platform` 正交；「全覆蓋」改為**每個介面各自全覆蓋**。既有三份 adapter 維持為執行層 adapter，全部仍然合格；`github.md` 另外多一個身分——它同時是 wiki 與 mkdocs 精裝站兩個文檔投影面的對照文檔。
 
   「寧缺勿殘」的原意（不讓半套平台上線）因此完整保留：殘不殘的判準是「**宣告支援的那個介面有沒有做完**」，而不是「有沒有做完所有介面」。
   </details>

@@ -1007,8 +1007,8 @@ class ConfigParserTest(unittest.TestCase):
     def test_巢狀與註解與引號(self):
         cfg = foundry_lint.parse_config(
             "# 開頭註解\n"
-            "foundry: 1\n"
-            "platform: paperclip   # 行尾註解\n"
+            "foundry: 2\n"
+            "devtools_platform: paperclip   # 行尾註解\n"
             "mirror_platform: github\n"
             "platform_options:\n"
             "  github:\n"
@@ -1019,7 +1019,7 @@ class ConfigParserTest(unittest.TestCase):
             "gates:\n"
             "  external_actions: user\n"
         )
-        self.assertEqual(cfg["platform"], "paperclip")
+        self.assertEqual(cfg["devtools_platform"], "paperclip")
         self.assertEqual(cfg["mirror_platform"], "github")
         self.assertEqual(cfg["platform_options"]["github"]["project_owner"], "@me")
         self.assertEqual(cfg["platform_options"]["github"]["mirror_since"], "MYL-58")
@@ -1034,7 +1034,7 @@ class ConfigParserTest(unittest.TestCase):
 
     def test_真實設定檔讀得出_platform(self):
         cfg = foundry_lint.read_config(REPO_ROOT)
-        self.assertEqual(cfg.get("platform"), "paperclip")
+        self.assertEqual(cfg.get("devtools_platform"), "paperclip")
 
 
 class MirrorMarkerTest(unittest.TestCase):
@@ -1205,13 +1205,13 @@ class MirrorReconCheckTest(unittest.TestCase):
     def write_config(self, text):
         (self.root / ".foundry" / "config.yml").write_text(text, encoding="utf-8")
 
-    ENABLED = ("platform: paperclip\nmirror_platform: github\n"
+    ENABLED = ("devtools_platform: paperclip\nmirror_platform: github\n"
                "platform_options:\n"
                "  github:\n    mirror_since: MYL-58\n"
                "  paperclip:\n    company_id: fake-company\n")
 
     def test_未設定_mirror_platform_是通過不是跳過(self):
-        self.write_config("platform: paperclip\n")
+        self.write_config("devtools_platform: paperclip\n")
         res = foundry_lint.check_mirror_recon(self.root)
         self.assertTrue(res.passed)
         self.assertEqual(res.skipped, "")
@@ -1229,7 +1229,7 @@ class MirrorReconCheckTest(unittest.TestCase):
         self.assertNotIn("✅", rendered)
 
     def test_沒有對帳實作的鏡像平台是跳過(self):
-        self.write_config("platform: paperclip\nmirror_platform: local-md\n")
+        self.write_config("devtools_platform: paperclip\nmirror_platform: local-md\n")
         res = foundry_lint.check_mirror_recon(self.root)
         self.assertTrue(res.skipped)
 

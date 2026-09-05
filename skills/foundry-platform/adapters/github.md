@@ -1,6 +1,6 @@
 # adapter：github
 
-`platform: github` 時的動詞對照。介面語意見 `../SKILL.md`，本文只翻譯成具體指令。
+`devtools_platform: github` 時的動詞對照。介面語意見 `../SKILL.md`，本文只翻譯成具體指令。
 
 ## 前置條件
 
@@ -164,7 +164,7 @@ gh project item-list <PROJECT> --owner <OWNER> --format json --limit 200 \
 
 （MYL-39 計畫 v5 §3 定案；欄位規格見 `../config-schema.md` 的 `mirror_platform` 段。）
 
-`platform: github` 時，上面的動詞對照就是全部——真相在這裡。**鏡像模式是另一回事**：真相在別的平台
+`devtools_platform: github` 時，上面的動詞對照就是全部——真相在這裡。**鏡像模式是另一回事**：真相在別的平台
 （本 repo 是 Paperclip），GitHub 只承載**可見面**。差別具體在三點：
 
 - **鏡像 issue 唯讀。** 在這裡留言、改 Status、close，都不會回到來源端，而且會在下一次同步被覆蓋。
@@ -311,10 +311,10 @@ gh issue list --state all --limit 500 --json number,state,body \
 ## publish_docs（文檔投影目標面）
 
 本檔除了是執行層 adapter，也承載 `publish_docs`（SKILL.md §3.9）的兩個目標面。
-**這一節與上面的執行層動詞互相獨立**：`docs` 段選這裡，`platform` 選上面，
+**這一節與上面的執行層動詞互相獨立**：`docs` 段選這裡，`devtools_platform` 選上面，
 一個專案可以只用其中一邊（MYL-52 裁定，理由見 SKILL.md §5）。
 本節在「宿主平台是 github」時適用——宿主的判定同 `../config-schema.md` 的 `docs` 合法性規則：
-`mirror_platform` 有值取它、否則取 `platform`。本 repo 屬後者之外的情況（`platform: paperclip`
+`mirror_platform` 有值取它、否則取 `devtools_platform`。本 repo 屬後者之外的情況（`devtools_platform: paperclip`
 而文檔面在 github），所以要靠 `mirror_platform: github` 或在工單裡明講，別靠讀者猜。
 
 | 設定 | 指令 | 定位 | 觸發時機 |

@@ -95,8 +95,8 @@ agent-foundry/
 | `docs/pilot/pilot-log.md` | 歷史紀錄，除非要查典故否則不必讀 |
 | `docs/handbook/07-workflows.md` | 八條固定 workflow 的索引。要查某條流程「什麼時候啟動、規則本體在哪」時讀該條那一節即可 |
 | `skills/foundry-init/SKILL.md` | 只在導入全新專案時讀 |
-| `skills/foundry-platform/adapters/github.md` | 兩種用途各佔一半：`platform: github` 的動詞對照，與「鏡像模式」規格。要哪一個讀哪一節 |
-| `skills/foundry-platform/adapters/gitlab.md` | 同樣兩種用途：`platform: gitlab` 的動詞對照，與 `publish_docs` 的兩個投影面（wiki／Pages）。**先讀開頭的「版本分岔」**——Free 與 Premium 有四個動詞走法不同，判錯了不會報錯 |
+| `skills/foundry-platform/adapters/github.md` | 兩種用途各佔一半：`devtools_platform: github` 的動詞對照，與「鏡像模式」規格。要哪一個讀哪一節 |
+| `skills/foundry-platform/adapters/gitlab.md` | 同樣兩種用途：`devtools_platform: gitlab` 的動詞對照，與 `publish_docs` 的兩個投影面（wiki／Pages）。**先讀開頭的「版本分岔」**——Free 與 Premium 有四個動詞走法不同，判錯了不會報錯 |
 | `skills/foundry-platform/SKILL.md` | 9 個動詞的介面定義。只讀你要用的那個動詞那一節；§5 的「全覆蓋」裁定只在新增平台或新增文檔目標面時才需要 |
 | `skills/foundry-platform/config-schema.md` | `.foundry/config.yml` 的欄位權威。依段落取用——`gates`／`push`／`model_routing`／`docs` 四段互相獨立，別整份載 |
 | `skills/foundry-platform/adapters/paperclip.md` | 未達門檻但一樣別整份載：只讀當前平台那一份，不要四份都載 |

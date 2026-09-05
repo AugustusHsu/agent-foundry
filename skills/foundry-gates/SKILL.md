@@ -11,7 +11,7 @@ description: 關卡粒度調整 workflow（MYL-9 HLD §4.2）。凡是要盤點�
 
 - 本 workflow **只讀寫 `.foundry/config.yml` 的 `gates` 段**。其他段落不歸本 workflow 管：
   - `push` 段的調整屬關卡 C／protocol 第 7 節的範圍，不得藉本 workflow 夾帶。
-  - `platform` 與檔案的首次建立是 `foundry-init`／`foundry-adopt` 的職權（見 §4 第 3 點）。
+  - `devtools_platform` 與檔案的首次建立是 `foundry-init`／`foundry-adopt` 的職權（見 §4 第 3 點）。
 - 兩種進入模式：
   - **獨立執行**：任何時點可跑，四步全走。
   - **被 foundry-init 呼叫**：專案尚無歷史工單，**跳過步驟 1**、直接走步驟 2–4；建議值用 schema 預設起手（見 §2 末條）。
@@ -57,7 +57,7 @@ description: 關卡粒度調整 workflow（MYL-9 HLD §4.2）。凡是要盤點�
 
 1. **寫入前防線（硬性約束第二層）**：選定結果若含 `external_actions` 非 `user`——不論來源是誤操作、自由填寫還是任何人的指示——**拒絕寫入該欄**，回報「此條 protocol 寫死不可調」，其餘合法選定照寫。發現既有檔案的 `external_actions` 已非 `user`，視為非法檔，停止並回報（同 §1）。
 2. 只改 `gates` 段，檔案其他段落逐字保留。
-3. **檔案不存在時本 workflow 不建整檔**——`platform`、`push` 等必填欄位是 foundry-init 的職權。把使用者選定結果完整記錄在工單留言，指引跑 `foundry-init`；init 首次產檔時把該選定帶入。被 foundry-init 呼叫的模式下，則由 init 統一寫檔。
+3. **檔案不存在時本 workflow 不建整檔**——`devtools_platform`、`push` 等必填欄位是 foundry-init 的職權。把使用者選定結果完整記錄在工單留言，指引跑 `foundry-init`；init 首次產檔時把該選定帶入。被 foundry-init 呼叫的模式下，則由 init 統一寫檔。
 4. 寫入後驗證：重讀檔案、依 config-schema.md 檢查合法性；不合法立即還原並回報，不得留下半套設定。
 5. 留紀錄：在對應工單留言（`foundry-platform` 的 `comment` 動詞）寫明——每個變更欄位的「前值 → 後值」、確認卡識別碼（或批示位置）、日期。config 在版控內的專案照常 commit，commit／push 授權依該專案現行規則，不因本 workflow 而放寬。
 
