@@ -49,11 +49,21 @@ jobs:
         run: |
           python3 tools/publish-docs/site_docs.py decide --tag "$TAG" | tee -a "$GITHUB_OUTPUT"
 
+      # ⚠️ 裁決文字一律走 env，不要把 ${{ }} 直接展進 run 的 shell 字串裡：
+      # reason 內含反引號（如 `docs.mirror_site.enabled`），展進雙引號會被當成
+      # command substitution 執行掉，log 印出來變成「reason= 是 ，不是 true」。
+      # 2026-09-05 MYL-55 的 handbook-v0-off-test 實跑就是這樣被吃掉的。
       - name: 印出裁決
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          PUBLISH: ${{ steps.decide.outputs.publish }}
+          VERSION: ${{ steps.decide.outputs.version }}
+          REASON: ${{ steps.decide.outputs.reason }}
         run: |
-          echo "tag=${{ inputs.tag || github.ref_name }}"
-          echo "publish=${{ steps.decide.outputs.publish }}"
-          echo "reason=${{ steps.decide.outputs.reason }}"
+          printf 'tag=%s\n' "$TAG"
+          printf 'publish=%s\n' "$PUBLISH"
+          printf 'version=%s\n' "$VERSION"
+          printf 'reason=%s\n' "$REASON"
 
   deploy:
     needs: gate

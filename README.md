@@ -78,9 +78,11 @@ Skill 以 **`sourceType: local_path` 參照式安裝**:Paperclip 記的是這個
 - 想看網站版:本機執行 `pip install mkdocs-material && make serve`。
 - **手冊有兩個對外閱讀面**:主閱讀面是本 repo 的 wiki(手冊變更合併進 main 後同步);
   精裝站是版本化的 GitHub Pages,**打 `handbook-v*` tag 才由 CI 發佈**,站上同時留住
-  `v1`、`v2`…與 `latest`。舊網址 <https://augustushsu.github.io/foundry-handbook/>
+  `v1`、`v2`…與 `latest`:<https://augustushsu.github.io/agent-foundry/>(2026-09-05 發出 `v1`)。
+  舊網址 <https://augustushsu.github.io/foundry-handbook/>
   是搬家前的公開鏡像,MYL-55 起**直接斷開、不做轉址**(使用者裁定,見 known-drift `R7`);
-  該 repo 由使用者封存保留,不刪除。
+  該 repo 已封存保留,不刪除。⚠️ **封存不等於關站**:實測封存後舊站仍回 200,
+  要真的斷得另外關掉它的 Pages(見 known-drift `L18`),那是獨立的一次授權。
   同步流程見 protocol 第 7 節「手冊發佈審查」——動到 `docs/handbook/` 的工單,
   結案前必須走完前四步,由 `scripts/lib/publish-gate.sh` 的證據閘門把關;
   第五步(打 tag 發一版)是使用者專屬。
