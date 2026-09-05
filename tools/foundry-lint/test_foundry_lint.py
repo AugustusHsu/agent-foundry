@@ -402,6 +402,86 @@ class SelfcheckTest(unittest.TestCase):
         res = self._named("rule-ids")
         self.assertTrue(res.passed, res.failures)
 
+    # ── rule-marks（MYL-47）──────────────────────────────────────────
+    #
+    # 受測對象是 protocol 本體，所以每個反例都直接改副本裡的 SKILL.md。
+    # 這裡刻意連「不該被擋」的兩個形狀也各配一則：漏標與誤殺同樣是缺陷，
+    # 而誤殺更難發現——它會逼下一個人把誠實的標記改成假的去迎合檢查。
+
+    def _protocol(self):
+        return self.root / "skills" / "foundry-protocol" / "SKILL.md"
+
+    def _sub_protocol(self, old, new):
+        p = self._protocol()
+        text = p.read_text(encoding="utf-8")
+        self.assertIn(old, text, "反例的錨點字串已不在 protocol 裡，測試要跟著改")
+        p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+    def test_違反行沒有標記被擋下(self):
+        """增訂時漏標——本檢查存在的主要理由。"""
+        self._sub_protocol(
+            "要退回的不只是一條設定。`【自律】`", "要退回的不只是一條設定。")
+        res = self._named("rule-marks")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("沒有以標記收尾" in f for f in res.failures),
+                        res.failures)
+
+    def test_標記順序顛倒的合併形被擋下(self):
+        """放行的是字面相同的三種，不是自由組合。
+
+        錨點要帶前文：`replace(..., 1)` 換的是第一個命中，而合併形第一次出現
+        是在圖例表裡——只寫標記本身會改到圖例，測到的變成另一項失敗。
+
+        這則同時釘住「不能只比對行尾後綴」：顛倒後的尾巴正好是合法的
+        `【自律】`，用 `endswith` 判會放行，而它讀起來剛好少掉機械那一半。
+        """
+        self._sub_protocol("歸人為判斷。`【自律】`＋`【機械】`",
+                           "歸人為判斷。`【機械】`＋`【自律】`")
+        res = self._named("rule-marks")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("不是合法字面" in f for f in res.failures),
+                        res.failures)
+
+    def test_第三種標記值被擋下(self):
+        """「有沒有工具會擋」沒有中間態，`【半機械】` 之類的值一律擋。"""
+        self._sub_protocol("要退回的不只是一條設定。`【自律】`",
+                           "要退回的不只是一條設定。`【半機械】`")
+        res = self._named("rule-marks")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("第三種標記值" in f and "半機械" in f
+                            for f in res.failures), res.failures)
+
+    def test_圖例漏列合法結尾被擋下(self):
+        """圖例與程式常數必須是同一份——本單就是被這一項抓出來的。"""
+        self._sub_protocol(
+            "| `【自律】`＋`【機械】` | 該小節含多條規則、後盾程度不同", "| ~~ | ")
+        res = self._named("rule-marks")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("圖例沒有列出合法結尾" in f for f in res.failures),
+                        res.failures)
+
+    def test_違反文正文引用另一個標記不被誤判(self):
+        """§7 兩段違反文在敘述裡引用 `【自律】`，收尾卻是 `【機械】`。
+
+        用 contains 判會把它們誤殺，所以只認行尾。
+        """
+        text = self._protocol().read_text(encoding="utf-8")
+        self.assertIn("從 MYL-40 標記表上的 `【自律】` 轉為機械攔截", text,
+                      "這則反例的前提沒了——protocol 已無「敘述裡引用標記」的違反行")
+        self.assertTrue(self._named("rule-marks").passed)
+
+    def test_沒有違反行的小節不被要求補標記(self):
+        """哪些小節該配後果是編輯判斷，不歸機械管（第 1～3 節整節留白）。"""
+        res = self._named("rule-marks")
+        self.assertTrue(res.passed, res.failures)
+        self.assertIn("違反段", res.summary)
+
+    def test_protocol_不存在被擋下(self):
+        self._protocol().unlink()
+        res = self._named("rule-marks")
+        self.assertFalse(res.passed)
+        self.assertIn("不存在", res.failures[0])
+
     def _big(self, rel):
         """在副本裡放一個超過門檻的 .md，回傳它的 repo 相對路徑。"""
         path = self.root / rel
@@ -519,8 +599,8 @@ class SelfcheckTest(unittest.TestCase):
         self.assertFalse(data["passed"])
         self.assertEqual({c["name"] for c in data["checks"]},
                          {"entry-sync", "nav-sync", "anchors", "rule-ids",
-                          "big-files", "internal-links", "handbook-stamp",
-                          "mirror-recon"})
+                          "rule-marks", "big-files", "internal-links",
+                          "handbook-stamp", "mirror-recon"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()
