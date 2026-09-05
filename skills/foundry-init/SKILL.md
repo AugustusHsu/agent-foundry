@@ -102,6 +102,12 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
      不帶這個目錄就產 `org.yml`，目標專案一跑自檢就是九條「掛的 skill 不存在」（實測，MYL-78）。
      反過來，不建團隊時不產 `org.yml`，這個目錄也就沒有存在的理由，照舊不複製。
    - 不複製：`skills/foundry-init/`（目標專案用不到）。
+     ⚠️ **這一行同時是 `--selfcheck` 判斷「規則本體 vs 目標專案」的依據**（MYL-87）：
+     `foundry_lint.py` 的 `is_rule_repo()` 就用「有沒有 `skills/foundry-init/` 這個目錄」
+     判定，而它成立的唯一理由是本行——本行說了目標專案不會有它。四項檢查
+     （`nav-sync`／`anchors`／`handbook-stamp`／`init-copy-list`）靠這個判準決定要不要跳過。
+     **要把這個目錄改成複製之前先讀 `foundry_lint.py` 的 `RULE_REPO_MARKER_REL` 那段註解**，
+     否則目標專案會突然被當成規則本體，四項一起回到必紅。
      ⚠️ **MYL-78 修正**：本行原本還列著 `skills/roles/`，理由是「組織分工屬 agent-foundry
      自身設定，MYL-14 範疇」。那個理由在 MYL-76 之後不成立了——protocol 第 9 節被逐字複製過去，
      而 `org-sync` 把 `org.yml` 的角色集合綁死在那張圖上，目標專案的編制**不是**它自己的決策。
@@ -141,10 +147,24 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
      維護規則（哪段共用、哪段可分岔、新增第三個入口檔要動哪些檔）以
      `skills/foundry-ai-platform/SKILL.md` §5 為準。
    - 兩檔的 `FOUNDRY:SHARED-BODY` 標記之間**逐字相同**，只有 §8 工具名對應不同。
-   - 佔位符（專案定位、地圖、大檔表、指令速查）依 `<TARGET>` 實況填寫：
-     地圖照實際目錄寫、大檔表用 `git ls-files | xargs du -b | sort -rn | head` 產生、
-     指令速查只列該專案真的會用到的指令。**填不出來的整節刪掉，不要留佔位殼**——
-     留著假內容比沒有更糟，讀者會照著錯的做。
+   - 佔位符（專案定位、地圖、指令速查）依 `<TARGET>` 實況填寫：
+     地圖照實際目錄寫、指令速查只列該專案真的會用到的指令。
+     **填不出來的整節刪掉，不要留佔位殼**——留著假內容比沒有更糟，讀者會照著錯的做。
+   - **§4 的大檔表用機械產生，不要人手抄**（MYL-87）。複製完成後在 `<TARGET>` 跑：
+
+     ```bash
+     python3 tools/foundry-lint/foundry_lint.py --big-files-list
+     ```
+
+     把輸出整段貼進兩份入口檔 `FOUNDRY:BIG-FILES` 標記之間那張表的表身，取代
+     `| {路徑} | … |` 那一列。理由：這張表由 `--selfcheck` 的 `big-files` 逐條核對，
+     人手抄的清單漂掉就是紅字，而那正是 MYL-42 在本 repo 處理過一輪的漂移形狀，
+     不該在導入的每個專案重來一次。產生器與檢查讀的是**同一個掃描函式**，
+     所以貼完必綠。
+     - 第二欄印的是 `{待填：通常只需要哪一部分}`——那一欄是編輯判斷，機械產不出來。
+       **這是唯一容許留在入口檔裡的佔位符**（上一條「不要留佔位殼」的例外）：整列
+       刪掉會讓 `big-files` 紅，而它不影響紅綠、又看得出來還沒填。逐條補上實際內容
+       屬導入者的判斷，補不完就列進步驟 5 報告的待辦，不要靜默留著。
    - `<TARGET>` 已存在同名檔案時**不得覆蓋**：停止並回報（同 §0 規則），由使用者裁定合併方式。
 2. **機械層閘門**：複製 `<SRC>/.pre-commit-config.yaml` 與 `<SRC>/Makefile` 到 `<TARGET>`。
    - 兩檔任一已存在且內容不同 → **不覆蓋**，改為在步驟 5 報告列出「建議合併的 target／hook」，交使用者決定。
@@ -153,9 +173,16 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    這是 github 模式相對其他平台的**實質優勢**——關卡在多數平台靠 agent 自覺遵守，
    在 GitHub 上可以有機械執行力。已存在同名 workflow 時不覆蓋，列入報告待辦。
 4. **驗證**：在 `<TARGET>` 執行 `python3 tools/foundry-lint/foundry_lint.py --selfcheck`。
-   - `entry-sync` 必須通過——這是雙入口檔產對的證明。
-   - 其他三項（手冊 nav、錨點、規則 ID）在尚未建手冊的新專案會因目錄不存在而報缺；
-     **這屬預期狀況**，記進報告即可，不算 init 失敗。
+   **要求是零紅字**——`make check` 就是入口檔叫每個新 session 跑的那一行，
+   帶著紅字交付等於教會接手者忽略它（MYL-87）。有任何 ❌ 就是 init 沒做完，回頭修，
+   不要寫進報告當「已知狀況」。
+   - ⏭ 是預期的：`nav-sync`／`anchors`／`handbook-stamp`／`init-copy-list` 這四項
+     在尚未建手冊的新專案會印 ⏭ 並附跳過理由（判準見 `foundry_lint.py` 的
+     `handbook_absent_skip()`）。**⏭ 不是 ✅**——它明說「沒有實際檢查」，
+     總結行也會另報跳過數。目標專案哪天自建了 `docs/handbook/`，前三項就自動回到照驗。
+   - `entry-sync` 與 `big-files` 必須 ✅——分別是雙入口檔產對、與 §4 大檔表填對的證明。
+   - ⚠️ 本段列的是**這一版**的跳過項，不是承諾。以檢查實際印出來的 ⏭ 與理由為準；
+     跟這裡對不上時信程式、回報差異，不要照這段散文推斷哪一項「應該」跳過。
 
 ## 3. 步驟 3：呼叫 adapter `init_structure`
 

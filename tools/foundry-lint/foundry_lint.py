@@ -263,6 +263,42 @@ class SelfcheckResult:
         return not self.failures
 
 
+#: 判定「這個 repo 是不是 Foundry 規則本體」的唯一依據（MYL-87）。
+#: ⚠️ **這不是隨手挑的特徵，是規格上的硬對應**：`skills/foundry-init/SKILL.md` §2
+#: 第 3 點的複製清單最後一行明寫「不複製：`skills/foundry-init/`（目標專案用不到）」，
+#: 所以「有這個目錄 ⇔ 是規則本體」，任何照那份清單初始化出來的專案都不會有。
+#: 那一行同時留了一句回指本檔的註解——兩邊互鎖，改一邊要先看另一邊。
+RULE_REPO_MARKER_REL = "skills/foundry-init"
+
+
+def is_rule_repo(root: Path) -> bool:
+    """本 repo 是 Foundry 規則本體，而不是被 `foundry-init` 導入的目標專案。"""
+    return (root / RULE_REPO_MARKER_REL).is_dir()
+
+
+def handbook_absent_skip(root: Path) -> str:
+    """手冊三項（`nav-sync`／`anchors`／`handbook-stamp`）該不該跳過；回傳跳過理由。
+
+    MYL-87：這三項守的是「手冊與 nav／錨點／protocol 對得上」。目標專案沒有
+    `docs/handbook/`，那個對應關係根本不存在，於是三項一起紅——而 `make check`
+    正是入口檔叫每個新 session 跑的那一行，第一次跑就掛。
+
+    **跳過條件刻意是兩層，缺一不可**：
+
+    1. 不是規則本體（`is_rule_repo()`）——只有這一層擋得住「本 repo 的手冊被誤刪
+       會從 ❌ 變成 ⏭」。那是把閘門放鬆，不是修好它。
+    2. `docs/handbook/` 真的不存在——只有這一層擋得住「目標專案哪天自建了手冊卻
+       與 nav 對不上，檢查卻沉默」。手冊一旦存在就照驗，不因為它是目標專案而放寬。
+
+    跳過用 `SelfcheckResult.skipped`（印 ⏭、總結行另報跳過數），**不是靜靜略過**：
+    沿用 `mirror-recon` 已經在用的那套姿態，不新增第二種。
+    """
+    if is_rule_repo(root) or (root / HANDBOOK_REL).is_dir():
+        return ""
+    return (f"本專案不是 Foundry 規則本體（沒有 `{RULE_REPO_MARKER_REL}/`）"
+            f"且沒有 `{HANDBOOK_REL}/`，沒有手冊可對照")
+
+
 def _strip_inline(text: str) -> str:
     """去掉行內 markdown 標記，取出 mkdocs 實際拿去 slugify 的純文字。"""
     text = LINK_RE.sub(r"\1", text)
@@ -418,7 +454,10 @@ def check_nav_sync(root: Path) -> SelfcheckResult:
     res = SelfcheckResult("nav-sync", "手冊章節與 nav 一致（且只有一份手寫 nav）")
     handbook = root / "docs" / "handbook"
     if not handbook.is_dir():
-        res.failures.append("docs/handbook/ 不存在")
+        # MYL-87：判準與兩層條件的理由都在 `handbook_absent_skip()`。
+        res.skipped = handbook_absent_skip(root)
+        if not res.skipped:
+            res.failures.append("docs/handbook/ 不存在")
         return res
 
     on_disk = {p.name for p in handbook.glob("[0-9][0-9]-*.md")}
@@ -469,7 +508,10 @@ def check_handbook_anchors(root: Path) -> SelfcheckResult:
     res = SelfcheckResult("anchors", "手冊內部錨點可跳轉")
     handbook = root / "docs" / "handbook"
     if not handbook.is_dir():
-        res.failures.append("docs/handbook/ 不存在")
+        # MYL-87：同 `check_nav_sync`，判準見 `handbook_absent_skip()`。
+        res.skipped = handbook_absent_skip(root)
+        if not res.skipped:
+            res.failures.append("docs/handbook/ 不存在")
         return res
 
     pages = {p.name: read_text(p) for p in sorted(handbook.glob("*.md"))}
@@ -656,6 +698,28 @@ def scan_big_files(root: Path) -> list:
             if path.stat().st_size >= BIG_FILE_BYTES:
                 found.append(rel.as_posix())
     return sorted(found)
+
+
+#: 產生模式給第二欄填的佔位字串。第二欄（「通常只需要哪一部分」）是編輯判斷，
+#: 機械產不出來——留一個**看得出來還沒填**的字串，比留空白誠實。
+#: `check_big_files` 只驗第一欄的路徑集合，所以這一欄不影響紅綠。
+BIG_FILES_TODO = "{待填：通常只需要哪一部分}"
+
+
+def render_big_files_list(root: Path) -> str:
+    """印出可直接貼進入口檔 §4 的大檔清單表格列（MYL-87）。
+
+    `foundry-init` 步驟 2.5 產生入口檔時跑這一支，把輸出填進 `<TARGET>` 的
+    `CLAUDE.md`／`AGENTS.md`。**為什麼要機械產生**：模板那格是 `| {路徑} |`
+    佔位符，人手抄一次就等著漂——而「寫死在散文裡的清單沒有人會回來改」正是
+    MYL-42 已經處理過一輪的漂移形狀，不該在導入的每個專案重來一次。
+
+    這一支**不放鬆 `check_big_files` 一行**：它只是把該檢查自己的掃描結果
+    （`scan_big_files()`，同一個函式）換成表格列印出來，所以產生的清單與檢查
+    要求的集合必然相等。目標專案照樣受 `big-files` 管（MYL-87 AC4）。
+    """
+    rows = [f"| `{rel}` | {BIG_FILES_TODO} |" for rel in scan_big_files(root)]
+    return "\n".join(rows)
 
 
 def check_big_files(root: Path) -> SelfcheckResult:
@@ -1268,6 +1332,13 @@ def check_handbook_stamp(root: Path) -> SelfcheckResult:
     agent 身上（見上方三層設計）。
     """
     res = SelfcheckResult("handbook-stamp", "手冊四章戳記不落後於 protocol")
+    # MYL-87：目標專案沒有手冊時整項跳過（判準見 `handbook_absent_skip()`）。
+    # 位置在最前面是刻意的：底下淺 clone 那一段講的是「有手冊但驗不了歷史」，
+    # 跟「根本沒有手冊」是兩件事，混在一起會吐出一個指錯方向的處置。
+    res.skipped = handbook_absent_skip(root)
+    if res.skipped:
+        res.summary += "（沒有手冊，未驗）"
+        return res
     has_git, _ = git_run(root, "rev-parse", "--verify", "HEAD")
     # 淺 clone 是「有 git 但沒有歷史」——戳記 sha 一律解不出來，於是四章一起偽裝成
     # 「戳記寫錯了」。那個訊息把人指向手冊，真正該改的卻是 checkout 的 fetch-depth
@@ -1842,15 +1913,21 @@ def check_init_copy_list(root: Path) -> SelfcheckResult:
     程式反而更短。反方向不管——清單列得比 Makefile 多是合理的（`templates/`
     那些跟 Makefile 無關），本檢查只擋「Makefile 有、清單沒有」這一個方向。
 
-    ⚠️ **本檢查在 foundry-init 產出的目標專案必紅，處置歸 MYL-87 AC0。**
-    複製清單自己寫著「不複製：`skills/foundry-init/`」，所以照它初始化出來的專案
-    一定沒有對照端，走到下面那句「對照端沒了」。這是政策題不是缺陷——「缺對照端
-    該 ⏭ 還是該產骨架」與 MYL-87 那四項是同一個政策，在這裡先斬會分岔（MYL-86
-    CR R1，該單留言有實測輸出）。
+    **目標專案跳過本項**（MYL-87，接續 MYL-86 CR R1 的交接）：複製清單自己寫著
+    「不複製：`skills/foundry-init/`」，所以照它初始化出來的專案一定沒有對照端。
+    這裡跳過的判準只有一層——`is_rule_repo()`，不像手冊三項要再問一次
+    「東西在不在」，因為對照端與判準旗標**是同一個目錄**：不是規則本體就必然沒有
+    對照端，沒有第二種情形要分。相對地，規則本體自己少了那份 SKILL.md 仍舊是紅。
     """
     res = SelfcheckResult(
         "init-copy-list", "`Makefile` 引用到的 `tools/` 目錄都在 foundry-init 複製清單裡")
     mk, skill = root / MAKEFILE_REL, root / INIT_SKILL_REL
+    if not is_rule_repo(root):
+        res.skipped = (
+            f"本專案不是 Foundry 規則本體（沒有 `{RULE_REPO_MARKER_REL}/`），"
+            "複製清單這個對照端在目標專案依規格就不存在"
+        )
+        return res
     if not mk.exists():
         res.failures.append(f"{MAKEFILE_REL} 不存在——本檢查的來源端沒了")
         return res
@@ -1954,10 +2031,16 @@ def parse_args(argv):
         help="判定 SHA..HEAD 的 docs/handbook/ 變更是否只有同步戳記行；"
              "通過時 stdout 列出那些 commit（scripts/publish-handbook.sh 的戳記旁路用）",
     )
+    parser.add_argument(
+        "--big-files-list",
+        action="store_true",
+        help="印出入口檔 §4 大檔清單的表格列（foundry-init 步驟 2.5 產生入口檔時用）",
+    )
     parser.add_argument("--repo-root", default=None, help="自檢的 repo 根目錄，預設為本檔上溯兩層")
     parser.add_argument("file", nargs="?")
     args = parser.parse_args(argv)
-    other_modes = args.selfcheck or args.staged_handbook_sync or args.stamp_only_since
+    other_modes = (args.selfcheck or args.staged_handbook_sync
+                   or args.stamp_only_since or args.big_files_list)
     if not other_modes and (args.type is None or args.file is None):
         parser.error("需要 --type 與 file（或改用 --selfcheck）")
     return args
@@ -1977,6 +2060,10 @@ def main(argv=None):
         result = check_staged_handbook_sync(repo_root_of(args))
         print(render_selfcheck_text([result]))
         sys.exit(0 if result.passed else 1)
+
+    if args.big_files_list:
+        print(render_big_files_list(repo_root_of(args)))
+        sys.exit(0)
 
     if args.stamp_only_since:
         only, commits, offending = handbook_diff_is_stamp_only(
