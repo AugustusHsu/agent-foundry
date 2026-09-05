@@ -40,7 +40,7 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
    - 檔案衝突預查：`<TARGET>` 是否已有 `skills/foundry-*`、`templates/`、`.foundry/` 且內容與 `<SRC>` 不同——有就逐檔列出，這些檔在 M1 一律不覆蓋（§3.1）。
 3. **模組建議**：對照上述現況，逐模組寫「已啟用／可啟用／暫不建議＋理由」。平台側慣例與 Foundry 標準衝突時（例如既有 label 命名撞名）列為風險，附處理選項。
 4. **報告去向**：有工單系統 → 貼對應工單留言；無 → 存 `<TARGET>/.foundry/adopt-report-<YYYY-MM-DD>.md`（目錄不存在先建，這是本步唯一允許的寫入）。報告開頭記：執行日期、執行者、`<SRC>` commit sha、`<TARGET>` 路徑與 HEAD sha。
-5. **平台不在 adapter 枚舉時**（現行為 `github`｜`local-md`｜`paperclip`；如 Jira、Linear）：盤點照跑、報告照出，但模組啟用不可用——報告註明「需先依 foundry-platform §5 新增該平台 adapter（protocol 第 9 節規範修訂流程）」，本次到此為止，不發模組選擇卡。
+5. **平台不在 adapter 枚舉時**（現行為 `github`｜`gitlab`｜`local-md`｜`paperclip`；如 Jira、Linear）：盤點照跑、報告照出，但模組啟用不可用——報告註明「需先依 foundry-platform §5 新增該平台 adapter（protocol 第 9 節規範修訂流程）」，本次到此為止，不發模組選擇卡。
 
 ## 2. 步驟 2：模組選擇（發卡）
 

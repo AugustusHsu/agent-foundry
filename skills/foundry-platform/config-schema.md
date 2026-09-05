@@ -9,7 +9,7 @@
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
 | `foundry` | 整數 | ✅ | schema 版本，目前固定 `1`。讀取者遇到不認得的版本應停下報錯，不得猜著解析。 |
-| `platform` | 枚舉 | ✅ | `github`｜`local-md`｜`paperclip`。決定載入哪份 adapter 對照文檔（`adapters/<值>.md`）。未來新增平台（如 `gitlab`）時在此補枚舉值。 |
+| `platform` | 枚舉 | ✅ | `github`｜`gitlab`｜`local-md`｜`paperclip`。決定載入哪份 adapter 對照文檔（`adapters/<值>.md`）。再新增平台時在此補枚舉值。⚠️ `gitlab` 的 adapter 已全覆蓋八個執行層動詞，但**尚未在真的 GitLab 專案上實跑過**（見 `adapters/gitlab.md` 附錄 B），且 `foundry-init`／`foundry-adopt` 的平台問卡還沒納入它——現在填這個值等於自己走一次首跑驗證。 |
 | `mirror_platform` | 枚舉 | ─ | 對外可見面的鏡像平台，值域同 `platform`（MYL-39）。語意：**執行與喚醒仍在 `platform`，工單另單向鏡像到此平台供外部閱讀**。**整段缺席＝不鏡像**，同 `model_routing` 的「缺席＝未啟用」——是預設狀態，不是設定缺漏。 |
 | `platform_options` | 物件 | ─ | adapter 專屬選項，鍵為平台名。省略時各 adapter 用下述預設值。 |
 | `gates` | 物件 | ✅ | 三個抽象關卡的核可設定（HLD §4）。 |
@@ -26,6 +26,9 @@
 | `platform_options.github.project_title` | 字串 | `Foundry` | GitHub ProjectV2 的標題，adapter 據此查 project 編號。 |
 | `platform_options.github.project_owner` | 字串 | `@me` | project 擁有者（org 專案填 org 名）。 |
 | `platform_options.github.mirror_since` | 字串 | ─ | **只在鏡像模式下有意義**（MYL-54）：鏡像從這個 `issue_ref` 起算（含本身），之前的單不對帳。缺席＝全部納入。存在的理由是啟用鏡像時舊單通常沒有回填，而回填是批次對外動作、要另外核可；沒有這條界線，對帳一啟用就把所有舊單報成漏建，於是整項檢查在第一天就被當成雜訊。**調低它等於宣告那些舊單已回填**——回填做完才改，不是想少看幾條紅燈就改。 |
+| `platform_options.gitlab.url` | 字串 | `https://gitlab.com` | GitLab 實例位址。**自架實例必填**——GitLab 不像 GitHub 只有一個站，adapter 的每一條指令都要顯式帶位址，不能靠 CLI 猜。 |
+| `platform_options.gitlab.project_path` | 字串 | ─ | 完整命名空間路徑（`group/subgroup/project`）。省略時 adapter 無從組出 API base（路徑要整段 URL-encode），`gitlab` 模式下視為缺必填。 |
+| `platform_options.gitlab.tier` | 枚舉 | `free` | `free`｜`premium`。決定四個動詞走哪條路徑（scoped label 互斥、`blocks` 關聯、epic／Roadmap 的可用性）。**填的是探測結果，不是期望值**——探測方式見 `adapters/gitlab.md`「版本分岔」。填錯不會報錯，只會讓 `update_status` 靜靜留下兩個 `status::` label。 |
 | `platform_options.local-md.id_prefix` | 字串 | `FND` | 工單編號前綴（`<前綴>-<序號>`）。設定後不得變更——已發出的 issue_ref 會失效。 |
 | `platform_options.paperclip.company_id` | 字串 | `${PAPERCLIP_COMPANY_ID}` | 公司 UUID。省略時取執行環境的同名環境變數；label 是公司層資源，adapter 據此查建。 |
 | `platform_options.paperclip.project_id` | 字串 | ─ | 專案 UUID。省略時 `create_issue` 需由呼叫端指定，`list_issues` 不做專案過濾。 |
@@ -128,7 +131,7 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 
 合法性（違反時同下方總則，整檔拒用）：
 
-- `primary: wiki` 但**投影面的宿主平台沒有 wiki** → 非法。宿主的判定：`mirror_platform` 有值時取它，否則取 `platform`；目前 `local-md` 與 `paperclip` 皆無 wiki。
+- `primary: wiki` 但**投影面的宿主平台沒有 wiki** → 非法。宿主的判定：`mirror_platform` 有值時取它，否則取 `platform`；目前 `github` 與 `gitlab` 有 wiki，`local-md` 與 `paperclip` 皆無。⚠️ 兩個有 wiki 的宿主**載體不同**（頁面層級、首頁與側欄命名、錨點演算法都不一樣），各自的轉換規則寫在自己的 adapter，別互相照抄。
 - `source` 指到不存在的目錄 → 非法。這條可機械判定，不要留到發佈當下才炸。
 - `enabled: true` 而 `trigger` 缺席，或 `trigger: tag` 而 `tag_pattern` 缺席 → 缺必填，非法。
 

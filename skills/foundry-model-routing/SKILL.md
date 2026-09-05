@@ -19,7 +19,7 @@ description: 模型供應商路由 workflow。三種情況載入本文：① 撞
 
 | 軸 | 管什麼 | 由誰定義 | 值 |
 | --- | --- | --- | --- |
-| **執行層平台** | 工單／狀態／看板放在哪 | `foundry-platform` ＋ `.foundry/config.yml` 的 `platform` | `github`／`local-md`／`paperclip` |
+| **執行層平台** | 工單／狀態／看板放在哪 | `foundry-platform` ＋ `.foundry/config.yml` 的 `platform` | `github`／`gitlab`／`local-md`／`paperclip` |
 | **模型供應商** | 哪一家的模型在跑這個角色 | **本文** ＋ `.foundry/config.yml` 的 `model_routing` | `claude`／`codex`／`gemini`… |
 
 兩者都曾被口語叫成「平台」，但換供應商不會換掉工單系統，換工單系統也不會換掉供應商。
@@ -139,9 +139,9 @@ curl -s -X PATCH -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type:
   `adapterConfig` 的欄位名與允許值**無法事先查證**，第一次寫入要當成試驗：
   失敗就原樣回報錯誤、發卡請使用者查，**不要換寫法連續重試**（同 `H6`）。
 
-### github／local-md
+### github／gitlab／local-md
 
-這兩個平台沒有「agent 註冊表」這種東西——供應商就是**你啟動哪一支 CLI**。所以：
+這三個平台沒有「agent 註冊表」這種東西——供應商就是**你啟動哪一支 CLI**。所以：
 
 - 指派結果寫在 `.foundry/config.yml` 的 `model_routing` 段，那份就是唯一真相。
 - 執行者（人或排程）依該表決定用哪支 CLI 跑哪個角色的工單。

@@ -3,7 +3,10 @@
 
 foundry: 1
 
-platform: github            # github | local-md | paperclip
+platform: github            # github | gitlab | local-md | paperclip
+                            # ⚠️ gitlab 的 adapter 已全覆蓋動詞，但沒有在真的 GitLab 專案上跑過，
+                            #    且 foundry-init／foundry-adopt 的平台問卡尚未納入它——
+                            #    填 gitlab 等於自己走一次首跑驗證（adapters/gitlab.md 附錄 B）。
 
 # 對外可見面的鏡像平台（選填，MYL-39 T-2）。整段註解掉＝不鏡像。
 # 語意：執行與喚醒仍在上面的 platform，工單「單向」鏡像到這裡供外部閱讀；
@@ -16,6 +19,11 @@ platform_options:           # 選填；省略時用各 adapter 預設
   github:
     project_title: Foundry  # GitHub ProjectV2 標題
     project_owner: "@me"    # 個人帳號用 @me，org 專案填 org 名
+  # gitlab:
+  #   url: https://gitlab.example.com      # 自架實例必填；GitLab 不像 GitHub 只有一個站
+  #   project_path: group/subgroup/project # 完整命名空間路徑（adapter 會整段 URL-encode）
+  #   tier: free                           # free | premium — 填探測結果不是期望值，
+  #                                        #   填錯不報錯，只會靜靜留下兩個 status:: label
   # local-md:
   #   id_prefix: FND        # 工單編號前綴，設定後不得變更
   # paperclip:
