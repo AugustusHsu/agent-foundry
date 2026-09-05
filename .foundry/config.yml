@@ -59,6 +59,11 @@ docs:
   #    wiki 的定位是內部主閱讀面，該情境下斷鏈可接受——要改就改這一欄，不要在腳本裡加特例。
   link_policy: absolute      # absolute（改寫成絕對 URL）| plain（拆為純文字）
   mirror_site:
-    enabled: true            # 精裝站（mkdocs）：本專案開
+    # ⚠️ 這一顆 commit 是 **AC2 端到端實測的靶標**，不是本 repo 的常態設定。
+    # 使用者於互動卡 dc818205 選 `e2e`：要看「開關關掉之後、就算 tag 完全相符也不發佈」
+    # 在真的 CI 上跑一次。tag `handbook-v0-off-test` 指向本 commit，
+    # 預期 gate job 輸出 publish=false、deploy job 整個被跳過。
+    # **下一顆 commit 就把它改回 true**——如果你在 main 的頂端看到 false，那是出事了。
+    enabled: false           # 精裝站（mkdocs）：暫時關閉（AC2 靶標）
     trigger: tag             # tag | merge | manual
     tag_pattern: 'handbook-v*'
