@@ -1,6 +1,8 @@
-# `.foundry/config.yml` schema
+# `.foundry/` 設定檔 schema
 
-依 MYL-9 HLD §2.3 定案（repo 歸檔本：`docs/features/cross-platform/HLD.md`，下文所有「HLD §x」均指該檔）。本檔是專案層 Foundry 設定的唯一 schema 權威；範例見 `config.example.yml`。檔案位置固定：專案根目錄 `.foundry/config.yml`，進版控。
+依 MYL-9 HLD §2.3 定案（repo 歸檔本：`docs/features/cross-platform/HLD.md`，下文所有「HLD §x」均指該檔）。本檔是專案層 Foundry 設定的唯一 schema 權威，涵蓋兩份檔案：**`.foundry/config.yml`**（平台、關卡、push、文檔投影）與 **`.foundry/org.yml`**（組織宣告，MYL-76）。兩份都固定放在專案根目錄的 `.foundry/` 下、進版控；`config.yml` 的範例見 `config.example.yml`。
+
+下文到「版本沿革」為止談的都是 `config.yml`；`org.yml` 自成一節（末節），有自己的版本欄位與合法性規則——兩份檔案的版本號**互不連動**。
 
 寫入者：`foundry-init`（S4）首次產生；`foundry-gates`（S3）經使用者確認後改 `gates` 段。**agent 不得未經對應 workflow 或使用者指示直接改本檔**——gates 與 push 的值都是使用者裁定的授權邊界。
 
@@ -186,3 +188,72 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 
 新增的 `ai_platform` 本身是選填、缺席＝未宣告，**單獨看屬相容變更**；它跟著本次一起發，是因為
 正名的目的就是把兩條軸分開，只改名不給第二條軸一個落點，等於把同一件事做一半。
+
+## `.foundry/org.yml`（組織宣告）
+
+（MYL-76 定案，補的是 MYL-61 org-review §7 的缺口 G4：組織層完全不可攜。）
+
+`foundry-init`／`foundry-adopt` 與九個抽象動詞裡沒有任何一段處理「建置角色團隊」——導入一個新專案，
+跑完只會得到 label、看板、view 與關卡設定，**然後沒有任何一個 agent**。組織層原本只存在三個地方：
+protocol 第 9 節的散文、`skills/roles/` 底下的角色 skill、以及在平台上手動設定出來的狀態；
+沒有機器可讀的清單，也沒有任何檢查會發現它漂掉。本節就是那份清單的格式。
+
+**本檔是「應然」不是「實然」。** 它是規則層的宣告——這個專案**該有**哪些角色、誰向誰匯報、
+各自掛什麼、用哪一層模型；它**不是平台狀態的鏡子**。`foundry-lint --selfcheck` 的 `org-sync`
+因此只比對 `org.yml` ↔ protocol 第 9 節組織圖 ↔ 第 8 節分層表，**刻意不比對平台實況**。
+現成的例子：本 repo 的 `org.yml` 宣告了 PM，而 PM 的 agent 要到 MYL-79（T7）才真的被建出來，
+中間隔著幾張單——那段期間宣告一個平台上還不存在的成員是**預期行為，不是 bug**。
+與平台實況的對帳歸 T7；`test_不比對平台實況` 是這條規定的回歸守衛。
+⚠️ **不要「順手補」一個比對平台的檢查**——它在上述整段期間都會誤報，而誤報的檢查會被關掉。
+
+| 欄位 | 型別 | 必填 | 說明 |
+| --- | --- | --- | --- |
+| `foundry_org` | 整數 | ✅ | 本檔的 schema 版本，目前固定 `1`。與 `config.yml` 的 `foundry` **各自獨立**：兩份檔案的形狀不會一起變。讀取者遇到不認得的版本應停下報錯，不得猜著解析。 |
+| `ai_platform` | 枚舉 | ✅ | 這份組織宣告**在哪個軸 A 平台上實現**，值域同 `config.yml` 的同名欄位（`paperclip`｜`claude-code`｜`codex`，MYL-82 正名）。兩份檔案都寫時值必須一致（`org-sync` 比對）。**放在頂層不是每個角色一份**：一支團隊活在同一個 AI 平台上，混合編制沒有任何動詞支援得了——真要有那一天，屬 MYL-78 的範圍，不是在這裡開旋鈕。 |
+| `roles` | 序列 | ✅ | 角色宣告，順序建議照 protocol 第 9 節組織圖由上而下（只是可讀性，不影響判定）。 |
+
+每個 `roles` 項目：
+
+| 欄位 | 型別 | 必填 | 說明 |
+| --- | --- | --- | --- |
+| `id` | 字串 | ✅ | 角色代號，形狀 `[a-z][a-z0-9-]*`，全檔唯一。與 `role:*` label 的後綴、`skills/roles/<id>/` 目錄名、`model_routing.roles` 的鍵用同一套名字——**不要另立一套**。 |
+| `title` | 字串 | ✅ | 顯示名稱，必須**逐字等於** protocol 第 9 節組織圖上的節點名（節點名後面的「（需求）」那類括號說明不算）。組織圖與本檔靠這一欄對接，所以它不能重複。 |
+| `reports_to` | 字串 | ✅ | 匯報對象：另一個角色的 `id`，或 `user`（＝組織圖的樹根「使用者」）。必須與組織圖的父子關係一致。 |
+| `model_tier` | 枚舉 | ✅ | `high`｜`medium`｜`low`，對應 protocol 第 8 節「三層預設」表的高／中／低。`org-sync` 會驗這個角色在該表裡**恰好**落在一層，且就是這一層。 |
+| `skills` | 序列 | ✅ | 這個角色要掛的 skill，寫 repo 相對路徑，至少一項。`org-sync` 會驗每條路徑真的存在（skill 改名或搬走時擋下）。⚠️ CEO 依 `O3` 不掛第 1 層，所以它的清單裡**沒有** `foundry-protocol`——那是規範裡的例外，不是漏寫。 |
+| `permissions` | 序列 | ✅ | 這個角色**應持有**的權限，封閉值域見下。沒有要授權的就寫 `[]`；**列出的＝應持有，未列出的＝不應持有**，所以空序列與缺席是兩件事。 |
+
+`permissions` 的值域（Foundry 級名稱，刻意不用任何平台的欄位名）：
+
+| 值 | 語意 | 在 Paperclip 上落到哪 |
+| --- | --- | --- |
+| `assign_tasks` | 指派工單（＝第 9 節矩陣的「派工」格）。在 Paperclip 上，指派同時是唯一的喚醒原語 | 寫 `permissions.canAssignTasks` |
+| `create_agents` | 建置新的 agent | 寫 `permissions.canCreateAgents` |
+| `create_skills` | 建立／匯入 skill | 寫 `permissions.canCreateSkills` |
+
+⚠️ **寫入與稽核讀的不是同一組欄位**（本 repo 執行層實測）：設定時寫 `permissions.*`，
+但稽核要讀 `access.*` 與 `access.grants`——兩者可能給出相反的答案。所以本欄用 Foundry 級名稱
+宣告「應然」，平台欄位的對應寫在這張表與各平台 adapter，**不把平台欄位名寫進 `org.yml`**。
+真正把宣告套到平台上（含這組對應要怎麼驗）是抽象動詞 `provision_team` 的事，屬 MYL-77（T5）；
+在那之前本檔只被 `org-sync` 讀。
+
+### 誰能改 `org.yml`
+
+**agent 不得自行改本檔。** 本檔頂部的規則（「agent 不得未經對應 workflow 或使用者指示直接改
+`.foundry/config.yml`」）**延伸適用**於 `org.yml`，理由比 `config.yml` 更直接：本檔宣告的是編制、
+匯報線與權限，讓 agent 改得動它，等於讓它自我授權——而且改完不會有任何一步發現這件事，
+`org-sync` 只驗三處一致，宣告與規範一起改就照樣全綠。
+
+- **寫入者**：`foundry-init`（導入新專案時產生）、或經使用者裁定的執行工單。
+- **改動路徑**：與 protocol 第 9 節的結構調整同一條——組織結構是公司層設定變更，
+  依第 4 節 HITL 閘門先發卡提案、經使用者裁定，再由執行工單同步本檔與規範。
+- **順序**：規範（protocol 第 9／8 節）是權威來源，本檔是它的機器可讀投影。
+  兩者不一致時依 `O1` 判斷缺口在哪一邊，**不是一律改本檔遷就**。
+
+### 合法性
+
+- 缺必填欄位、枚舉值非法、`id` 重複、`title` 重複 → 整檔非法，停止依賴本檔的操作並回報。
+- `reports_to` 指到不存在的 `id`（且不是 `user`）→ 非法。
+- `skills` 指到不存在的路徑 → 非法。這條可機械判定，不要留到 `provision_team` 當下才炸。
+- `roles` 的集合與 protocol 第 9 節組織圖的節點集合不相等 → 非法。
+- 未知欄位：忽略並警告（向前相容），但不得依未知欄位改變行為。

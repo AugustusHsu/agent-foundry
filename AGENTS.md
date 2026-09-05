@@ -25,7 +25,7 @@
    哪些 API 會 403、哪些提案已經被否決過、哪些缺口是使用者知情下保留的。
    不讀這份，很容易花一整輪去重踩一個已經有結論的坑。
 3. **自己的角色 skill**（`skills/roles/<角色>/SKILL.md`，約 60–120 行）——只寫該角色獨有的判準。
-4. `.foundry/config.yml` — 本專案的關卡與 push 授權設定（**agent 不得自行改動**）。
+4. `.foundry/config.yml` ＋ `.foundry/org.yml` — 本專案的關卡／push 授權設定與組織宣告（**agent 都不得自行改動**）。
 
 ## 3. 地圖：我想要…→前往
 
@@ -52,6 +52,7 @@
 agent-foundry/
 ├─ CLAUDE.md / AGENTS.md    # 本檔（雙入口，正文相同、只差工具名對應段）
 ├─ .foundry/config.yml      # 本專案的平台、關卡、push 授權設定
+├─ .foundry/org.yml         # 本專案的組織宣告（角色、匯報線、掛的 skill、權限、模型層）
 ├─ skills/
 │  ├─ foundry-protocol/     # 第 1 層：全隊硬規則（必掛；唯一豁免＝CEO，見 O3）
 │  ├─ foundry-platform/     # 平台抽象層：9 個抽象動詞＋各平台 adapter（4 份）
@@ -98,7 +99,7 @@ agent-foundry/
 | `skills/foundry-platform/adapters/github.md` | 兩種用途各佔一半：`devtools_platform: github` 的動詞對照，與「鏡像模式」規格。要哪一個讀哪一節 |
 | `skills/foundry-platform/adapters/gitlab.md` | 同樣兩種用途：`devtools_platform: gitlab` 的動詞對照，與 `publish_docs` 的兩個投影面（wiki／Pages）。**先讀開頭的「版本分岔」**——Free 與 Premium 有四個動詞走法不同，判錯了不會報錯 |
 | `skills/foundry-platform/SKILL.md` | 9 個動詞的介面定義。只讀你要用的那個動詞那一節；§5 的「全覆蓋」裁定只在新增平台或新增文檔目標面時才需要 |
-| `skills/foundry-platform/config-schema.md` | `.foundry/config.yml` 的欄位權威。依段落取用——`gates`／`push`／`model_routing`／`docs` 四段互相獨立，別整份載 |
+| `skills/foundry-platform/config-schema.md` | `.foundry/config.yml` 與 `.foundry/org.yml` 的欄位權威。依段落取用——`gates`／`push`／`model_routing`／`docs`／`org.yml` 各段互相獨立，別整份載 |
 | `skills/foundry-platform/adapters/paperclip.md` | 未達門檻但一樣別整份載：只讀當前平台那一份，不要四份都載 |
 <!-- FOUNDRY:BIG-FILES:END -->
 
@@ -127,7 +128,7 @@ agent-foundry/
 # 文件是否符合模板必備章節（type: brd|prd|hld|lld|review-report|test-plan）
 python3 tools/foundry-lint/foundry_lint.py --type prd docs/features/<模組>/PRD.md
 
-# repo 規範自檢（雙入口同步、手冊 nav 一致性、錨點、規則 ID 引用、規則標記、大檔清單、相對連結、版本號形狀、手冊戳記、鏡像對帳）
+# repo 規範自檢（雙入口同步、手冊 nav 一致性、錨點、規則 ID 引用、規則標記、大檔清單、相對連結、版本號形狀、表格連續性、組織宣告、手冊戳記、鏡像對帳）
 python3 tools/foundry-lint/foundry_lint.py --selfcheck
 
 # 測試

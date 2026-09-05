@@ -781,6 +781,413 @@ def check_version_shape(root: Path) -> SelfcheckResult:
 # 「看過了」與「沒看過」因此不再靠自我申報。
 
 
+#: `table-shape` 的掃描範圍（MYL-76 AC9）。`docs/features/` 也掃——那裡的表格
+#: 一樣會被切斷，而它是交付物；`big-files` 排除它是因為那項管的是 context 預算，理由不同。
+TABLE_SCAN_DIRS = ("docs", "skills")
+#: markdown 表格的分隔列（`| --- | --- |`）。前後空白由呼叫端 `strip()` 掉。
+TABLE_SEP_RE = re.compile(r"^\|(?:\s*:?-{2,}:?\s*\|)+$")
+
+
+def is_table_row(line: str) -> bool:
+    """這一行渲染時會被當成表格列（縮排在清單裡的表格也算）。"""
+    return line.lstrip().startswith("|")
+
+
+def table_breaks(text: str) -> list:
+    """回傳「被空行截斷的表格續列」行號（1-based）。
+
+    markdown 的表格在第一個空行處結束。所以表頭＋分隔列之後夾了一行空白，
+    再接 `|` 開頭的列時，那些列**不會**被渲染成表格的一部分——它們變成普通段落，
+    連同分隔符一起原樣印出來。MYL-73 就踩到：`known-drift` 的 `L23` 被一行既有
+    空行切在表外，而當時 10 項自檢全綠、`make check` 也過，沒有任何一項在驗這件事。
+
+    只報「續列」不報「新表」：空行之後那一段如果自己帶分隔列，就是兩張相鄰的表，
+    合法。判準放在這裡而不是靠人眼，理由與本檢查存在的理由相同。
+    """
+    lines = text.splitlines()
+    breaks = []
+    in_fence = False
+    i = 0
+    while i < len(lines):
+        if FENCE_RE.match(lines[i]):
+            in_fence = not in_fence
+            i += 1
+            continue
+        # 表頭單獨一行不算表格，要下一行是分隔列才算——少了這道，
+        # 任何以 `|` 開頭的段落都會被誤判成表。
+        if (in_fence or not is_table_row(lines[i])
+                or i + 1 >= len(lines) or not TABLE_SEP_RE.match(lines[i + 1].strip())):
+            i += 1
+            continue
+        end = i + 2
+        while end < len(lines) and is_table_row(lines[end]):
+            end += 1
+        nxt = end
+        while nxt < len(lines) and not lines[nxt].strip():
+            nxt += 1
+        starts_new_table = (nxt + 1 < len(lines)
+                            and TABLE_SEP_RE.match(lines[nxt + 1].strip()))
+        if nxt > end and nxt < len(lines) and is_table_row(lines[nxt]) and not starts_new_table:
+            breaks.append(nxt + 1)
+            i = nxt
+            continue
+        i = end
+    return breaks
+
+
+def check_table_shape(root: Path) -> SelfcheckResult:
+    """markdown 表格中間不得夾空行——夾了會被切斷，而機械斷言看不見（MYL-76 AC9）。
+
+    這一項與 `L13`／`L21`／`X4` 同族：**斷言全綠但渲染是壞的**。差別在於前三者
+    是外部平台的行為，這一條是 markdown 自己的，所以擋得住，也就該擋。
+    """
+    res = SelfcheckResult("table-shape", "markdown 表格沒有被空行切斷")
+    scanned = 0
+    for top in TABLE_SCAN_DIRS:
+        base = root / top
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*.md")):
+            scanned += 1
+            rel = path.relative_to(root).as_posix()
+            for lineno in table_breaks(read_text(path)):
+                res.failures.append(
+                    f"{rel}:{lineno} 是上面那張表的續列，但中間隔了空行"
+                    "——渲染時表格在空行處就結束了，這一行起會變成普通段落，"
+                    "連分隔符一起原樣印出來。刪掉那個空行；真要分成兩張表，"
+                    "就給下面這段補上自己的表頭與分隔列"
+                )
+    res.summary += f"（掃 {scanned} 份）"
+    return res
+
+
+# ── `org-sync`：組織宣告 ↔ protocol 第 9／8 節（MYL-76）────────────────────
+ORG_REL = ".foundry/org.yml"
+#: 本檢查認得的 `foundry_org` 版本。改 schema 形狀時一起改，讓舊檔停下報錯而不是被誤讀。
+ORG_SCHEMA_VERSION = "1"
+#: `model_tier` 的值 → protocol 第 8 節「三層預設」表第一欄的字面。
+ORG_MODEL_TIERS = {"high": "高", "medium": "中", "low": "低"}
+#: `permissions[]` 的封閉值域（Foundry 級名稱；落到各平台哪個欄位見 config-schema）。
+ORG_PERMISSIONS = ("assign_tasks", "create_agents", "create_skills")
+#: 第 9 節組織圖的樹根，以及 `reports_to` 裡代表它的值。
+ORG_TREE_ROOT = "使用者"
+ORG_ROOT_REPORTS_TO = "user"
+ORG_TREE_HEADING = "現行結構"
+ORG_TIER_HEADING = "三層預設"
+#: 第 8 節分層表用簡稱寫某個角色時的補充比對名（第 9 節寫 `QA Engineer`、第 8 節寫 `QA`）。
+#: 這是**放寬**不是改寫：全名與簡稱都算命中，所以 protocol 日後統一成全名也不會誤報。
+#: 要加第二則之前先想清楚——別名一多，本檢查就從「三處一致」退化成「大致像」。
+ORG_TIER_ALIASES = {"qa-engineer": ("QA",)}
+#: 組織圖每一層的縮排寬度（`└── ` 四格）。
+ORG_TREE_INDENT = 4
+ORG_TREE_LINE_RE = re.compile(r"^(?P<prefix>[ │├└─]*)(?P<label>\S.*?)\s*$")
+ORG_ID_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+
+
+def parse_org(text: str) -> dict:
+    """把 `.foundry/org.yml` 讀成 dict。**刻意只支援本檔用得到的子集**。
+
+    支援：頂層 `鍵: 純量`、`roles:` 底下的映射序列、角色欄位的純量與純量序列、
+    `#` 註解、值兩側的引號。不支援的寫法**拋 `LintError` 而不是忽略**——這一點
+    與 `parse_config` 相反，理由是用途不同：那個 parser 只從一份大設定檔裡挑幾個
+    已知欄位出來，本檔則整份都是本檢查的輸入，靜靜漏掉一行等於漏檢一個角色。
+
+    不用 PyYAML 的理由同 `parse_config`：foundry-lint 只用標準函式庫。
+    """
+    data: dict = {}
+    roles: list = []
+    role = None
+    seq_key = None
+    seq_indent = 0
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        body = line.strip()
+        where = f"{ORG_REL}:{lineno}"
+        if body.startswith("- "):
+            item = body[2:].strip()
+            if seq_key is not None and indent > seq_indent:
+                role[seq_key].append(item.strip("'\""))
+                continue
+            if ":" not in item:
+                raise LintError(f"{where} 不支援的寫法 `{body}`：序列項不在任何欄位底下")
+            role = {}
+            roles.append(role)
+            seq_key = None
+            key, _, value = item.partition(":")
+            role[key.strip()] = value.strip().strip("'\"")
+            continue
+        if ":" not in body:
+            raise LintError(f"{where} 不支援的寫法 `{body}`：本 parser 只吃 `鍵: 值`")
+        key, _, value = body.partition(":")
+        key, value = key.strip(), value.strip().strip("'\"")
+        seq_key = None
+        if indent == 0:
+            role = None
+            if key == "roles":
+                data["roles"] = roles
+            elif value:
+                data[key] = value
+            else:
+                raise LintError(f"{where} 頂層的 `{key}` 沒有值，而本 parser 只認得 `roles` 一個巢狀鍵")
+            continue
+        if role is None:
+            raise LintError(f"{where} `{key}` 不在任何 role 底下")
+        if value and value != "[]":
+            role[key] = value
+        else:
+            role[key] = []
+            seq_key, seq_indent = key, indent
+    return data
+
+
+def section_lines(text: str, heading: str) -> list:
+    """取某個標題底下、到下一個同級或更上層標題為止的行（含空行，供表格／圍欄解析）。"""
+    lines = text.splitlines()
+    start = level = None
+    for idx, line in enumerate(lines):
+        m = HEADING_RE.match(line)
+        if not m:
+            continue
+        if start is None:
+            if heading in m.group(2):
+                start, level = idx + 1, len(m.group(1))
+            continue
+        if len(m.group(1)) <= level:
+            return lines[start:idx]
+    return lines[start:] if start is not None else []
+
+
+def parse_org_tree(protocol_text: str) -> tuple:
+    """protocol 第 9 節組織圖 → `(樹根, {節點: 上一層節點})`。樹根不在字典裡。"""
+    block: list = []
+    in_fence = False
+    for line in section_lines(protocol_text, ORG_TREE_HEADING):
+        if FENCE_RE.match(line):
+            if in_fence:
+                break
+            in_fence = True
+            continue
+        if in_fence:
+            block.append(line)
+    parents: dict = {}
+    stack: dict = {}
+    root = ""
+    for raw in block:
+        if not raw.strip():
+            continue
+        m = ORG_TREE_LINE_RE.match(raw)
+        if not m:
+            continue
+        depth = len(m.group("prefix")) // ORG_TREE_INDENT
+        # 節點名後面的「（需求）」是說明，不是名字的一部分。
+        label = m.group("label").split("（")[0].strip()
+        stack[depth] = label
+        if depth == 0:
+            root = root or label
+        else:
+            parents[label] = stack.get(depth - 1, "")
+    return root, parents
+
+
+def parse_tier_table(protocol_text: str) -> dict:
+    """protocol 第 8 節「三層預設」表 → `{層級字面: 預設適用欄的文字}`。"""
+    tiers: dict = {}
+    for line in section_lines(protocol_text, ORG_TIER_HEADING):
+        stripped = line.strip()
+        if not stripped.startswith("|") or TABLE_SEP_RE.match(stripped):
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if len(cells) >= 3:
+            tiers.setdefault(cells[0], cells[-1])
+    return tiers
+
+
+def check_org_sync(root: Path) -> SelfcheckResult:
+    """`.foundry/org.yml` 要與 protocol 第 9 節組織圖、第 8 節分層表三處一致。
+
+    **本檢查刻意不比對平台實況**（MYL-76 AC7）。`org.yml` 是規則層的**應然**宣告，
+    不是平台狀態的鏡子：AC2 要照定案組織填出 9 名，而 PM 的 agent 要到 MYL-79（T7）
+    才真的被建出來，中間隔著幾張單——那段期間本檔宣告一個平台上還不存在的成員，
+    是預期行為。**下一個看到這裡的人請不要「補上」一個比對平台的檢查**，
+    那會在整段期間誤報；與平台實況的對帳歸 T7。
+
+    `ai_platform` 的枚舉合法性歸 config-schema，本檢查只驗兩份設定檔講的是同一件事——
+    在程式裡另養一份枚舉，就是再造一個會漂的來源。
+    """
+    res = SelfcheckResult("org-sync", "組織宣告與 protocol 第 9／8 節一致")
+    path = root / ORG_REL
+    if not path.exists():
+        res.failures.append(
+            f"{ORG_REL} 不存在——組織層宣告是可攜性的一部分，缺了它，"
+            "導入新專案跑完只會得到看板與關卡設定，然後沒有任何一個 agent"
+        )
+        return res
+    try:
+        org = parse_org(read_text(path))
+    except LintError as exc:
+        res.failures.append(str(exc))
+        return res
+
+    version = org.get("foundry_org")
+    if version != ORG_SCHEMA_VERSION:
+        res.failures.append(
+            f"{ORG_REL} 的 `foundry_org` 是 {version!r}，本檢查只認得 {ORG_SCHEMA_VERSION!r}"
+            "——版本不合時停下報錯，不猜著解析（同 config.yml 的 `foundry`）"
+        )
+        return res
+
+    roles = org.get("roles") or []
+    if not roles:
+        res.failures.append(f"{ORG_REL} 沒有任何 `roles` 項目")
+        return res
+
+    protocol = root / PROTOCOL_REL
+    if not protocol.exists():
+        res.failures.append(f"{PROTOCOL_REL} 不存在——比對基準缺席，本項無從判定")
+        return res
+    protocol_text = read_text(protocol)
+
+    # ── 逐角色的形狀 ────────────────────────────────────────────────────
+    seen_ids: set = set()
+    by_id: dict = {}
+    for idx, role in enumerate(roles, 1):
+        rid = role.get("id", "")
+        label = rid or f"第 {idx} 項"
+        if not isinstance(rid, str) or not ORG_ID_RE.match(rid or ""):
+            res.failures.append(f"{ORG_REL} {label} 的 `id` 缺席或形狀不合（要 `[a-z][a-z0-9-]*`）")
+            continue
+        if rid in seen_ids:
+            res.failures.append(f"{ORG_REL} 的角色 id `{rid}` 重複")
+            continue
+        seen_ids.add(rid)
+        by_id[rid] = role
+        for field_name in ("title", "reports_to", "model_tier"):
+            if not role.get(field_name):
+                res.failures.append(f"{ORG_REL} `{rid}` 缺必填欄位 `{field_name}`")
+        tier = role.get("model_tier")
+        if tier and tier not in ORG_MODEL_TIERS:
+            res.failures.append(
+                f"{ORG_REL} `{rid}` 的 `model_tier` 是 `{tier}`，"
+                f"值域是 {'｜'.join(ORG_MODEL_TIERS)}"
+            )
+        skills = role.get("skills")
+        if not isinstance(skills, list) or not skills:
+            res.failures.append(f"{ORG_REL} `{rid}` 的 `skills` 缺席或是空的——每個角色至少掛一份")
+        else:
+            for rel in skills:
+                if not (root / rel).exists():
+                    res.failures.append(
+                        f"{ORG_REL} `{rid}` 掛的 `{rel}` 不存在——skill 改名或搬走了，宣告沒跟上"
+                    )
+        perms = role.get("permissions")
+        if not isinstance(perms, list):
+            res.failures.append(f"{ORG_REL} `{rid}` 缺 `permissions`（沒有要授權的權限就寫 `[]`）")
+        else:
+            for perm in perms:
+                if perm not in ORG_PERMISSIONS:
+                    res.failures.append(
+                        f"{ORG_REL} `{rid}` 的 `permissions` 有 `{perm}`，"
+                        f"值域是 {'｜'.join(ORG_PERMISSIONS)}"
+                    )
+
+    # ── 對第 9 節組織圖 ─────────────────────────────────────────────────
+    tree_root, parents = parse_org_tree(protocol_text)
+    if tree_root != ORG_TREE_ROOT or not parents:
+        res.failures.append(
+            f"讀不出 {PROTOCOL_REL} 第 9 節「{ORG_TREE_HEADING}」的組織圖"
+            f"（樹根讀成 {tree_root!r}）——圖的形狀變了就要一起改本檢查，不要讓它靜靜失效"
+        )
+        return res
+
+    titles = {role.get("title"): rid for rid, role in by_id.items() if role.get("title")}
+    if len(titles) != len(by_id):
+        res.failures.append(f"{ORG_REL} 有重複的 `title`——組織圖靠它對接，不能重複")
+    for title in sorted(set(titles) - set(parents)):
+        res.failures.append(
+            f"{ORG_REL} 宣告了 `{title}`，但 protocol 第 9 節組織圖沒有這個節點"
+            "——先改規範再改宣告（結構調整依第 9 節走使用者裁定）"
+        )
+    for node in sorted(set(parents) - set(titles)):
+        res.failures.append(
+            f"protocol 第 9 節組織圖有 `{node}`，但 {ORG_REL} 沒有宣告它"
+            "——組織圖是權威來源，宣告漏了就等於 T5 建不出這個角色"
+        )
+    for rid, role in sorted(by_id.items()):
+        title = role.get("title")
+        if title not in parents:
+            continue
+        declared = role.get("reports_to")
+        expected_parent = parents[title]
+        if declared == ORG_ROOT_REPORTS_TO:
+            actual_parent = ORG_TREE_ROOT
+        elif declared in by_id:
+            actual_parent = by_id[declared].get("title")
+        else:
+            res.failures.append(
+                f"{ORG_REL} `{rid}` 的 `reports_to` 是 `{declared}`，"
+                f"既不是本檔的角色 id 也不是 `{ORG_ROOT_REPORTS_TO}`"
+            )
+            continue
+        if actual_parent != expected_parent:
+            res.failures.append(
+                f"{ORG_REL} `{rid}` 宣告匯報給 `{actual_parent}`，"
+                f"但 protocol 第 9 節組織圖把 `{title}` 掛在 `{expected_parent}` 底下"
+            )
+
+    # ── 對第 8 節分層表 ─────────────────────────────────────────────────
+    tiers = parse_tier_table(protocol_text)
+    missing_rows = [zh for zh in ORG_MODEL_TIERS.values() if zh not in tiers]
+    if missing_rows:
+        res.failures.append(
+            f"protocol 第 8 節「{ORG_TIER_HEADING}」表讀不到 {'、'.join(missing_rows)} 這幾層"
+            "——表的形狀變了就要一起改本檢查"
+        )
+        return res
+    for rid, role in sorted(by_id.items()):
+        tier = role.get("model_tier")
+        if tier not in ORG_MODEL_TIERS:
+            continue
+        names = (role.get("title", ""),) + ORG_TIER_ALIASES.get(rid, ())
+        hits = [zh for zh, cell in tiers.items()
+                if zh in ORG_MODEL_TIERS.values() and any(n and n in cell for n in names)]
+        if not hits:
+            res.failures.append(
+                f"protocol 第 8 節分層表三層都沒提到 `{role.get('title')}`，"
+                f"但 {ORG_REL} 宣告它是 `{tier}` 層——分層表漏了一個角色，或名字寫得對不上"
+            )
+        elif len(hits) > 1:
+            res.failures.append(
+                f"protocol 第 8 節分層表有 {len(hits)} 層（{'、'.join(hits)}）都提到 "
+                f"`{role.get('title')}`——一個角色只能有一個預設層"
+            )
+        elif hits[0] != ORG_MODEL_TIERS[tier]:
+            res.failures.append(
+                f"{ORG_REL} `{rid}` 宣告 `{tier}`（＝{ORG_MODEL_TIERS[tier]}層），"
+                f"但 protocol 第 8 節把它列在{hits[0]}層"
+            )
+
+    # ── 對 config.yml 的 `ai_platform` ──────────────────────────────────
+    declared_ai = org.get("ai_platform")
+    config_ai = read_config(root).get("ai_platform")
+    if not declared_ai:
+        res.failures.append(
+            f"{ORG_REL} 缺 `ai_platform`——這份組織宣告在哪個軸 A 平台上實現要顯式寫出來"
+        )
+    elif config_ai and config_ai != declared_ai:
+        res.failures.append(
+            f"{ORG_REL} 的 `ai_platform` 是 `{declared_ai}`，"
+            f"但 {CONFIG_REL} 寫 `{config_ai}`——同一件事寫了兩個值"
+        )
+
+    res.summary += f"（{len(by_id)} 名）"
+    return res
+
+
 # git 在 hook 裡會匯出這幾個「指向哪個 repo」的變數，而它們的優先序高於 `-C`。
 # 從**一般 checkout** commit 時它們是相對路徑（`GIT_INDEX_FILE=.git/index`、
 # 沒有 `GIT_DIR`），`-C` 照常生效；從 **worktree** commit 時兩者都是絕對路徑，
@@ -850,6 +1257,15 @@ def check_handbook_stamp(root: Path) -> SelfcheckResult:
 
     戳記必須落在**標題後第一個非空行**：四章裡有三章的標題下方本來就是引言
     blockquote，位置不定死的話戳記會跟引言黏成同一塊，也無從機械定位。
+
+    ⚠️ **覆蓋範圍是「有動到手冊任一檔」，不是「動到對應章」——這是已知且刻意的**
+    （MYL-76 AC10 判定，記在 `docs/standards/known-drift.md` `GAP-6`）。
+    `unsynced_protocol_commits()` 只看 `diff-tree ... -- docs/handbook` 有沒有輸出，
+    所以「改了 protocol 第 3 節、手冊只動 `06` 章、`03` 章戳記照樣停在舊 sha」會全綠
+    （MYL-73 的 `0a0b461` 就是這個形狀）。**不要補一張 protocol 節 → 手冊章的對應表**：
+    兩者不是一對一，硬做會變成第二份需要人工維護的映射，而那正是本 repo 反覆記錄的
+    漂移來源——這道閘門要擋的是「完全沒看手冊」，判斷「哪一章要改」本來就在層 2 的
+    agent 身上（見上方三層設計）。
     """
     res = SelfcheckResult("handbook-stamp", "手冊四章戳記不落後於 protocol")
     has_git, _ = git_run(root, "rev-parse", "--verify", "HEAD")
@@ -1358,7 +1774,8 @@ def check_mirror_recon(root: Path) -> SelfcheckResult:
 
 SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
               check_rule_marks, check_big_files, check_internal_links,
-              check_version_shape, check_handbook_stamp, check_mirror_recon)
+              check_version_shape, check_table_shape, check_org_sync,
+              check_handbook_stamp, check_mirror_recon)
 
 
 def run_selfcheck(root: Path) -> list:
