@@ -187,6 +187,22 @@ STAMP_RE = re.compile(
 )
 
 
+#: MYL-40 的「違反：⟨後果⟩ ＋ 標記」行，MYL-47 補上維護觸發點。
+#: 標記只有兩個值，但**合法結尾有三種**——`§7 手冊版本 tag` 一節含 `V1`／`V2`／`V3`
+#: 三條、機械後盾程度不同，單一違反段的誠實寫法就是併記。要它二選一得先把那節拆成
+#: 三段違反行，那是改節結構、不是改標記。放行的是**字面完全相同**的三種，不是自由
+#: 組合：一旦開放組合，標記就從「可判定的值」退化成散文，本檢查也就白寫了。
+RULE_MARK_PREFIX = "**違反：**"
+RULE_MARK_VALUES = ("機械", "自律")
+RULE_MARK_ENDINGS = ("`【自律】`", "`【機械】`", "`【自律】`＋`【機械】`")
+#: 標記本身的 token（含全形括號），用來抓「第三種值」——寫成 `【半機械】` 之類的東西。
+RULE_MARK_TOKEN_RE = re.compile(r"【([^】]*)】")
+#: 行尾**整串**標記（含中間的連接號），用來跟上面三種合法字面做全等比對。
+#: 不能只用 `endswith`：`【機械】＋【自律】`（順序顛倒）的尾巴正好是合法的
+#: `【自律】`，會被當成單一自律標記放行——而它讀起來剛好少掉機械那一半。
+RULE_MARK_TAIL_RE = re.compile(r"(?:`【[^】]*】`[＋+、，,／/]?)+\s*$")
+
+
 @dataclass
 class SelfcheckResult:
     """單項自檢結果。`failures` 每一則都要能讓讀者直接知道去改哪裡。
@@ -510,6 +526,80 @@ def check_rule_ids(root: Path) -> SelfcheckResult:
                     "——ID 打錯，或新條款忘了登記"
                 )
     res.summary += f"（已登記 {len(declared)} 個 ID）"
+    return res
+
+
+def check_rule_marks(root: Path) -> SelfcheckResult:
+    """protocol 每行「違反：」都要以合法的 `【機械】`／`【自律】` 標記收尾。
+
+    MYL-40 為硬規則補了標記，但**標記本身沒有維護觸發點**：光是 MYL-40 審查
+    期間 repo 就多了 `big-files`（MYL-42）與 `internal-links`（MYL-41）兩項
+    機械檢查，而標記詞彙自己也漂過一次——`【自律】＋【機械】` 這個合併形是
+    MYL-55（`1f1a2d7`）之後才出現的，比本檢查的原始規格還早。標記一旦過期，
+    就從「據實記錄」變成「誤導」，正好是 MYL-40 想解決的問題的反面。
+
+    只擋三個方向，都是機械判得準的：
+      1. 有「違反：」行卻沒有標記收尾——增訂時漏標；
+      2. 標記寫成合法三種以外的字面——例如 `【機械】＋【自律】`（順序顛倒）；
+      3. 全檔出現第三種值——例如 `【半機械】`。
+
+    **不擋**「哪些小節該有違反行」。哪一條規則值得配一段後果是編輯判斷（MYL-40
+    盤了 20 條、其餘小節刻意留白），讓機械來管會逼出一堆為了過檢查而寫的廢話段。
+    圖例節的措辭因此也不宣稱全覆蓋——見 protocol「怎麼讀規則末尾的標記」。
+
+    標記只認**行尾**，不認「這行有沒有出現過這兩個詞」：`§7` 有兩段違反文在正文裡
+    引用另一個標記（「從 `【自律】` 轉為機械攔截」），那是敘述不是標記，用 contains
+    去判會把兩段都誤殺。
+    """
+    res = SelfcheckResult("rule-marks", "protocol 違反行的標記合法")
+    protocol = root / PROTOCOL_REL
+    if not protocol.exists():
+        res.failures.append(f"{PROTOCOL_REL} 不存在——標記無從核對")
+        return res
+
+    text = read_text(protocol)
+    section = ""
+    marked = 0
+    for lineno, line in enumerate(text.splitlines(), 1):
+        heading = HEADING_RE.match(line)
+        if heading:
+            section = heading.group(2)
+        if not line.startswith(RULE_MARK_PREFIX):
+            continue
+        marked += 1
+        tail = RULE_MARK_TAIL_RE.search(line.rstrip())
+        where = f"{PROTOCOL_REL}:{lineno}（{section}）"
+        legal = "、".join(RULE_MARK_ENDINGS)
+        if tail is None:
+            res.failures.append(
+                f"{where}的「違反：」行沒有以標記收尾"
+                "——每段後果都要講清楚這條**現在有沒有工具會擋**，"
+                f"合法結尾只有：{legal}"
+            )
+        elif tail.group(0).strip() not in RULE_MARK_ENDINGS:
+            res.failures.append(
+                f"{where}的「違反：」行以「{tail.group(0).strip()}」收尾，不是合法字面"
+                f"——合法結尾只有：{legal}（順序、連接號都要一模一樣）"
+            )
+
+    for value in sorted(set(RULE_MARK_TOKEN_RE.findall(text))):
+        if value not in RULE_MARK_VALUES:
+            res.failures.append(
+                f"{PROTOCOL_REL} 出現第三種標記值 `【{value}】`"
+                f"——標記只有 {'／'.join(f'`【{v}】`' for v in RULE_MARK_VALUES)} 兩個值，"
+                "「有沒有工具會擋」沒有中間態；要記程度差異寫在後果散文裡"
+            )
+
+    # 圖例是讀者查標記含義的地方，它跟這裡的值域必須是同一份。
+    # 對照 `big-files`：那邊也是拿程式常數去核散文裡的門檻數字。
+    legend = text.split("## 1.")[0]
+    for ending in RULE_MARK_ENDINGS:
+        if ending not in legend:
+            res.failures.append(
+                f"protocol 開頭的標記圖例沒有列出合法結尾 {ending}"
+                "——程式放行的形式圖例查不到，讀者會以為那是漂移"
+            )
+    res.summary += f"（{marked} 行違反段）"
     return res
 
 
@@ -1170,8 +1260,8 @@ def check_mirror_recon(root: Path) -> SelfcheckResult:
 
 
 SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
-              check_big_files, check_internal_links, check_handbook_stamp,
-              check_mirror_recon)
+              check_rule_marks, check_big_files, check_internal_links,
+              check_handbook_stamp, check_mirror_recon)
 
 
 def run_selfcheck(root: Path) -> list:
@@ -1227,8 +1317,8 @@ def parse_args(argv):
     parser.add_argument(
         "--selfcheck",
         action="store_true",
-        help="跑 repo 規範自檢（雙入口同步、手冊 nav、錨點、規則 ID、大檔清單、"
-             "相對連結、手冊戳記、鏡像對帳），不需 --type／file",
+        help="跑 repo 規範自檢（雙入口同步、手冊 nav、錨點、規則 ID、規則標記、"
+             "大檔清單、相對連結、手冊戳記、鏡像對帳），不需 --type／file",
     )
     parser.add_argument(
         "--staged-handbook-sync",
