@@ -1627,5 +1627,135 @@ class OrgSyncTest(RepoCopyTestCase):
         self.assertTrue(self._run().passed)
 
 
+class TargetProjectSkipTest(RepoCopyTestCase):
+    """MYL-87：`foundry-init` 產出的目標專案不該一跑 `make check` 就掛。
+
+    目標專案＝拿真實 repo 的副本，刪掉 `skills/foundry-init/`（複製清單明寫不複製）
+    與 `docs/handbook/`（init 不產手冊）。**每一項跳過都配一個「該紅的情境仍然紅」
+    的反例**——跳過條件寫錯的失效方向是靜默放行，那正是這幾個測試要擋的。
+    """
+
+    HANDBOOK_CHECKS = ("nav-sync", "anchors", "handbook-stamp")
+
+    def _named(self, name):
+        return next(r for r in foundry_lint.run_selfcheck(self.root) if r.name == name)
+
+    def _make_target_project(self):
+        """把 repo 副本改造成「剛 init 完的目標專案」。"""
+        shutil.rmtree(self.root / foundry_lint.RULE_REPO_MARKER_REL)
+        shutil.rmtree(self.root / "docs" / "handbook")
+        self._fill_big_files()
+
+    def _fill_big_files(self):
+        """照 foundry-init 步驟 2.5 用 `--big-files-list` 的輸出填兩份入口檔的大檔表。"""
+        rows = foundry_lint.render_big_files_list(self.root)
+        block = (f"{foundry_lint.BIG_BEGIN}\n"
+                 "每個 12KB 以上的 .md 都必須列在下表。\n\n"
+                 "| 檔案 | 通常只需要哪一部分 |\n| --- | --- |\n"
+                 f"{rows}\n")
+        for name in ("CLAUDE.md", "AGENTS.md"):
+            text = (self.root / name).read_text(encoding="utf-8")
+            head, _, rest = text.partition(foundry_lint.BIG_BEGIN)
+            _, _, tail = rest.partition(foundry_lint.BIG_END)
+            self.write(name, head + block + foundry_lint.BIG_END + tail)
+
+    # ── 判準②：跳過看得出來是跳過，且不擋 commit ──────────────────────
+    def test_目標專案四項印跳過而不是失敗(self):
+        self._make_target_project()
+        for name in self.HANDBOOK_CHECKS + ("init-copy-list",):
+            with self.subTest(check=name):
+                res = self._named(name)
+                self.assertTrue(res.passed, res.failures)
+                self.assertTrue(res.skipped, f"{name} 沒有跳過理由＝被印成 ✅")
+
+    def test_目標專案的跳過會印出_跳過_字樣(self):
+        """⏭ 與理由都要出現在輸出裡；印成 ✅ 會讓人以為查過了。"""
+        self._make_target_project()
+        text = foundry_lint.render_selfcheck_text(foundry_lint.run_selfcheck(self.root))
+        self.assertIn("⏭ [nav-sync]", text)
+        self.assertIn("跳過（未實際檢查）", text)
+        self.assertIn("項跳過未檢查", text)
+
+    # ── 判準①：本 repo 的同一項檢查不因此變鬆 ────────────────────────
+    def test_規則本體整個手冊不見時三項仍然紅(self):
+        """判準①的守門測試：只用「手冊在不在」當條件就會在這裡從 ❌ 變 ⏭。"""
+        shutil.rmtree(self.root / "docs" / "handbook")
+        for name in self.HANDBOOK_CHECKS:
+            with self.subTest(check=name):
+                res = self._named(name)
+                self.assertFalse(res.passed, f"{name} 在規則本體缺手冊時被放行")
+                self.assertFalse(res.skipped, f"{name} 在規則本體被跳過")
+
+    def test_規則本體少一章時_nav_sync_仍然紅(self):
+        (self.root / "docs" / "handbook" / "07-workflows.md").unlink()
+        res = self._named("nav-sync")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("07-workflows.md" in f for f in res.failures), res.failures)
+
+    def test_規則本體缺_init_skill_檔時_init_copy_list_仍然紅(self):
+        """判準旗標是**目錄**，對照端是檔案：目錄還在就不准跳過。"""
+        (self.root / foundry_lint.INIT_SKILL_REL).unlink()
+        res = self._named("init-copy-list")
+        self.assertFalse(res.passed)
+        self.assertFalse(res.skipped)
+        self.assertIn("對照端沒了", res.failures[0])
+
+    # ── 第二層條件：目標專案自建手冊後就回到照驗 ──────────────────────
+    def test_目標專案自建手冊與_nav_對不上時仍然紅(self):
+        """少了第二層條件，這個情境會被靜默放行。"""
+        self._make_target_project()
+        (self.root / "docs" / "handbook").mkdir(parents=True)
+        (self.root / "docs" / "handbook" / "01-first-run.md").write_text(
+            "# 1. 第一次上工\n", encoding="utf-8")
+        res = self._named("nav-sync")
+        self.assertFalse(res.passed)
+        self.assertFalse(res.skipped)
+
+    # ── AC4：`big-files` 沒有被關掉 ─────────────────────────────────
+    def test_目標專案漏列達門檻檔案仍然紅(self):
+        self._make_target_project()
+        dropped = f"| `{foundry_lint.PROTOCOL_REL}` |"
+        self.assertIn(dropped, (self.root / "CLAUDE.md").read_text(encoding="utf-8"))
+        for name in ("CLAUDE.md", "AGENTS.md"):
+            body = (self.root / name).read_text(encoding="utf-8")
+            self.write(name, "\n".join(ln for ln in body.splitlines()
+                                       if not ln.startswith(dropped)) + "\n")
+        res = self._named("big-files")
+        self.assertFalse(res.passed)
+        self.assertTrue(any(foundry_lint.PROTOCOL_REL in f for f in res.failures),
+                        res.failures)
+
+    def test_big_files_list_的輸出貼回入口檔就轉綠(self):
+        self._make_target_project()
+        res = self._named("big-files")
+        self.assertTrue(res.passed, res.failures)
+        self.assertFalse(res.skipped, "big-files 不該跳過——它在目標專案一樣成立")
+
+    def test_big_files_list_印的是掃描結果本身(self):
+        """產生器與檢查共用 `scan_big_files()`，兩者必然相等——不是各掃各的。"""
+        rows = foundry_lint.render_big_files_list(self.root).splitlines()
+        listed = [foundry_lint.MD_PATH_RE.search(r).group(1) for r in rows]
+        self.assertEqual(listed, foundry_lint.scan_big_files(self.root))
+        self.assertTrue(all(foundry_lint.BIG_FILES_TODO in r for r in rows))
+
+    def test_big_files_list_是獨立模式_不需要_type(self):
+        proc = run_cli("--big-files-list", "--repo-root", str(self.root))
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn(f"`{foundry_lint.PROTOCOL_REL}`", proc.stdout)
+
+    # ── 互鎖：判準吊在複製清單那一行上 ───────────────────────────────
+    def test_複製清單那一行留有回指本檔的註解(self):
+        """MYL-87 的雙向鎖：那一行改了要先看 `RULE_REPO_MARKER_REL`。
+
+        沒有這個測試，互指的註解被刪掉不會有任何地方報錯，判準就懸空了。
+        """
+        text = (self.root / foundry_lint.INIT_SKILL_REL).read_text(encoding="utf-8")
+        block, why = foundry_lint.init_copy_list_block(text)
+        self.assertEqual(why, "")
+        # 「不複製」那一行被 `init_copy_list_block` 截掉，所以往它後面找。
+        tail = text[text.index(block) + len(block):]
+        self.assertIn("RULE_REPO_MARKER_REL", tail)
+
+
 if __name__ == "__main__":
     unittest.main()
