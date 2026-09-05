@@ -1,8 +1,8 @@
 # 6. 團隊是怎麼編制的？
 
-> 最後對照 protocol `e62e42c`（2026-09-05）
+> 最後對照 protocol `0e94307`（2026-09-05）
 
-> 本章記錄 MYL-12 討論、MYL-14 落地的組織結構決議。規則本體在 [`skills/foundry-protocol/SKILL.md`](../../skills/foundry-protocol/SKILL.md) 第 9 節；本章解釋它對你（使用者）的意義。
+> 本章記錄 MYL-12 討論、MYL-14 落地、MYL-61／MYL-73 改寫的組織結構決議。規則本體在 [`skills/foundry-protocol/SKILL.md`](../../skills/foundry-protocol/SKILL.md) 第 9 節；本章解釋它對你（使用者）的意義。
 
 ## 組織圖
 
@@ -10,15 +10,18 @@
 你（使用者）
 └── CEO ─────────── 你唯一的對口
     ├── Product Analyst（需求）
+    ├── PM（交付彙整與派工）
     ├── Scrum Master（流程）
+    ├── Frontend Verifier（前端驗證）
     └── Tech Lead（技術）
         ├── Developer
         ├── Code Reviewer
         └── QA Engineer
 ```
 
-- **CEO 直轄三個職能負責人**：Product Analyst 管需求、Scrum Master 管流程、Tech Lead 管技術。
+- **CEO 直轄五個**：Product Analyst 管需求、PM 管交付彙整與派工、Scrum Master 管流程、Frontend Verifier 代你操作瀏覽器驗前端、Tech Lead 管技術。
 - **開發三角（Developer、Code Reviewer、QA Engineer）掛在 Tech Lead 下**。
+- **Frontend Verifier 不在開發三角內**，掛在 CEO 下。理由：它要驗的東西橫跨 Developer 的實作與 QA Engineer 的測試計畫，掛在其中任一邊就變成那一邊的自我驗證。它是你在 MYL-37 裁定建的，MYL-73 才補寫進規範（過程見下面「規範落後現況時怎麼辦」）。
 
 ## 這對你有什麼影響
 
@@ -34,19 +37,33 @@
 2. **對外動作**——push main／force-push／tag、新開公開資源、發布、公開任何東西（protocol 第 9 節分級表的 P3 級）。你已透過 MYL-23 核可把 P1（例行推送）與 P2（手冊公開鏡像同步）改為常設授權自動執行——**P1 的判準是「這次推送有沒有讓新的東西變成公開」，不是 repo 本身公開與否**（MYL-59；這個 repo 現在是 public，但推一條工作分支不會多公開任何東西）；跨平台專案中，分支 push＋開 PR 依 `.foundry/config.yml` 下放 Tech Lead（MYL-9）。
 3. **產品方向**——需求內容、範圍取捨、優先序。
 
-常規流程中，這三類決定的執行形式就是[第 4 章](04-decision-points.md)的三個關卡（A 規格、B 方案、C 對外／不可逆）。其餘決定都有明文的拍板者：技術選型歸 Tech Lead、AC 修改歸 Scrum Master、審查結論歸 Code Reviewer、技術爭議歸 Tech Lead 裁定、分支 push＋開 PR 歸 Tech Lead（跨平台專案）。完整的「誰拍板、裁不了怎麼升級」矩陣在 [`foundry-protocol` 第 9 節](../../skills/foundry-protocol/SKILL.md)。如果你被問到矩陣內已授權的決定，可以直接回「這由 {角色} 依規範決定」，把決定推回去。
+常規流程中，這三類決定的執行形式就是[第 4 章](04-decision-points.md)的三個關卡（A 規格、B 方案、C 對外／不可逆）。其餘決定都有明文的拍板者：技術選型歸 Tech Lead、AC 修改與依賴鏈歸 Scrum Master、派工歸 PM、審查結論歸 Code Reviewer、技術爭議歸 Tech Lead 裁定、分支 push＋開 PR 歸 Tech Lead（跨平台專案）。完整的「誰拍板、裁不了怎麼升級」矩陣在 [`foundry-protocol` 第 9 節](../../skills/foundry-protocol/SKILL.md)。如果你被問到矩陣內已授權的決定，可以直接回「這由 {角色} 依規範決定」，把決定推回去。
 
-## 現在為什麼不加 PM？
+## PM 是做什麼的？跟以前說的「不加 PM」是不是矛盾？
 
-現階段只有一條 feature 流，CEO 直接協調就夠；多一層 PM 只會多一站轉手。
+不矛盾，因為那是兩種不同的 PM。舊版本章寫的「現在不加 PM」指的是 **stream owner**，新加的這一個是**彙整型**：
 
-**加 PM（stream owner）的觸發條件**（兩項同時成立才啟動）：
+| | stream owner（舊條款講的） | 彙整型（現在這一個） |
+| --- | --- | --- |
+| 解什麼問題 | 流太多，CEO 的時間被跨流協調吃掉 | CEO 的 context 被原始材料占滿，讀材料跟做決定互相排擠 |
+| 幾個 | 每條 feature 流各一個 | 全公司一個 |
+| 現況 | **還沒觸發**，不預先建置 | **已採用**（你在 MYL-61 的裁定卡上選的） |
 
-1. 同時有 ≥2 條獨立 feature 流在進行。
-2. CEO 的時間主要花在跨流協調，而非單流內的裁決。
+**stream owner 的觸發條件沒有改**，仍是兩項同時成立才啟動：(1) 同時有 ≥2 條獨立 feature 流在進行；(2) CEO 的時間主要花在跨流協調，而非單流內的裁決。這兩項現在都還不成立——**採用彙整型 PM 不等於這兩項滿足了**。真的觸發時，CEO 會開單提案、發卡請你裁定，不會自行改組織。
 
-觸發時 CEO 會開單提案、發卡請你裁定，不會自行改組織。
+彙整型 PM 對你的實際差別：**CEO 讀的東西變了**。以前 CEO 要把工單、留言、run 記錄整批載進來才寫得出進度給你；現在那一步交給 PM，CEO 只讀一份結構化報告就做決定。派工（哪張單交給誰、什麼時候發出去）也一併歸 PM，Scrum Master 仍然管拆單方式、依賴鏈與工單 AC 修改。PM **不做**需求取捨、不改 AC、不裁技術爭議、也不直接對你發卡——要問你的事一律經 CEO。
+
+## 規範落後現況時怎麼辦
+
+這一節是 MYL-61 盤點時撞到的實例，寫下來是因為它會再發生。
+
+Frontend Verifier 是你在 MYL-37 裁定建的，平台上一直都在，但規範與手冊裡**一次都沒提過它**。而第 9 節原本寫著「規範是權威來源，兩者不一致時以規範為準」——照字面辦，結論會變成「把 Frontend Verifier 從平台移除」，等於在沒有任何裁定的情況下推翻你的裁定。
+
+所以 MYL-73 把那條拆成兩個方向：
+
+- **規範有、平台沒有** → 去把平台補上。
+- **平台有、規範沒有** → **補寫進規範**，不是把它從平台拿掉。查得到當初的裁定來源（工單／互動卡）就直接補登記；**查不到來源才發卡問你**。
 
 ## 結構與平台設定的對應
 
-Paperclip 上各 agent 的 `reportsTo`（匯報對象）設定是上面組織圖的映射，MYL-14 已同步完成。兩者若再出現不一致，以 foundry-protocol 第 9 節為準發起同步。
+Paperclip 上各 agent 的 `reportsTo`（匯報對象）設定是上面組織圖的映射。Frontend Verifier 的匯報線本來就是 CEO，這次是規範追上它；**PM 目前只存在於規範裡，平台上的 agent 還沒建**——那要等你核可條文之後，在後續工單裡建置，屆時會另外請你開一次建立 agent 的權限。兩者若再出現不一致，依上一節的兩個方向處理。
