@@ -452,7 +452,8 @@ Foundry-Projection-Digest: <投影內容的 sha256>
 
 ### 硬約束（導入報告必須明列）
 
-指派一個 GitHub issue **不會喚醒任何人**（`S7`，也是 `../SKILL.md` §7 對照表的最後一列）。
+指派一個 GitHub issue **不會喚醒任何人**（`S7`，也是 `../SKILL.md` §7 對照表
+「指派會不會喚醒 agent」那一列）。
 上面四個落點加起來仍然只約束得了人：`../../foundry-ai-platform/SKILL.md` 的 `AP-2`
 講的那件事，在組織層原封不動再發生一次。**不得靜默略過**——這與 `AP-2`／`AP-4` 同一個要求。
 

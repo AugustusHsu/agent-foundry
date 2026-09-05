@@ -219,7 +219,8 @@ description: 軸 A（AI 平台，`.foundry/config.yml` 的 `ai_platform`）的�
 **只在 Paperclip 成立、換平台就沒有的：**
 
 - **指派＝喚醒。** GitHub／GitLab 的 issue 指派**不會喚醒任何 agent**（`S7`，
-  也是 `foundry-platform` §7 對照表的最後一列）。整套「交接鏈自動往下跑」建立在這一條上，
+  也是 `foundry-platform` §7 對照表「指派會不會喚醒 agent」那一列）。
+  整套「交接鏈自動往下跑」建立在這一條上，
   它是 Foundry 目前**最不可攜的一件事**——降級走 `AP-2`。
 - **互動卡會讓 run 停下來等。** 其他平台的留言不會擋住任何人（`AP-1`）。
 - **一張工單可以掛結構化的 blocker 並在解除時自動送喚醒事件。** 這是 Paperclip 的排程能力，
@@ -259,7 +260,7 @@ description: 軸 A（AI 平台，`.foundry/config.yml` 的 `ai_platform`）的�
 | --- | --- |
 | `SKILL.md`（本文） | 軸 A 的能力面、四欄對照表、降級規則 `AP-1`～`AP-6`、雙入口維護規則、誠實上限 |
 | `skills/foundry-platform/config-schema.md` | `ai_platform` 的欄位與枚舉權威（含 `org.yml` 側同名欄位） |
-| `skills/foundry-platform/SKILL.md` | **軸 B**：九個動詞與四份 adapter。§7 跨平台對照表除最後一列外都是軸 B。**§8 例外——那是軸 A 的 `provision_team`**，本文只引用不重寫 |
+| `skills/foundry-platform/SKILL.md` | **軸 B**：九個動詞與四份 adapter。§7 跨平台對照表除標【軸 A】的那一列外都是軸 B。**§8 例外——那是軸 A 的 `provision_team`**，本文只引用不重寫 |
 | `skills/foundry-model-routing/SKILL.md` | 模型供應商（第三個概念，見 §0）。其 §0 指回本文 |
 | `skills/foundry-browser/SKILL.md` | `CAP-8` 的判級、補齊與降級全部以該檔為準 |
 | `templates/entry-file.md` | 雙入口檔模板，§8-A／§8-B 對應 §5 的可分岔段 |

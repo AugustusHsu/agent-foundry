@@ -467,7 +467,8 @@ curl -s -H "$GL_AUTH" "$GL_API/wikis?with_content=1&per_page=100" | jq -r '.[]|"
 
 ### 硬約束（導入報告必須明列）
 
-指派一個 GitLab issue **不會喚醒任何人**（`../SKILL.md` §7 對照表最後一列）。
+指派一個 GitLab issue **不會喚醒任何人**（`../SKILL.md` §7 對照表
+「指派會不會喚醒 agent」那一列）。
 四個落點加起來仍然只約束得了人：`../../foundry-ai-platform/SKILL.md` 的 `AP-2`
 講的那件事，在組織層原封不動再發生一次。**不得靜默略過**。
 

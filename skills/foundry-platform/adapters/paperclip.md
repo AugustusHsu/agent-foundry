@@ -197,22 +197,37 @@ curl -s -X PATCH "${AUTH[@]}" -d "$(jq -n --argjson c "$CUR" --arg b "<B>" \
 
 ```sh
 curl -s "${AUTH[@]}" "$PAPERCLIP_API_BASE/api/companies/<CID>/agents" \
-  | jq '[.[] | {id, title, role, reportsTo, status, permissions, access}]'
+  | jq '[.[] | {id, name, title, role, reportsTo, status, permissions, access}]'
 ```
 
 回傳是**裸陣列**（不是 `{agents:[…]}`）。拿它與 `org.yml` 的 `roles` 逐筆比對，分三堆。
 
-⚠️ **對帳鍵是 `title`，逐字比對，不做模糊配對。** 平台的 `role` 欄位**不是 Foundry 的角色**：
-它是平台自己的 12 值粗桶（`ceo｜cto｜cmo｜cfo｜security｜engineer｜designer｜pm｜qa｜devops｜researcher｜general`），
-多個 Foundry 角色會落在同一個值——實測本公司的 Tech Lead／Developer／Code Reviewer **三個都是 `engineer`**，
-Product Analyst 與 Scrum Master **都是 `pm`**。`role` 只影響平台 UI 分類，角色身分由 `title` 承載。
+⚠️ **對帳鍵：`org.yml` 的 `title` ↔ 平台的 `name`，逐字比對，不做模糊配對。**
+兩邊的欄位名不同形，這是刻意的——`../config-schema.md` 明訂不把平台欄位名寫進 `org.yml`，
+所以這條對應關係只存在於本檔。**承載欄位是 `name` 而不是平台那個同樣叫 `title` 的欄位**，
+理由是 `../SKILL.md` §8.2 那條硬要求：對帳鍵得對每個成員都有定義。實測平台 schema
+（`POST /api/companies/{companyId}/agents`）**`required` 只有 `name`**（`minLength: 1`），
+`title` 是 `nullable: true` 的選填欄位——拿它當鍵，沒填的成員會同時被判成「缺」與「多」。
 
-⚠️ **同一個角色同時出現在「缺的」與「多出來的」兩堆＝命名不一致，不是要建新的。**
-這條不是假設：2026-09-06 實測，`org.yml` 宣告 `title: Developer`，平台上那個成員叫
-**`Developer（全端）`**。逐字比對會判成「缺 Developer」＋「多出 Developer（全端）」，
-照字面往下做就會建出第二個 Developer。**撞到就停下報告**，由使用者裁定改平台的 `title`
-還是改宣告——兩邊都不是 agent 能自己決定的（改 `org.yml` 的授權路徑見 `../config-schema.md`）。
-同次實測的另一個差異是平台上沒有 PM，那個是**預期的**（MYL-79／T7 才建），屬「缺的」那一堆。
+⚠️ **平台的 `role` 欄位不是 Foundry 的角色**：它是平台自己的 12 值粗桶
+（`ceo｜cto｜cmo｜cfo｜security｜engineer｜designer｜pm｜qa｜devops｜researcher｜general`），
+多個 Foundry 角色會落在同一個值——實測本公司的 Tech Lead／Developer／Code Reviewer **三個都是 `engineer`**，
+Product Analyst 與 Scrum Master **都是 `pm`**。`role` 只影響平台 UI 分類，角色身分由 `name` 承載。
+
+⚠️ **同一個角色同時出現在「缺的」與「多出來的」兩堆＝對不上鍵，不是要建新的。**
+撞到就**停下報告**，不得在那個位置建第二個成員；由使用者裁定要改哪一邊——
+兩邊都不是 agent 能自己決定的（改 `org.yml` 的授權路徑見 `../config-schema.md`）。
+`name` 沒有平台層的唯一性保證，所以**同一個鍵配到多筆時同樣停下報告**，不得任挑一筆。
+
+**2026-09-06 全公司 8 名成員實測**（`org.yml` 宣告 9 個角色），差異共**三項**：
+
+| 宣告 `title` | 平台 `name`（對帳鍵） | 平台 `title`（顯示名） | 判定 |
+| --- | --- | --- | --- |
+| `CEO` | `CEO` | **`null`** | ✅ 對得上。**這一格就是不能拿平台 `title` 當鍵的證據**——它是樹根（`reports_to: user`），而 §8.2 要求由上而下建置，用 `title` 當鍵的話第一個動作就是在樹根建出第二個 CEO |
+| `Developer` | `Developer` | **`Developer（全端）`** | ✅ 對得上。顯示名與宣告不一致屬 §8.2 的**第五種差異**：只報告，不自動改 |
+| `PM` | （不存在） | （不存在） | 屬「缺的」那一堆，且是**預期的**——MYL-79／T7 才建 |
+
+其餘 6 個角色三欄一致，無差異。上表是**同一次實測的完整結果**，不是舉例。
 
 ### 步驟 1：建立成員（缺的那一堆）
 
@@ -223,12 +238,12 @@ curl -s -X POST "${AUTH[@]}" -d "$(jq -n \
     adapterType:"claude_local",
     adapterConfig:{model:"<第 8 節對應的 model>", effort:"<對應的 effort>"},
     permissions:{canCreateAgents:false, canCreateSkills:true}}')" \
-  "$PAPERCLIP_API_BASE/api/companies/<CID>/agents" | jq '{id,title,reportsTo}'
+  "$PAPERCLIP_API_BASE/api/companies/<CID>/agents" | jq '{id,name,title,reportsTo}'
 ```
 
-- **只有 `name` 是必填**（其餘欄位可後補），但 `title` 要一併給——對帳鍵是它。
+- **`name` 是唯一的必填欄位，而它就是對帳鍵**——`org.yml` 的 `title` 逐字填進 `name`，不得改寫、不得加括號說明。`title` 一併給是為了平台 UI 的顯示名，**它不參與對帳**（步驟 0 那張表的 `Developer（全端）` 就是兩者分岔的實例）。
 - **`reportsTo` 吃的是上級的 agent UUID**，所以**建置順序必須由上而下**：上級還不存在時這一格填不了。依 `org.yml` 的 `reports_to` 做一次拓樸排序再開始建，`reports_to: user` 的那個（＝CEO）是樹根。
-- **查證**：回傳的 `id` 即 `<AID>`；`GET /api/companies/<CID>/agents` 查得到該 `title`。
+- **查證**：回傳的 `id` 即 `<AID>`；`GET /api/companies/<CID>/agents` 查得到該 `name`。
 
 ### 步驟 2：權限
 
@@ -269,7 +284,7 @@ curl -s -X PATCH "${AUTH[@]}" \
 
 ### 查證與它的兩個邊界
 
-**驗得回來的**：`title`、`reportsTo`、`permissions.*`、`access.*`、`status`——
+**驗得回來的**：`name`（對帳鍵）、`title`、`reportsTo`、`permissions.*`、`access.*`、`status`——
 `GET /api/companies/<CID>/agents` 或 `GET /api/agents/<AID>` 都讀得到。
 
 **驗不回來的**（2026-09-06 以 agent 身分實測，兩項都不是 404）：
@@ -322,7 +337,8 @@ curl -s "${AUTH[@]}" "$PAPERCLIP_API_BASE/api/companies/<CID>/issues?view=compac
 | 所有 `GET`（issues／comments／documents／labels／goals／openapi.json） | 2026-09-03 於本公司實機執行驗證 |
 | `PATCH /api/issues/<ID>` 的欄位集合、`POST …/labels`、`POST …/goals`、`POST …/comments` 的 body schema | 依平台 `GET /api/openapi.json` 的 schema 定義 |
 | `POST /api/companies/<CID>/issues` 的 body | OpenAPI 未展開該 schema；欄位取自 issue 物件實際回傳欄位與既有開單實務 |
-| 「provision_team」一節的**讀取面**：`GET …/agents`（裸陣列、`role` 的 12 值粗桶、`Developer（全端）` 的命名不一致）、`GET /api/agents/me` 的 `adapterConfig`、讀別人回 `{}`、`…/skills` 的 `deny_missing_membership` | 2026-09-06 於本公司以 agent 身分實機執行驗證（MYL-77） |
+| 「provision_team」一節的**讀取面**：`GET …/agents`（裸陣列、`role` 的 12 值粗桶、步驟 0 那張 8 名成員對帳表——含 CEO 的平台 `title` 為 `null` 與 `Developer（全端）` 的顯示名分岔）、`GET /api/agents/me` 的 `adapterConfig`、讀別人回 `{}`、`…/skills` 的 `deny_missing_membership` | 2026-09-06 於本公司以 agent 身分實機執行驗證（MYL-77） |
+| `POST /api/companies/<CID>/agents` 的 `required` 只有 `name`（`minLength: 1`）、`title` 為 `nullable: true` 的選填欄位——**對帳鍵定在 `name` 的全部依據** | 依平台 `GET /api/openapi.json` 的 schema 定義（2026-09-06 取，MYL-77） |
 | 「provision_team」一節的**寫入面**：`POST …/agents`、`PATCH …/permissions`、`POST …/skills/sync`、`PATCH /api/agents/<AID>` 的欄位與必填 | 依平台 `GET /api/openapi.json` 的 schema 定義。**本單未實跑任何寫入**——依工單邊界，真的在平台上建 agent 屬 MYL-79（T7）。第一次執行時逐步比對實際回傳，對不上就改回本節 |
 
 首次在新專案套用本 adapter 時，先用一張測試工單走一遍 `create_issue → set_labels → update_status → comment → list_issues`，確認無誤再正式使用。
