@@ -3,7 +3,8 @@
 # 把 docs/handbook/ 建成版本化的 GitHub Pages 站，發到**本 repo** 的 gh-pages。
 #
 # MYL-55 取代 scripts/publish-handbook.sh。三件事跟著換掉：
-#   1. **家搬回本 repo**：不再推公開鏡像 repo（foundry-handbook 已封存），
+#   1. **家搬回本 repo**：不再推公開鏡像 repo（foundry-handbook 由使用者封存保留，
+#      舊網址不轉址、直接斷——使用者裁定，見 known-drift `R7`），
 #      站台由本 repo 的 gh-pages 分支出。跨 repo PAT 因此不再需要。
 #   2. **版本化**：用 mike，站上同時留 v1／v2／…／latest 與版本選擇器。
 #      讀者第一次答得出「我讀的是哪一版規則」。
