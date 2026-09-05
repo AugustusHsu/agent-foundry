@@ -150,7 +150,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 | `adapters/gitlab.md` | 執行層動詞 → GitLab REST API v4 對照（含 Free／Premium 分岔）；**另含 `publish_docs` 的兩個投影面**（wiki、Pages）。**本 repo 無 GitLab 實例，全文未實跑**，證據等級見該檔附錄 B |
 | `adapters/local-md.md` | 執行層動詞 → `.foundry/board/` 檔案操作對照 |
 | `adapters/paperclip.md` | 執行層動詞 → Paperclip REST API 對照（含平台限制表） |
-| `config-schema.md` | `.foundry/config.yml` 欄位說明 |
+| `config-schema.md` | `.foundry/config.yml` 與 `.foundry/org.yml` 欄位說明（MYL-76 起兩份設定檔共用本檔）|
 | `config.example.yml` | 設定檔範例（含註解），`foundry-init` 據此產生實際檔案 |
 
 ## 7. 跨平台對照表
