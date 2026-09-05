@@ -15,15 +15,25 @@ description: 模型供應商路由 workflow。三種情況載入本文：① 撞
 所以本 workflow 的目標**不是省額度、也不是拚吞吐**，是**觀點互補**：讓寫 code 的和審 code 的
 來自不同供應商，避免同一個模型的盲點在實作與審查兩端同時發生（規則本體＝protocol `M4`）。
 
-## 0. 先分清兩條軸，別混
+## 0. 先分清三件事，別混
 
-| 軸 | 管什麼 | 由誰定義 | 值 |
+| | 管什麼 | 由誰定義 | 值 |
 | --- | --- | --- | --- |
-| **執行層平台** | 工單／狀態／看板放在哪 | `foundry-platform` ＋ `.foundry/config.yml` 的 `devtools_platform` | `github`／`gitlab`／`local-md`／`paperclip` |
+| **軸 B：文檔與協作工具** | 工單／狀態／看板放在哪 | `foundry-platform` ＋ `.foundry/config.yml` 的 `devtools_platform` | `github`／`gitlab`／`local-md`／`paperclip` |
+| **軸 A：AI 平台** | agent 在哪個殼裡跑、被誰喚醒 | **`foundry-ai-platform`** ＋ `.foundry/config.yml` 的 `ai_platform` | `paperclip`／`claude-code`／`codex` |
 | **模型供應商** | 哪一家的模型在跑這個角色 | **本文** ＋ `.foundry/config.yml` 的 `model_routing` | `claude`／`codex`／`gemini`… |
 
-兩者都曾被口語叫成「平台」，但換供應商不會換掉工單系統，換工單系統也不會換掉供應商。
-**本文一律用「供應商」**；看到舊文件寫「平台路由」指的是本文這條軸。
+三者都曾被口語叫成「平台」，但換供應商不會換掉工單系統，換工單系統也不會換掉供應商。
+**本文一律用「供應商」**；看到舊文件寫「平台路由」指的是本表第三列這一條。
+
+⚠️ **`codex` 這個字在軸 A 與供應商兩個值域裡都出現，意思不同**：軸 A 的 `codex` 指
+「agent 跑在 Codex 這個殼裡」，供應商的 `codex` 指「這個角色用 OpenAI 的模型」。看到這個字先確認在講哪一欄。
+
+**軸 A 會限縮本文的可行值域**（MYL-78）：`ai_platform: paperclip` 時平台可以替不同角色掛不同
+adapter，per-role 路由才有落點；`ai_platform: claude-code`／`codex` 時一個 session 就是一家供應商，
+`model_routing` 的 per-role 設定**無處落地**，`M4` 只能靠開兩個 session 分別扮演而形式成立。
+**軸 A 的定義與能力對照表一律以 `skills/foundry-ai-platform/SKILL.md` 為準，本表只給一句話指路**——
+同一條軸不留第二份定義。
 
 ## 1. 什麼時候跑
 
@@ -106,9 +116,9 @@ python3 tools/model-routing/probe_providers.py --format json
   同一張工單的 Developer 與 Code Reviewer 不得是同一家。
 - **一次只換一個角色**，跑完一輪再擴大——換供應商的退步（品質下降、格式不合）
   往往要跑幾張單才看得出來，一次全換會分不清是哪一項改動造成的。
-- **角色規範怎麼載入要先確認**：Foundry 的 skill 是 `SKILL.md` ＋ frontmatter 格式。
-  換到非 Claude 的供應商時，角色規範靠 repo 根的 `AGENTS.md`（雙入口檔）進 context——
-  **目標專案沒有 `AGENTS.md` 就先補，這是換供應商的硬前置**。
+- **角色規範怎麼載入要先確認**：這一項**是軸 A 的能力**（`CAP-1` 載入角色規範），不是供應商的性質，
+  規則本體已移到 `skills/foundry-ai-platform/SKILL.md` 的 `AP-3`（MYL-78）。這裡只留結論：
+  **換到不會自動載入 skill 的殼時，目標專案沒有 `AGENTS.md` 就先補**——判準與證據要求以 `AP-3` 為準。
 
 ### 3.3 現況（2026-09-03）
 
@@ -170,4 +180,5 @@ curl -s -X PATCH -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type:
 | `tools/model-routing/probe_providers.py` | 步驟 1 的盤點腳本（供應商登記表也在這裡） |
 | `skills/foundry-protocol/SKILL.md` 第 8 節 | 規則本體：`M4`／`M5`／`M6` |
 | `skills/foundry-platform/config-schema.md` | `model_routing` 段的欄位定義 |
+| `skills/foundry-ai-platform/SKILL.md` | **軸 A**（`ai_platform`）的權威：能力對照表、降級規則。§0 第二列指向它 |
 | `docs/standards/known-drift.md` | `L4`／`L5` 平台限制、`R1`／`R6` 反悔錄 |
