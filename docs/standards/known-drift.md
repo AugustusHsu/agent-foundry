@@ -35,8 +35,10 @@
 | L15 | `has_wiki: true` 之後直接 clone／push `<repo>.wiki.git`，期望 wiki repo 已經存在 | 兩邊都 `Repository not found`（clone 與 push 皆是）。**啟用 wiki 只是開開關，wiki 的 git repo 要等第一頁建立才成形**，而建第一頁**只有 UI 有入口**：REST 的 `repos/{o}/{r}/wiki` 是 404，GraphQL 沒有 wiki mutation，push 也不會把它生出來 | 依 `H6` 發卡請使用者在 `https://github.com/<o>/<r>/wiki/_new` 建任意一頁（內容隨意，下次投影會覆蓋），之後腳本才跑得動。⚠️ **不要把這個 `Repository not found` 讀成權限問題**：同一把 ssh 金鑰對主 repo `ls-remote` 正常，那個對照組就是「不是認證問題」的證明——沒跑對照組的話，這裡很容易被誤診成 token scope 不足而去換認證方式重試。（2026-09-05 MYL-52 實測：`has_wiki` 由 false 改 true 之後立即測，clone／push／REST 三條路全試過） |
 | L16 | 以為手冊裡的頁內錨點（`[主開發流程鏈](#1)`）投影到 wiki 之後照樣能跳，於是把投影的錨點改寫當成多餘的一步簡化掉 | **兩邊的 slug 演算法不同，而且失敗是無聲的**。手冊原文的 `#1`／`#3-hitl` 是寫給 mkdocs（Python-Markdown）的：它的 slugify 走 NFKD → ASCII，**中文整段被吃掉**，於是 `## 1. 主開發流程鏈` 的 id 就只剩 `1`。GitHub（wiki 與 repo blob 兩邊）**保留中文**，同一個標題算出來是 `1-主開發流程鏈`。錨點對不上時頁面照常渲染、連結照常可按，**只是按了不會跳**——沒有 404、沒有紅字、沒有任何一支 lint 會叫 | 投影**必須**依目標面的演算法重算錨點（`project_docs.github_slug()`／`github_anchors()` 就是幹這件事的），不能原樣搬。⚠️ **本機驗不了這件事**（見 `X4` 沒有渲染器），唯一算數的證據是抓實站渲染出來的 `id="user-content-…"` 來比對。2026-09-05 MYL-52 實測全綠：9 頁全取得、44 條內部連結目標頁存在、**9 個錨點全部在實站 id 集合裡找得到**，證明 `github_slug()` 與 GitHub 真實演算法一致（含 `## 3. HITL 發卡` → `3-hitl-發卡` 這種中英混排）。⇒ 改動投影的連結改寫邏輯後，**要重跑一次實站比對才算驗過**，本機測試全綠不構成證據 |
 | L17 | 對一個還沒有 `gh-pages` 分支的 repo，先去 Settings → Pages 想把來源設成 `gh-pages` | **選單裡沒有那個分支**。Pages 的來源分支下拉只列得出已存在的分支，而 `gh-pages` 要等第一次 `mike deploy`／`gh-deploy` 推上去才存在 | 順序反過來：**先讓 CI 跑一次**（打 `handbook-v*` tag；此時站台仍 404，那是正常的）→ 分支建出來 → **再開 Pages 選 `gh-pages` / root**。⚠️ 這與 wiki 的 `L15` 是**同一種形狀的不同方向**：`L15` 是「開了開關但 repo 還沒成形」，本條是「東西還沒成形所以開關選不到」。兩條共通的教訓是**「開通對外面」往往是兩步，發卡時要一次講完**，只問第一步會讓使用者以為按完就結束。（2026-09-05 MYL-55：`repos/AugustusHsu/agent-foundry/pages` 實測 404、repo 只有 `main` 一條分支） |
-| L18 | 封存（archive）一個有 Pages 的 repo，以為它的公開站會跟著關掉 | **站台照樣活著**。`PATCH repos/{o}/{r}` 帶 `archived=true` 之後 `has_pages` 仍是 true，實測 `https://augustushsu.github.io/foundry-handbook/` 與其子頁封存前後都回 200——封存只把 **repo** 變唯讀，已部署的 Pages 內容不受影響 | 要真的讓舊網址斷，得**另外**呼叫 `DELETE repos/{o}/{r}/pages`，而且**必須趕在封存之前**（封存後 repo 唯讀，這支 API 大機率 403）。⇒ 「封存舊 repo」與「關掉舊站」是**兩件事、兩個授權、有先後順序**——發卡問「要不要封存」時如果沒同時問「要不要關站」，使用者會以為按完就斷了，實際上舊內容仍在公開索引裡跟新站打對台。與 `L15`／`L17` 同屬「對外面的開關是兩步」這一族。（2026-09-05 MYL-55 實測：封存後兩條舊網址各再測一次，仍 200） |
+| L18 | 封存（archive）一個有 Pages 的 repo，以為它的公開站會跟著關掉 | **站台照樣活著**。`PATCH repos/{o}/{r}` 帶 `archived=true` 之後 `has_pages` 仍是 true，實測 `https://augustushsu.github.io/foundry-handbook/` 與其子頁封存前後都回 200——封存只把 **repo** 變唯讀，已部署的 Pages 內容不受影響 | 要真的讓舊網址斷，得**另外**呼叫 `DELETE repos/{o}/{r}/pages`，而且**必須趕在封存之前**（封存後 repo 唯讀，這支 API 大機率 403）。⇒ 「封存舊 repo」與「關掉舊站」是**兩件事、兩個授權、有先後順序**——發卡問「要不要封存」時如果沒同時問「要不要關站」，使用者會以為按完就斷了，實際上舊內容仍在公開索引裡跟新站打對台。與 `L15`／`L17` 同屬「對外面的開關是兩步」這一族。**最乾淨的收法其實是把整個 repo 刪掉**（Pages 跟著消失），但那條路另有權限牆，見 `L20`。（2026-09-05 MYL-55 實測：封存後兩條舊網址各再測一次，仍 200） |
 | L19 | 用 `curl` 抓 mkdocs-material 站台的 HTML，`grep` 不到 `md-version` 就判定「版本選擇器沒生效」 | **誤判**。版本選擇器是**瀏覽器端 JS 渲染**的：靜態 HTML 只帶 `<script id="__config">` 裡的 `"version": {"provider": "mike"}`，`.md-version` 元素由 bundle 於執行期 fetch 站根 `versions.json` 之後才插進 DOM。`curl` 永遠看不到它 | 判定方式分兩層：**設定層**看 `__config` JSON 有沒有 `version.provider`＋站根 `versions.json` 回不回得了 200；**畫面層**只能用真瀏覽器（本 repo 走 `foundry-browser` 的 playwright MCP）查 `.md-version__current` 的文字與 `.md-version__link` 清單。2026-09-05 MYL-55 實測：curl 抓不到任何 `md-version`，瀏覽器查到 `hasVersionSelector: true`、`currentLabel: "v1"`。⇒ 這是 `L13`「機械驗證會騙人」的**反向版本**——L13 是 API 全綠但畫面空的，本條是文字比對全空但畫面其實是對的。**兩個方向都要提防**。附帶一提：站台 console 會有一筆 `api.github.com/repos/{o}/{r}/releases/latest` 404，那是 material 的 repo 資訊卡在抓最新 release，repo 沒發過 release 就會 404，**與版本選擇器無關**，不要順手去「修」它 |
+| L20 | 看到 `repos/{o}/{r}` 回 `"permissions": {"admin": true}`，就以為手上這把 token 刪得掉這個 repo | `DELETE repos/{o}/{r}` → **403 `Must have admin rights to Repository.`**。**這句訊息會把人帶錯方向**：admin 明明就是 true，真正缺的是 **`delete_repo` scope**（本 repo 的 `gh` token 實測為 `gist, project, read:org, repo`）。只有 `gh` 自己多印的那行 `This API operation needs the "delete_repo" scope` 講出了實情，直接打 REST 是看不到的 | 刪 repo 屬**帳號層授權**，不是 repo 層權限，兩者不可互推。補 scope 要走 `gh auth refresh -h github.com -s delete_repo`——**互動式裝置流程，agent 跑不動**，而且那是在改使用者的全域憑證（`H6`）。⇒ 把「刪 repo」當成**使用者專屬動作**，發卡時直接附 UI 路徑（`Settings` → 頁尾 `Danger Zone` → `Delete this repository`），不要先承諾代做。⚠️ 別把 `Must have admin rights` 讀成「權限不夠、去要 admin 或換認證方式」而繞路重試——對照組是同一把 token 對同一個 repo `PATCH archived=true` **成功過**，那就證明不是 repo 權限問題。與 `L15` 那條「不要把 `Repository not found` 誤診成 token 問題」是同一種反向誤診。（2026-09-05 MYL-55 實測） |
+| L21 | 用 `updateProjectV2Field` 幫 Projects v2 的單選欄位（如 `Status`）**補**幾個缺的選項，把既有選項照抄一份、只在後面加新的 | **`singleSelectOptions` 是整份取代，不是增量**——而且**即使名稱、顏色、描述一字不差，既有選項也會被重新配發 option id**，連帶**看板上所有項目的該欄位值全部被清成 `null`**。實測：三個選項補成六個，`Todo` 的 id 由 `f75ad846` 變成 `507fee68`，三張 item 的 Status 同時歸零 | **動手前先把每張 item 的現值抓下來**（`gh project item-list <N> --owner <O> --format json --jq '.items[] \| {num:.content.number, status}'`），改完拿新的 option id 逐張 `gh project item-edit` 寫回。`ProjectV2SingleSelectFieldOptionInput` 沒有 `id` 欄位，**沒有任何辦法保住原 id**，所以「先備份再重寫」是唯一安全序。⚠️ 這件事**不會報錯**：mutation 回 200、回傳的六個選項看起來完全正確，要另外去查 item 才發現值沒了——與 `L13` 同屬「機械斷言全綠但畫面是空的」。（2026-09-05 MYL-55 實測，三張 item 已即時還原） |
 
 ## 2. API 形狀陷阱：會回 4xx 但錯誤訊息不會告訴你原因
 
@@ -125,13 +127,18 @@
   使用者直接封存 `foundry-handbook`，舊網址變 404。腳本**已隨本裁定刪除**。
 - ⚠️ **裁定的前提有一半沒成立**：2026-09-05 執行封存後實測，舊站**仍回 200**——
   封存只讓 repo 唯讀，不會關掉已部署的 Pages（`L18`）。所以「不轉址」這半做到了，
-  「變 404」那半沒有。要補上得**另外**關掉舊 repo 的 Pages，那是獨立的一次 `P3` 授權。
+  「變 404」那半沒有。
+- **最終處置（2026-09-05，卡 `0a46a84a`）**：使用者以自由文字回覆「**可以直接刪除那個舊站的
+  repo**」——這推翻了工單原本「**不刪除**，只封存」的範圍限制，以使用者這次的裁定為準。
+  agent 代刪失敗（`DELETE repos/AugustusHsu/foundry-handbook` → 403，缺 `delete_repo`
+  scope，見 `L20`），依卡片的但書交回使用者手動執行。⇒ **舊 repo 與舊站的最終狀態是「刪除」**，
+  不是「封存保留」；下一個 session 若在文件裡讀到「封存保留」的舊敘述，那是本次之前的版本。
 - **為什麼記在這裡**：那支腳本的 header 把「必須在封存前跑」寫得很像待辦事項，
   下一個 session 從 git 歷史翻到它、或看到 README 提及舊網址，很容易判斷成
   「這件事漏做了」而重寫一份。**它不是漏做，是被否決。**
 - 重提的前提：舊網址真的有外部流量或引用需要接（目前唯一的內部引用
-  `skills/foundry-init/SKILL.md` 已改指新站）。**封存之後 repo 唯讀，轉址就再也推不上去了**
-  ——想反悔必須先請使用者解除封存，成本高於當初直接做。
+  `skills/foundry-init/SKILL.md` 已改指新站）。**repo 刪掉之後轉址就徹底不可能了**
+  ——連解封存再推這條退路都沒有，只剩「重建一個同名 repo」這種明顯不成比例的成本。
 
 ## 4. 已知缺口：使用者知情下保留，不要當成待辦自行修掉
 
