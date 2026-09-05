@@ -104,7 +104,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 ### `done`
 
 - **進入**：AC 逐條有驗證證據，且分支已依第 7 節收尾。**只有宣稱、沒有證據，不得結案。**
-- **手冊發佈檢查（MYL-12 決議，MYL-32／MYL-24 增訂）**：本單若動到 `docs/handbook/`，結案前必須走完第 7 節「手冊發佈審查」四步（合併進 main → 寫審查記錄 → commit → 跑 `scripts/publish-handbook.sh`）。同步屬 MYL-23 分級表 **P2**，由執行者自檢前提後自行執行，**不需使用者逐次同意**；結案留言附審查記錄路徑、過濾清單輸出、公開 repo commit hash 與站台 URL。前提不成立而暫不同步時（例如變更還沒合併進 main），結案留言註明「公開鏡像未同步」與後續處理方式，不因等待同步而卡住結案。
+- **手冊發佈檢查（MYL-12 決議，MYL-32／MYL-24／MYL-55 增訂）**：本單若動到 `docs/handbook/`，結案前必須走完第 7 節「手冊發佈審查」的**前四步**（合併進 main → 寫審查記錄 → commit → 同步主閱讀面）。同步屬 MYL-23 分級表 **P2**，由執行者自檢前提後自行執行，**不需使用者逐次同意**；結案留言附審查記錄路徑、連結改寫輸出、逐章比對表與閱讀面 URL。第五步（精裝站版本 tag）是**可選**的，**不是結案條件**——它由使用者決定何時發一版（`V1`）。前提不成立而暫不同步時（例如變更還沒合併進 main），結案留言註明「主閱讀面未同步」與後續處理方式，不因等待同步而卡住結案。
 - 原則上不重開；結案後發現的問題依第 5 節判定退回或開新單。
 
 ### `cancelled`
@@ -261,10 +261,10 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 跨平台架構下，文檔分三層（MYL-9 HLD §1）：**① 規則層**＝repo 內 .md（`skills/`、`docs/`、`templates/`、`.foundry/`），規則與流程的 SSOT；**② 執行層**＝git 平台的工單／看板（`local-md` 模式為 `.foundry/board/`），執行狀態的 SSOT；**③ 說明層**＝文檔網站，永遠是 ① 的投影。
 
-- **同步方向**：規則文檔只在 ① 編輯——③ 由 `scripts/publish-handbook.sh` 從 ① 同步、② 的 issue templates／labels 定義由 init workflow 從 ① 產生。執行狀態只在 ② 更新，① 不保存工單進度副本。**禁止直接改 ③、或在 ② 上另寫規則**——那會製造第二份真相。
+- **同步方向**：規則文檔只在 ① 編輯——③ 由 `publish_docs` 動詞從 ① 投影（本 repo＝`scripts/publish-wiki.sh` 與 `scripts/publish-site.sh`，目標面由 `.foundry/config.yml` 的 `docs` 段決定）、② 的 issue templates／labels 定義由 init workflow 從 ① 產生。執行狀態只在 ② 更新，① 不保存工單進度副本。**禁止直接改 ③、或在 ② 上另寫規則**——那會製造第二份真相。
 - **跨層衝突裁決**：規則類內容衝突以 ① 為準、執行狀態類衝突以 ② 為準。無法歸類為單純規則或狀態時，回到本節開頭的階序處理；仍裁不了就依第 4 節發卡。
 
-**違反：**出現第二份真相。直接改 ③ 的內容會在下一次 `scripts/publish-handbook.sh` 執行時被 ① 整份覆蓋掉，改動連同改它的理由一起消失；在 ② 上另寫規則則永遠不會回流到 ①，於是同一件事在看板和 repo 各有一套說法。`【自律】`
+**違反：**出現第二份真相。直接改 ③ 的內容會在下一次投影時被擋下或被 ① 整份覆蓋，改動連同改它的理由一起消失；在 ② 上另寫規則則永遠不會回流到 ①，於是同一件事在看板和 repo 各有一套說法。`【自律】`
 
 ### 永久文件 vs 一次性意圖紀錄（MYL-36 增訂）
 
@@ -319,7 +319,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 - 每次 push 後在對應工單留言記錄分支、commit hash 與遠端；P2 另附發佈證據
   （過濾清單、公開 repo commit、站台 URL）。
 - 凡動到 `docs/handbook/` 的工單，結案自檢加一項：變更合併進 main 後，
-  依下方「手冊發佈審查」流程同步公開鏡像（P2）。
+  依下方「手冊發佈審查」流程同步主閱讀面（P2）；要不要順帶發一版精裝站是使用者的決定（`V1`）。
 - 🔓 本節授權依 MYL-23 提案經使用者核可生效（2026-09-03，確認卡
   `confirmation:MYL-23:git-flow-proposal:309758d`；與全域 CLAUDE.md 同步，比照 MYL-10
   模式）；收回或收緊授權時，本節與全域 CLAUDE.md 對應條款**兩處一起改**，不得只改一處。
@@ -341,24 +341,34 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 **違反：**pre-commit 直接擋下 commit，`make check` 的 `handbook-stamp` 也會紅。本條因此從 MYL-40 標記表上的 `【自律】` 轉為機械攔截，是那張表第一個被轉換的條目。但機械擋得住的只有「本檔改了而手冊完全沒動」與「戳記落後」兩件事，**擋不住「戳記推了、內容其實沒對照過」**——那一步仍歸層 2 的判斷，差別只在它現在會留下一道 diff 上的痕跡，事後查得出是誰在哪一顆 commit 說自己看過了。`【機械】`
 
-### 手冊發佈審查（MYL-24 增訂）
+### 手冊發佈審查（MYL-24 增訂，MYL-55 補第五步）
 
-動到 `docs/handbook/` 的工單，結案前依序做完四步；**沒有使用者介入點**——P2 的拍板者是執行者本人（第 9 節分級表），使用者只在結案留言收摘要。
+動到 `docs/handbook/` 的工單，結案前依序做完**前四步**；那四步**沒有使用者介入點**——P2 的拍板者是執行者本人（第 9 節分級表），使用者只在結案留言收摘要。第五步是可選的版本發佈，**只有它需要使用者**。
 
 1. **合併進 main**：手冊變更合併回 main 並 push（P1）。沒合併就發佈＝把只存在於工作分支的內容推上公開站。
-2. **寫審查記錄**：用 `templates/publish-review.md` 建 `docs/publish-reviews/<工單編號>.md`，逐項自檢 P2 三前提（來源已合併進 main／範圍僅限 `docs/handbook/`／私有連結過濾無異常）＋公開適切性（機敏資訊、內部路徑、連結可達性）。三前提全成立才填 `verdict: APPROVED`。
+2. **寫審查記錄**：用 `templates/publish-review.md` 建 `docs/publish-reviews/<工單編號>.md`，逐項自檢 P2 三前提（來源已合併進 main／範圍僅限 `docs/handbook/`／私有連結改寫輸出無異常）＋公開適切性（機敏資訊、內部路徑、連結可達性）。三前提全成立才填 `verdict: APPROVED`。
 3. **commit 審查記錄**：`handbook_commit` 欄填 `git log -1 --format=%H -- docs/handbook` 的完整 sha。
-4. **執行 `scripts/publish-handbook.sh`**：腳本的證據閘門會核對記錄，通過才 push。
+4. **同步主閱讀面**：執行 `docs.primary` 指到的那個投影（本 repo＝`bash scripts/publish-wiki.sh`）。腳本的證據閘門會核對記錄，通過才 push。**P2，執行者自行**。
+5. **（可選）發一版精裝站**：`docs.mirror_site.trigger: tag` 時，打 `handbook-v<N>` tag 並 push，CI 用 `mike` 建出帶版本選擇器的 Pages 站。**這一步是使用者專屬**，見下方 `V1`。
 
 規則：
 
 - **審查者就是執行者本人**，不另設 Code Reviewer／Tech Lead 前置審查（MYL-23 分級表 P2 明定「無事前審查——內容已經該單既有審查鏈把關」）；巡檢兜底歸 Scrum Master。
 - **閘門綁 commit sha，不綁工單號**：審查通過後又改了手冊，舊記錄自動失效，必須重新自檢並更新 `handbook_commit`。想繞過閘門直接跑腳本會被拒跑。
-- **戳記-only 的手冊 diff 免寫獨立審查記錄，但照樣發佈**（MYL-44 增訂）：若 `git diff ⟨上次已核可的 handbook_commit⟩..HEAD -- docs/handbook/` 的所有變更行都符合戳記正則，`scripts/publish-handbook.sh` 放行，並在輸出印出被略過審查的戳記 commit 清單。條件由 `git diff` 機械判定，是**封閉的洞、不是人治例外**：夾帶任何一行實質內容就落回上面的閘門、`exit 1`。沒有這條旁路的話，戳記-only 的 commit 會換掉手冊 sha、找不到對應的 APPROVED 記錄，公開站會被自己的閘門鎖在舊版——那正是同步戳記要避免的事。
-- 自檢有任一前提不成立 → 不要建 APPROVED 記錄，也不要跑腳本；工單結案留言註明「公開鏡像未同步」與原因（見第 2 節 `done`）。
-- 發佈範圍或過濾規則本身要改（不只是同步內容），那是 **P3**，發卡問使用者。
+- **戳記-only 的手冊 diff 免寫獨立審查記錄，但照樣發佈**（MYL-44 增訂）：若 `git diff ⟨上次已核可的 handbook_commit⟩..HEAD -- docs/handbook/` 的所有變更行都符合戳記正則，`scripts/lib/publish-gate.sh` 放行，並在輸出印出被略過審查的戳記 commit 清單。條件由 `git diff` 機械判定，是**封閉的洞、不是人治例外**：夾帶任何一行實質內容就落回上面的閘門、`exit 1`。沒有這條旁路的話，戳記-only 的 commit 會換掉手冊 sha、找不到對應的 APPROVED 記錄，公開站會被自己的閘門鎖在舊版——那正是同步戳記要避免的事。
+- 自檢有任一前提不成立 → 不要建 APPROVED 記錄，也不要跑腳本；工單結案留言註明「主閱讀面未同步」與原因（見第 2 節 `done`）。
+- 發佈範圍或過濾規則本身要改（不只是同步內容），那是 **P3**，發卡問使用者。新開一個目標面（啟用 wiki、開 Pages、新建公開 repo）另屬關卡 C。
 
-**違反：**`scripts/publish-handbook.sh` 的證據閘門會拒跑——找不到對應這版手冊 sha 的 `APPROVED` 記錄、或 `handbook_commit` 與 `git log -1 -- docs/handbook` 對不上，都直接擋下，公開站停在舊版。**這是本文少數真的擋得住的規則之一**；但閘門只管「有沒有跑腳本」，繞過腳本手動推公開 repo 它攔不到，那條路的後果是公開站與 repo 不一致而無人察覺。`【機械】`
+**違反：**兩支投影腳本共用的 `scripts/lib/publish-gate.sh` 會拒跑——找不到對應這版手冊 sha 的 `APPROVED` 記錄、或 `handbook_commit` 與 `git log -1 -- docs/handbook` 對不上，都直接擋下，公開面停在舊版。**這是本文少數真的擋得住的規則之一**；但閘門只管「有沒有跑腳本」，繞過腳本手動推公開面它攔不到，那條路的後果是公開面與 repo 不一致而無人察覺。`【機械】`
+
+### 手冊版本 tag（MYL-55 增訂）
+
+精裝站（`.foundry/config.yml` 的 `docs.mirror_site`）**打 tag 才發**。手冊因此第一次有了「我讀的是哪一版規則」：`mike` 把每個版本各自留在 Pages 上，站台有版本選擇器，舊版不會被新版蓋掉。
+
+- `V1` **tag 規範與時機**：tag 名為 `handbook-v<N>`，**只標手冊版本、不動 repo 全域版本號**；且必須在該版手冊的發佈審查 `verdict: APPROVED` **之後**才打——先打 tag 等於發佈一個還沒過審的版本，而版本一旦上站就有人引用得到。打 tag 與 push tag 屬第 9 節分級表「push main、force-push、**tag 發佈**」那一列，**使用者專屬、逐次同意，無常設授權**；agent 不得自行 `git tag` 後 push。
+- `V2` **開關要真的關得掉**：`docs.mirror_site.enabled: false` 時，**即使打了符合 `tag_pattern` 的 tag 也不發佈**。判斷的權威是設定檔，不是 CI workflow 的 `on: push: tags:`——後者是寫死的靜態 glob，改 `tag_pattern` 不會讓它跟著變，所以它只是粗篩。實作在 `tools/publish-docs/site_docs.py` 的 `mirror_site_decision()`，由 CI 的 `gate` job 呼叫；`enabled` 不是 true 時 `deploy` job 整個不跑。
+
+**違反：**`V1` 沒有機械後盾中的「時機」那半——CI 不知道審查是哪一天過的，它只核對 tag 指到的那份手冊有沒有對應的 APPROVED 記錄（`publish-gate.sh`），所以「審查前就先打 tag」擋得住的前提是那時還沒寫審查記錄；審查記錄先寫好、tag 晚一點才打則本來就合規。真正擋不住的是 agent 自己 `git tag` 再 push——沒有任何 hook 攔 tag push，那條線純靠自律，而它的後果是使用者沒同意過的版本出現在公開站上。`V2` 有完整機械後盾（`gate` job ＋ `test_site_docs.py` 的反例測試）。`【自律】`＋`【機械】`
 
 ### push：跨平台專案的權限設定（MYL-9／MYL-27 增訂）
 
@@ -503,7 +513,7 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 | 級別 | 動作範圍 | 拍板者 | 審查者與審查內容 | 證據要求 |
 | --- | --- | --- | --- | --- |
 | `P1` **私有例行推送** | 私有 repo（現為 agent-foundry）：push 既有分支新 commit、推送工單分支、刪除**已合併**的遠端工單分支 | 執行者本人（MYL-23 核可＝常設授權） | 無事前審查——內容已經該單既有審查鏈把關；Scrum Master 巡檢兜底 | 工單留言／交接包記明分支與 commit hash |
-| `P2` **既有公開管道發佈** | 使用者已核可建立的公開管道之**內容同步**：現為 `scripts/publish-handbook.sh`（推 foundry-handbook main ＋ gh-pages） | 執行者本人，須前提全數成立：(1) 來源變更已合併進私有 main；(2) 同步範圍僅限既定目錄（`docs/handbook/`）；(3) 私有連結過濾輸出檢查無異常 | 執行 agent 逐項自檢前提，結果寫入 `docs/publish-reviews/<工單編號>.md`（MYL-24，流程見第 7 節「手冊發佈審查」）；Scrum Master 巡檢兜底 | 審查記錄路徑＋工單留言附：過濾清單輸出、公開 repo commit hash、站台 URL |
+| `P2` **既有公開管道發佈** | 使用者已核可建立的公開管道之**內容同步**：現為 `scripts/publish-wiki.sh`（主閱讀面 wiki）。精裝站 `scripts/publish-site.sh` 只在 CI 由 tag 觸發，而打 tag 是 `P3`（見 `V1`） | 執行者本人，須前提全數成立：(1) 來源變更已合併進私有 main；(2) 同步範圍僅限既定目錄（`docs/handbook/`）；(3) 連結改寫輸出與逐章比對無異常 | 執行 agent 逐項自檢前提，結果寫入 `docs/publish-reviews/<工單編號>.md`（MYL-24，流程見第 7 節「手冊發佈審查」）；Scrum Master 巡檢兜底 | 審查記錄路徑＋工單留言附：逐章比對表、投影 commit hash、閱讀面 URL |
 | `P3` **使用者專屬** | 新開公開資源（public repo／網站／套件／網域）、擴大公開同步範圍（動 P2 的過濾規則或來源目錄）、force push／改遠端歷史、刪除遠端 repo 或未合併分支、任何涉費用的動作 | **使用者**，逐次發卡當下同意 | 發卡列明動作、影響、回退方式 | 互動卡核可紀錄 |
 
 護欄：
@@ -550,6 +560,7 @@ Context 是**有限且共用**的資源：載進來的每一段都排擠了後�
 | `P1`～`P3` | push 權限分級 | 第 7、9 節 |
 | `M1`～`M6` | 模型升級規則（`M1`～`M3`）與供應商路由（`M4`～`M6`） | 第 8 節 |
 | `C1`～`C5` | 上下文預算與減法原則 | 第 10 節 |
+| `V1`／`V2` | 手冊版本 tag 與精裝站開關 | 第 7 節 |
 
 規則：
 

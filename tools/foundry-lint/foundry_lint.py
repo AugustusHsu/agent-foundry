@@ -347,11 +347,20 @@ def check_entry_sync(root: Path) -> SelfcheckResult:
 
 
 def check_nav_sync(root: Path) -> SelfcheckResult:
-    """手冊章節檔、mkdocs.yml nav、發佈腳本內嵌 nav 三者必須一致。
+    """手冊章節檔與 `mkdocs.yml` 的 nav 必須一致，且全 repo 只有這一份手寫 nav。
 
-    腳本內嵌的是**第二份** mkdocs.yml；只改一份會讓公開站漏章（MYL-31）。
+    本項的形狀在 MYL-55 換過一次。原本比的是**三者**：磁碟章節數、`mkdocs.yml`、
+    `scripts/publish-handbook.sh` 內嵌的第二份 heredoc mkdocs.yml——因為當時公開
+    鏡像站真的另外維護一份 nav，只改一份就會讓公開站漏章（MYL-31 踩過）。
+
+    精裝站搬回本 repo 之後那份 heredoc 不存在了：站台的 `mkdocs.yml` 由
+    `tools/publish-docs/site_docs.py` **轉寫**私有這一份（wiki 側欄同樣是轉寫）。
+    於是這一項要守的東西也跟著換：不再是「兩份要一致」，而是
+    **「不准再出現第二份」**——所以下面除了比對磁碟與 nav，還掃 `scripts/` 與
+    `.github/workflows/` 有沒有人又在腳本裡內嵌一份 nav。少了這道守衛，這項檢查
+    會退化成「nav 對得上磁碟」，而漂移是從「有人另寫一份」開始的，不是從對不上開始的。
     """
-    res = SelfcheckResult("nav-sync", "手冊章節與兩份 nav 一致")
+    res = SelfcheckResult("nav-sync", "手冊章節與 nav 一致（且只有一份手寫 nav）")
     handbook = root / "docs" / "handbook"
     if not handbook.is_dir():
         res.failures.append("docs/handbook/ 不存在")
@@ -366,35 +375,38 @@ def check_nav_sync(root: Path) -> SelfcheckResult:
     else:
         res.failures.append("mkdocs.yml 不存在")
 
-    script = root / "scripts" / "publish-handbook.sh"
-    in_script = set()
-    if script.exists():
-        text = read_text(script)
-        marker = 'cat > "$WORK/repo/mkdocs.yml" <<YMLEOF'
-        if marker in text:
-            block = text[text.index(marker) :]
-            end = block.find("\nYMLEOF")
-            in_script = set(CHAPTER_FILE_RE.findall(block[: end if end > 0 else None]))
-        else:
+    if in_mkdocs:
+        for missing in sorted(on_disk - in_mkdocs):
             res.failures.append(
-                f"scripts/publish-handbook.sh 找不到內嵌 mkdocs.yml 區塊標記：{marker}"
+                f"mkdocs.yml 的 nav 沒有 {missing}"
+                "——手冊有這一章但 nav 漏了，站台與 wiki 側欄都會看不到"
             )
-    else:
-        res.failures.append("scripts/publish-handbook.sh 不存在")
+        for extra in sorted(in_mkdocs - on_disk):
+            res.failures.append(
+                f"mkdocs.yml 的 nav 指向不存在的章節 {extra}——檔案已刪或改名，nav 沒跟上"
+            )
 
-    for label, found in (("mkdocs.yml", in_mkdocs), ("publish-handbook.sh 內嵌 nav", in_script)):
-        if not found:
-            continue
-        for missing in sorted(on_disk - found):
+    for rel in sorted(_nav_scan_targets(root)):
+        text = read_text(root / rel)
+        if "nav:" in text and CHAPTER_FILE_RE.search(text):
             res.failures.append(
-                f"{label} 的 nav 沒有 {missing}——手冊有這一章但該 nav 漏了，公開站會看不到"
+                f"{rel} 裡出現第二份 nav（同時含 `nav:` 與手冊章節檔名）"
+                "——投影用的 nav 一律轉寫 mkdocs.yml，不要再手寫一份"
+                "（known-drift「兩份 nav 的結構性漂移」）"
             )
-        for extra in sorted(found - on_disk):
-            res.failures.append(
-                f"{label} 的 nav 指向不存在的章節 {extra}——檔案已刪或改名，nav 沒跟上"
-            )
+
     res.summary += f"（章節 {len(on_disk)} 篇）"
     return res
+
+
+def _nav_scan_targets(root: Path) -> list:
+    """會被掃「有沒有內嵌第二份 nav」的檔案清單（repo 相對路徑）。"""
+    targets = []
+    for sub, pattern in (("scripts", "*.sh"), (".github/workflows", "*.yml")):
+        base = root / sub
+        if base.is_dir():
+            targets.extend(p.relative_to(root) for p in base.rglob(pattern))
+    return targets
 
 
 def check_handbook_anchors(root: Path) -> SelfcheckResult:

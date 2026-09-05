@@ -72,7 +72,7 @@ agent-foundry/
 ├─ tools/model-routing/     # 供應商盤點腳本（哪幾家 CLI 真的可用）
 ├─ tools/browser-probe/     # 瀏覽器能力盤點腳本（L0～L3 判級）
 ├─ .mcp.json ＋ .claude/settings.json  # 瀏覽器 MCP 的宣告與放行（見下方 §5 第三把鑰匙）
-└─ scripts/publish-handbook.sh  # 手冊 → 公開鏡像（P2 常設授權）
+└─ scripts/publish-wiki.sh ＋ publish-site.sh  # publish_docs 的兩個目標面（wiki／精裝站）
 ```
 
 ## 4. Context 預算（protocol 第 10 節 `C1`～`C5`）
@@ -93,6 +93,7 @@ agent-foundry/
 | `skills/foundry-adopt/SKILL.md` | 只在導入既有專案時讀，讀當前模組那一節即可 |
 | `skills/foundry-browser/SKILL.md` | 只在要驗畫面時讀；先 `make browser` 判級，再讀對應層級那一節 |
 | `docs/pilot/pilot-log.md` | 歷史紀錄，除非要查典故否則不必讀 |
+| `docs/handbook/07-workflows.md` | 八條固定 workflow 的索引。要查某條流程「什麼時候啟動、規則本體在哪」時讀該條那一節即可 |
 | `skills/foundry-init/SKILL.md` | 只在導入全新專案時讀 |
 | `skills/foundry-platform/adapters/github.md` | 兩種用途各佔一半：`platform: github` 的動詞對照，與「鏡像模式」規格。要哪一個讀哪一節 |
 | `skills/foundry-platform/SKILL.md` | 9 個動詞的介面定義。只讀你要用的那個動詞那一節；§5 的「全覆蓋」裁定只在新增平台或新增文檔目標面時才需要 |
@@ -147,11 +148,12 @@ mkdocs serve
 ## 7. 手冊改動的額外義務
 
 動到 `docs/handbook/` 的工單，結案前必須走完 protocol 第 7 節「手冊發佈審查」四步：
-**合併進 main → 用 `templates/publish-review.md` 寫審查記錄 → commit（`handbook_commit` 填實際 sha）→ 跑 `scripts/publish-handbook.sh`**。
-腳本有證據閘門會核對記錄，繞不過去。這一段**沒有使用者介入點**（P2 常設授權），但漏做就是公開站與 repo 不一致。
+**合併進 main → 用 `templates/publish-review.md` 寫審查記錄 → commit（`handbook_commit` 填實際 sha）→ 同步主閱讀面（`scripts/publish-wiki.sh`）**。
+腳本有證據閘門會核對記錄，繞不過去。這一段**沒有使用者介入點**（P2 常設授權），但漏做就是公開面與 repo 不一致。
+還有可選的第五步：打 `handbook-v<N>` tag 發一版精裝站（`V1`）——**那一步是使用者專屬**，agent 不得自行 tag，也不是結案條件。
 
-⚠️ 新增手冊章節時要改**兩份 nav**：`mkdocs.yml` 與 `scripts/publish-handbook.sh` 內嵌的那份。
-只改一份會導致公開站漏章（known-drift 已記錄此結構性漂移，`--selfcheck` 會擋）。
+⚠️ 新增手冊章節只要改 `mkdocs.yml` 一份 nav——wiki 側欄與精裝站的 nav 都是**轉寫**它（MYL-55 收掉了第二份）。
+反過來，**不要再在腳本裡手寫第三份**：`--selfcheck` 的 `nav-sync` 會掃 `scripts/` 與 `.github/workflows/` 把它擋下。
 
 反方向也有一條（MYL-44）：**動到 protocol 的工單要同步手冊**。`03`／`04`／`06`／`07`
 四章各掛一行「最後對照 protocol」戳記，pre-commit 在「改了 protocol 卻沒動手冊」時擋下，

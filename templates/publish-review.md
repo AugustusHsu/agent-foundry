@@ -10,8 +10,8 @@ reviewed_at: {YYYY-MM-DD}
 
 > 由手冊變更工單的執行者自己撰寫（MYL-23 分級表 P2：拍板者＝執行者本人，
 > 審查內容＝逐項自檢前提，Scrum Master 巡檢兜底）。存檔於
-> `docs/publish-reviews/<工單編號>.md`，commit 後 `scripts/publish-handbook.sh`
-> 才會放行。每個欄位下的引導文字填寫時整段刪除。
+> `docs/publish-reviews/<工單編號>.md`，commit 後投影腳本（`publish-wiki.sh`／
+> `publish-site.sh`，共用 `scripts/lib/publish-gate.sh`）才會放行。每個欄位下的引導文字填寫時整段刪除。
 >
 > **frontmatter 是給腳本讀的，格式不可改**：
 > - `verdict` 必須是 `APPROVED` 才放行（未通過就填 `CHANGES REQUESTED`，或先不要建這個檔）。

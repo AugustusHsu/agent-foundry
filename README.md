@@ -30,7 +30,8 @@ agent-foundry/
 │  ├─ features/<模組>/           # 各功能模組的需求與設計文件
 │  └─ publish-reviews/           # 手冊發佈審查記錄(發佈閘門的證據,綁 commit sha)
 ├─ tools/foundry-lint/           # 文件檢查器＋repo 規範自檢
-├─ scripts/publish-handbook.sh   # 手冊 → 公開鏡像
+├─ scripts/publish-wiki.sh       # 手冊 → wiki(主閱讀面)
+├─ scripts/publish-site.sh       # 手冊 → 版本化 Pages(精裝站,CI 由 tag 觸發)
 ├─ .pre-commit-config.yaml       # 機械層閘門
 ├─ Makefile                      # 單一指令入口(make help)
 └─ mkdocs.yml                    # MkDocs Material 設定
@@ -75,10 +76,14 @@ Skill 以 **`sourceType: local_path` 參照式安裝**:Paperclip 記的是這個
 
 - 手冊與設計文件以 Markdown 放在 `docs/`,GitHub 會直接渲染,可線上閱讀。
 - 想看網站版:本機執行 `pip install mkdocs-material && make serve`。
-- **手冊已發佈為公開站**:<https://augustushsu.github.io/foundry-handbook/>。
-  同步流程見 protocol 第 7 節「手冊發佈審查」四步——動到 `docs/handbook/` 的工單,
-  結案前必須走完,由 `scripts/publish-handbook.sh` 的證據閘門把關。
-  只有 `docs/handbook/` 會上公開站,其餘目錄(含 `docs/standards/`)留在私有 repo。
+- **手冊有兩個對外閱讀面**:主閱讀面是本 repo 的 wiki(手冊變更合併進 main 後同步);
+  精裝站是版本化的 GitHub Pages,**打 `handbook-v*` tag 才由 CI 發佈**,站上同時留住
+  `v1`、`v2`…與 `latest`。舊網址 <https://augustushsu.github.io/foundry-handbook/>
+  是搬家前的公開鏡像(MYL-55 起改為轉址)。
+  同步流程見 protocol 第 7 節「手冊發佈審查」——動到 `docs/handbook/` 的工單,
+  結案前必須走完前四步,由 `scripts/lib/publish-gate.sh` 的證據閘門把關;
+  第五步(打 tag 發一版)是使用者專屬。
+  只有 `docs/handbook/` 會上對外閱讀面,其餘目錄(含 `docs/standards/`)留在 repo 內。
 
 ## 文檔權威階序
 

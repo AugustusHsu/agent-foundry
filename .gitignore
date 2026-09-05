@@ -23,3 +23,6 @@ Thumbs.db
 # 環境與密鑰
 .env
 *.env
+
+# 手冊精裝站的建置工作區（scripts/publish-site.sh 產生，機械投影不進版控）
+.site-build/

@@ -34,6 +34,7 @@
 | L14 | 從「repo 是 public」推論「掛在它上面的 Projects v2 看板也是 public」 | **推論不成立**。Projects v2 是帳號層物件，可見性與 repo 各自獨立；MYL-48 兩次「以為開了窗口」都栽在這裡 | 判定可見性**只能用登出瀏覽器實跑**，不要看設定畫面、也不要從 repo 可見性推。登出態的自我證明手法：頁首出現 `Sign in`／`Sign up`（`ref_loc=header+logged+out`）即排除「其實還登著」的假陽性；看板為 private 時同一網址回 404，該 404 同時證明 private 與登出兩件事。同一個根源還有另一個表現：**v2 看板只屬於帳號、不屬於 repo**，建好不會自動掛上去，要另外 `gh project link`；要確認掛上了沒有，查 GraphQL 的 `repository.projectsV2` 而不是 REST 的 `has_projects`（MYL-57 實測）。（2026-09-05 MYL-48 實測） |
 | L15 | `has_wiki: true` 之後直接 clone／push `<repo>.wiki.git`，期望 wiki repo 已經存在 | 兩邊都 `Repository not found`（clone 與 push 皆是）。**啟用 wiki 只是開開關，wiki 的 git repo 要等第一頁建立才成形**，而建第一頁**只有 UI 有入口**：REST 的 `repos/{o}/{r}/wiki` 是 404，GraphQL 沒有 wiki mutation，push 也不會把它生出來 | 依 `H6` 發卡請使用者在 `https://github.com/<o>/<r>/wiki/_new` 建任意一頁（內容隨意，下次投影會覆蓋），之後腳本才跑得動。⚠️ **不要把這個 `Repository not found` 讀成權限問題**：同一把 ssh 金鑰對主 repo `ls-remote` 正常，那個對照組就是「不是認證問題」的證明——沒跑對照組的話，這裡很容易被誤診成 token scope 不足而去換認證方式重試。（2026-09-05 MYL-52 實測：`has_wiki` 由 false 改 true 之後立即測，clone／push／REST 三條路全試過） |
 | L16 | 以為手冊裡的頁內錨點（`[主開發流程鏈](#1)`）投影到 wiki 之後照樣能跳，於是把投影的錨點改寫當成多餘的一步簡化掉 | **兩邊的 slug 演算法不同，而且失敗是無聲的**。手冊原文的 `#1`／`#3-hitl` 是寫給 mkdocs（Python-Markdown）的：它的 slugify 走 NFKD → ASCII，**中文整段被吃掉**，於是 `## 1. 主開發流程鏈` 的 id 就只剩 `1`。GitHub（wiki 與 repo blob 兩邊）**保留中文**，同一個標題算出來是 `1-主開發流程鏈`。錨點對不上時頁面照常渲染、連結照常可按，**只是按了不會跳**——沒有 404、沒有紅字、沒有任何一支 lint 會叫 | 投影**必須**依目標面的演算法重算錨點（`project_docs.github_slug()`／`github_anchors()` 就是幹這件事的），不能原樣搬。⚠️ **本機驗不了這件事**（見 `X4` 沒有渲染器），唯一算數的證據是抓實站渲染出來的 `id="user-content-…"` 來比對。2026-09-05 MYL-52 實測全綠：9 頁全取得、44 條內部連結目標頁存在、**9 個錨點全部在實站 id 集合裡找得到**，證明 `github_slug()` 與 GitHub 真實演算法一致（含 `## 3. HITL 發卡` → `3-hitl-發卡` 這種中英混排）。⇒ 改動投影的連結改寫邏輯後，**要重跑一次實站比對才算驗過**，本機測試全綠不構成證據 |
+| L17 | 對一個還沒有 `gh-pages` 分支的 repo，先去 Settings → Pages 想把來源設成 `gh-pages` | **選單裡沒有那個分支**。Pages 的來源分支下拉只列得出已存在的分支，而 `gh-pages` 要等第一次 `mike deploy`／`gh-deploy` 推上去才存在 | 順序反過來：**先讓 CI 跑一次**（打 `handbook-v*` tag；此時站台仍 404，那是正常的）→ 分支建出來 → **再開 Pages 選 `gh-pages` / root**。⚠️ 這與 wiki 的 `L15` 是**同一種形狀的不同方向**：`L15` 是「開了開關但 repo 還沒成形」，本條是「東西還沒成形所以開關選不到」。兩條共通的教訓是**「開通對外面」往往是兩步，發卡時要一次講完**，只問第一步會讓使用者以為按完就結束。（2026-09-05 MYL-55：`repos/AugustusHsu/agent-foundry/pages` 實測 404、repo 只有 `main` 一條分支） |
 
 ## 2. API 形狀陷阱：會回 4xx 但錯誤訊息不會告訴你原因
 
@@ -152,18 +153,23 @@
     2. 要 commit 就**開自己的 linked worktree**：`git --git-dir=<repo>/.git worktree add "$PAPERCLIP_RUN_SCRATCH_DIR/wt-<單號>" <分支>`，把工作區檔案複製過去，在那裡跑 `make check` 與 commit。分支與 ref 是共用的，commit 一樣進得了本 repo。
   → commit 時**顯式帶身分**（`git -c user.name=… -c user.email=… commit`），否則會用到別人留在 repo config 裡的測試身分。這一條與 `X1` 是同一類問題的兩種形態：`X1` 是 HEAD 被換掉，`X6` 是 config 被換掉。
 
-### 兩份 nav 的結構性漂移
+### 兩份 nav 的結構性漂移 — **已收斂（2026-09-05，MYL-55）**
 
-`mkdocs.yml`（私有站）與 `scripts/publish-handbook.sh` 內嵌的 heredoc `mkdocs.yml`（公開鏡像）是**兩份各自維護的 nav**。新增手冊章節時只改一份，公開站就會漏章——MYL-31 踩過這一類。
+**歷史**：`mkdocs.yml`（私有站）與 `scripts/publish-handbook.sh` 內嵌的 heredoc `mkdocs.yml`
+（公開鏡像）曾是**兩份各自維護的 nav**。新增手冊章節時只改一份，公開站就會漏章——MYL-31 踩過這一類。
+當時以 `foundry-lint --selfcheck` 機械比對三者（磁碟章節數／私有 nav／腳本內嵌 nav）擋住，
+並記下「根治要讓腳本轉寫私有 `mkdocs.yml` 而非另寫一份」。
 
-短期以 `foundry-lint --selfcheck` 機械比對三者（磁碟章節數／私有 nav／腳本內嵌 nav）擋住；
-根治要讓腳本改為轉寫私有 `mkdocs.yml` 而非另寫一份，屬獨立工單範疇。
+**收斂經過**：MYL-52 讓 wiki 側欄（`_Sidebar.md`）由 `tools/publish-docs/project_docs.py`
+轉寫私有 nav 產生（第三個閱讀面沒有再加一份手寫 nav）；MYL-55 把精裝站搬回本 repo，
+`publish-handbook.sh` 連同它的 heredoc 一起刪除，站台的 `mkdocs.yml` 改由
+`tools/publish-docs/site_docs.py` 轉寫。**現況是一份手寫 ＋ 兩份轉寫。**
 
-**2026-09-05（MYL-52）補充：新增的第三個閱讀面沒有再加一份 nav。** wiki 的側欄
-（`_Sidebar.md`）由 `tools/publish-docs/project_docs.py` **轉寫私有 `mkdocs.yml` 的 nav**
-產生，正是上面那句「根治」的做法。`publish-handbook.sh` 的內嵌 heredoc **維持原樣未動**
-——改它會連動 `check_nav_sync` 綁定的區塊標記，不在該單範圍。所以現況是：
-**兩份手寫 nav ＋ 一份轉寫的**，漂移面沒有擴大，但也還沒收斂。
+**條目保留的理由不是懷舊，是那道機械閘門換了形狀**：`check_nav_sync` 不再比對「兩份要一致」
+（沒有第二份可比了），改成守 **「不准再出現第二份」**——掃 `scripts/` 與 `.github/workflows/`，
+同時出現 `nav:` 與手冊章節檔名就擋下。理由是漂移是從「有人另寫一份」開始的，
+不是從「兩份對不上」開始的；只比對一致性的話，這項檢查會隨第二份消失而退化成恆真。
+⇒ **要投影出新的閱讀面時，nav 一律轉寫 `mkdocs.yml`**，不要手寫。
 
 ---
 
