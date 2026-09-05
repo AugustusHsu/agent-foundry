@@ -8,7 +8,8 @@
 .foundry/board/
 ├── issues/          一單一檔：<ID>.md（frontmatter 存狀態欄位，body 存內容與留言）
 ├── milestones.md    全部里程碑，單一檔
-└── views/           預存查詢定義＋最近一次快照：board.md、table.md、roadmap.md
+├── views/           預存查詢定義＋最近一次快照：board.md、table.md、roadmap.md
+└── roster.md        選配：誰扮演哪個角色（見末節「組織層」；不由 init_structure 建）
 ```
 
 ## 資料格式
@@ -144,3 +145,44 @@ generated: 2026-09-03
 - `parent`（把 `<ID>` 掛為 `<P>` 的子單）：改 `issues/<ID>.md` frontmatter 的 `parent: <P>`。`<P>` 檔不存在則報錯。
 - `blocked_by`（標記 `<ID>` 被 `<B>` 阻塞）：把 `<B>` 加進 `issues/<ID>.md` frontmatter 的 `blocked_by` 清單（已在則冪等跳過）。`<B>` 檔不存在則報錯。
 - **查證**：重讀 frontmatter，關聯欄位正確；反向查詢用 `list_issues` 逐檔比對 `parent`／`blocked_by` 欄位即可，不另存反向索引（單一真實來源）。
+
+## 組織層：`provision_team` 在本軸不適用
+
+`provision_team`（`../SKILL.md` §8）由 `ai_platform` 分派，而 **`local-md` 不是 `ai_platform`
+的合法值**（枚舉是 `paperclip`｜`claude-code`｜`codex`，權威在 `../config-schema.md`）。
+本節**不是降級**——降級的前提是同一條軸上能力不足，這裡是根本不在這一軸。
+
+本 adapter 是**沒有 server** 的退路，所以組織層走到最底：三個落點裡只剩兩個，
+連 GitHub／GitLab 還有的 `CODEOWNERS` 都沒有（那是 git server 的功能，本 adapter 沒有 server）。
+
+| 落點 | 承載編制的哪一部分 | 怎麼做 |
+| --- | --- | --- |
+| 角色定義 | 每個角色的判準與產出要求 | `skills/roles/<id>/SKILL.md`，跟著 repo 走（規則層 100% 可攜） |
+| `role:*` label | 這張單「該由哪個角色做」 | 寫在 issue 檔 frontmatter 的 `labels`（`set_labels`） |
+| roster 對照表 | **誰扮演哪個角色** | `.foundry/board/roster.md`，見下 |
+
+### `roster.md`
+
+`org.yml` 沒有「這個角色**現在由誰扮演**」——在有 agent 註冊表的平台上那一欄就是 agent 本身，
+本 adapter 沒有註冊表，所以補一張表。與其他 adapter 同一個四欄形狀：
+
+```markdown
+# Roster
+
+| 角色 | 扮演者 | 自何時起 | 備註 |
+| --- | --- | --- | --- |
+| Tech Lead | 王小明 | 2026-01-01 | 同時扮演 Code Reviewer，`M4` 因此不成立 |
+```
+
+- 角色一欄逐字用 `org.yml` 的 `title`（對帳鍵同 `../SKILL.md` §8.2）。
+- **本檔不由 `init_structure` 建**：那個動詞只建執行層骨架，把編制也塞進去會讓「導入」
+  與「決定誰做什麼」變成同一步，而後者是人的決定。要用時手建即可。
+- `model_tier` 不轉寫過來——模型層綁的是 agent 的設定，人沒有這個欄位。
+- ⚠️ **會過期且沒有任何地方會報錯**：`--selfcheck` 的 `org-sync` 只比對 `org.yml` ↔
+  protocol 第 9／8 節，看不到本檔。維護觸發點只有交接的那一刻。
+
+### 硬約束（導入報告必須明列）
+
+本 adapter 連「指派」都只是改一個 frontmatter 欄位，**不會通知任何人、更不會喚醒任何東西**。
+上面三個落點加起來只約束得了人：`../../foundry-ai-platform/SKILL.md` 的 `AP-2`
+講的那件事，在組織層原封不動再發生一次。**不得靜默略過**。

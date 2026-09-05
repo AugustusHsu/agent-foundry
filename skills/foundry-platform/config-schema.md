@@ -12,7 +12,7 @@
 | --- | --- | --- | --- |
 | `foundry` | 整數 | ✅ | schema 版本，目前固定 `2`。讀取者遇到不認得的版本應停下報錯，不得猜著解析。 |
 | `devtools_platform` | 枚舉 | ✅ | `github`｜`gitlab`｜`local-md`｜`paperclip`。決定載入哪份 adapter 對照文檔（`adapters/<值>.md`）。再新增平台時在此補枚舉值。⚠️ `gitlab` 的 adapter 已全覆蓋八個執行層動詞，但**尚未在真的 GitLab 專案上實跑過**（見 `adapters/gitlab.md` 附錄 B），且 `foundry-init`／`foundry-adopt` 的平台問卡還沒納入它——現在填這個值等於自己走一次首跑驗證。 |
-| `ai_platform` | 枚舉 | ─ | `paperclip`｜`claude-code`｜`codex`。**agent 實際在哪個 AI 平台上執行與被喚醒**（MYL-61 卡 `00ded0b2` Q1）。**整段缺席＝未宣告**，同 `model_routing`／`docs` 的「缺席＝未啟用」——是預設狀態，不是設定缺漏。⚠️ **仍然沒有任何動詞依它分派**，也不會有 `adapters/` 跟它對應——軸 A 沒有動詞，它的形狀是能力矩陣不是介面（MYL-78）。**能力對照表、降級規則與誠實上限一律以 `skills/foundry-ai-platform/SKILL.md` 為準**；本欄只負責宣告值，枚舉權威留在這裡。 |
+| `ai_platform` | 枚舉 | ─ | `paperclip`｜`claude-code`｜`codex`。**agent 實際在哪個 AI 平台上執行與被喚醒**（MYL-61 卡 `00ded0b2` Q1）。**整段缺席＝未宣告**，同 `model_routing`／`docs` 的「缺席＝未啟用」——是預設狀態，不是設定缺漏。⚠️ **依本欄分派的動詞只有一個：`provision_team`**（`skills/foundry-platform/SKILL.md` §8，MYL-77 增訂）；它的平台對照寫在 `adapters/paperclip.md` 的同名節——**那是四份 adapter 裡唯一同時承載軸 A 的一份**，其餘三份在該節寫明「本軸不適用」。**除它以外軸 A 沒有動詞**：軸 A 的主要形狀仍是能力矩陣而不是介面（MYL-78），**能力對照表、降級規則與誠實上限一律以 `skills/foundry-ai-platform/SKILL.md` 為準**；本欄只負責宣告值，枚舉權威留在這裡。 |
 | `mirror_platform` | 枚舉 | ─ | 對外可見面的鏡像平台，值域同 `devtools_platform`（MYL-39）。語意：**執行與喚醒仍在 `devtools_platform`，工單另單向鏡像到此平台供外部閱讀**。**整段缺席＝不鏡像**，同 `model_routing` 的「缺席＝未啟用」——是預設狀態，不是設定缺漏。 |
 | `platform_options` | 物件 | ─ | adapter 專屬選項，鍵為平台名。省略時各 adapter 用下述預設值。 |
 | `gates` | 物件 | ✅ | 三個抽象關卡的核可設定（HLD §4）。 |
@@ -226,7 +226,7 @@ protocol 第 9 節的散文、`skills/roles/` 底下的角色 skill、以及在�
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
 | `foundry_org` | 整數 | ✅ | 本檔的 schema 版本，目前固定 `1`。與 `config.yml` 的 `foundry` **各自獨立**：兩份檔案的形狀不會一起變。讀取者遇到不認得的版本應停下報錯，不得猜著解析。 |
-| `ai_platform` | 枚舉 | ✅ | 這份組織宣告**在哪個軸 A 平台上實現**，值域同 `config.yml` 的同名欄位（`paperclip`｜`claude-code`｜`codex`，MYL-82 正名）。兩份檔案都寫時值必須一致（`org-sync` 比對）。**放在頂層不是每個角色一份**：一支團隊活在同一個 AI 平台上，混合編制沒有任何動詞支援得了。MYL-78 盤完軸 A 能力面後這一點沒有變——軸 A 依舊沒有動詞，`.foundry/org.yml` 依舊只是**宣告**而非把人建出來的指令（見 `foundry-ai-platform` §6「任何平台都做不到」），所以這裡仍然不開每角色一份的旋鈕。 |
+| `ai_platform` | 枚舉 | ✅ | 這份組織宣告**在哪個軸 A 平台上實現**，值域同 `config.yml` 的同名欄位（`paperclip`｜`claude-code`｜`codex`，MYL-82 正名）。兩份檔案都寫時值必須一致（`org-sync` 比對）。**放在頂層不是每個角色一份**：一支團隊活在同一個 AI 平台上，混合編制沒有任何動詞支援得了。MYL-77 給軸 A 補上 `provision_team`（`foundry-platform` §8）之後這一點更明確——那個動詞讀的就是本欄，一份 `org.yml` 只會被套到**一個** AI 平台上；每角色一份的旋鈕仍然不開。 |
 | `roles` | 序列 | ✅ | 角色宣告，順序建議照 protocol 第 9 節組織圖由上而下（只是可讀性，不影響判定）。 |
 
 每個 `roles` 項目：
@@ -251,7 +251,9 @@ protocol 第 9 節的散文、`skills/roles/` 底下的角色 skill、以及在�
 ⚠️ **寫入與稽核讀的不是同一組欄位**（本 repo 執行層實測）：設定時寫 `permissions.*`，
 但稽核要讀 `access.*` 與 `access.grants`——兩者可能給出相反的答案。所以本欄用 Foundry 級名稱
 宣告「應然」，平台欄位的對應寫在這張表與各平台 adapter，**不把平台欄位名寫進 `org.yml`**。
-真正把宣告套到平台上（含這組對應要怎麼驗）是抽象動詞 `provision_team` 的事，屬 MYL-77（T5）；
+真正把宣告套到平台上（含這組對應要怎麼驗）是軸 A 動詞 `provision_team` 的事，
+規格見 `SKILL.md` §8（MYL-77 定義），Paperclip 的指令對照見 `adapters/paperclip.md`
+的「provision_team」一節；**在平台上真的建出成員屬 MYL-79（T7）**。
 在那之前本檔只被 `org-sync` 讀。
 
 ### 誰能改 `org.yml`

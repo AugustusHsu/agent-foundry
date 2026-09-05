@@ -46,7 +46,8 @@ Foundry 把「文檔」拆成三層，各有各的載體與真實來源（SSOT�
 ⚠️ 這是**不相容變更**：舊設定檔裡的 `platform` 會被新的讀取者當成未知欄位丟掉，而必填的 `devtools_platform`
 不存在，整份設定就此非法。要升級只需改欄位名——但要改，不會自動相容。
 
-⚠️ `ai_platform` 這一欄**本身仍然只是宣告**：沒有任何動詞依它分派。但能力對照表已經有了（見下一節）。
+⚠️ 依 `ai_platform` 分派的動詞**只有一個**：`provision_team`（把 `.foundry/org.yml` 宣告的那支團隊在平台上建出來，
+MYL-77 增訂，只有 Paperclip 跑得動）。其餘的軸 A 差異不靠動詞吸收，靠能力對照表（見下一節）。
 
 規則本體：`skills/foundry-platform/`（介面 SKILL.md＋`adapters/github.md`＋`adapters/local-md.md`＋`config-schema.md`）。
 
@@ -69,8 +70,10 @@ Foundry 把「文檔」拆成三層，各有各的載體與真實來源（SSOT�
   二是**指派＝喚醒**：GitHub 的 issue 指派不會叫醒任何 agent，整套「交接鏈自動往下跑」建立在這一條上，
   這是目前最不可攜的一件事。
 
-還有一條誠實話：**「把團隊帶過去」目前任何平台都做不到。** `.foundry/org.yml` 是一份組織**宣告**，
-沒有動詞會依它到平台上把 agent 建出來——可攜的是那份宣告，不是那支團隊。
+還有一條誠實話：**「把團隊帶過去」只在 Paperclip 成立。** `.foundry/org.yml` 是一份組織**宣告**，
+把它變成一支真的存在的團隊要靠 `provision_team`（MYL-77 增訂），而這個動詞**只在有 agent 註冊表的平台上
+跑得動——軸 A 三個值裡只有 Paperclip 有**。換到 `claude-code`／`codex`，那份宣告一字不改仍然合法、檢查照樣綠，
+但它從那一刻起只是一份約束**人**的文件——**可攜的是那份宣告，不是那支團隊**。
 
 導入時不必自己查這張表：`foundry-init` 的初始化問答會問「agent 要跑在哪」，
 `foundry-adopt` 會盤點現況並問要不要對齊，兩者都會把落差與降級方式寫進報告。

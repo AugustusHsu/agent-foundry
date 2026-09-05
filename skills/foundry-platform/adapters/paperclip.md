@@ -176,6 +176,135 @@ curl -s -X PATCH "${AUTH[@]}" -d "$(jq -n --argjson c "$CUR" --arg b "<B>" \
 - 重複掛同一 blocker 因 `unique` 而冪等；`<P>`／`<B>` 不存在時 API 報錯，原樣回報、不代開新單。
 - **查證**：`GET /api/issues/<ID> | jq '{parent:.parentId, blockers:[.blockedBy[].identifier]}'`。
 
+## provision_team（軸 A：本檔的第二個身分）
+
+上面每一節都是 `devtools_platform: paperclip` 的**軸 B** 對照。本節不是——它是
+`ai_platform: paperclip` 時 `../SKILL.md` §8 的對照，**四份 adapter 裡唯一的軸 A 落點**。
+本 repo 兩個欄位恰好都是 `paperclip`，**那是巧合不是同義**：把本節讀成「執行層動詞之一」，
+在 `devtools_platform: github` ＋ `ai_platform: paperclip` 的專案上會整個錯位。
+
+前置條件、`AUTH` 陣列與佔位符沿用本檔開頭那一節；本節另用 `<AID>`＝agent UUID。
+
+### 前提（不齊就停下發卡，不自我授權）
+
+| 前提 | 怎麼查 | 不齊怎麼辦 |
+| --- | --- | --- |
+| 執行者持有 `canCreateAgents` | `GET /api/agents/me \| jq '.permissions.canCreateAgents'` | 發卡請使用者開；本 repo 依 MYL-61 卡 `f80e66b3` Q5 是**臨時**授權，用完收回 |
+| 使用者已核可這次建置 | 工單上的核可卡 | `H3`（要花錢）——每個成員各自燒模型額度。**`org.yml` 已經宣告不等於預算已經核可** |
+| `org.yml` 合法且 `org-sync` 綠 | `python3 tools/foundry-lint/foundry_lint.py --selfcheck` | 先修宣告，不要把歪掉的宣告放大成平台狀態 |
+
+### 步驟 0：對帳（先讀，後寫）
+
+```sh
+curl -s "${AUTH[@]}" "$PAPERCLIP_API_BASE/api/companies/<CID>/agents" \
+  | jq '[.[] | {id, name, title, role, reportsTo, status, permissions, access}]'
+```
+
+回傳是**裸陣列**（不是 `{agents:[…]}`）。拿它與 `org.yml` 的 `roles` 逐筆比對，分三堆。
+
+⚠️ **對帳鍵：`org.yml` 的 `title` ↔ 平台的 `name`，逐字比對，不做模糊配對。**
+兩邊的欄位名不同形，這是刻意的——`../config-schema.md` 明訂不把平台欄位名寫進 `org.yml`，
+所以這條對應關係只存在於本檔。**承載欄位是 `name` 而不是平台那個同樣叫 `title` 的欄位**，
+理由是 `../SKILL.md` §8.2 那條硬要求：對帳鍵得對每個成員都有定義。實測平台 schema
+（`POST /api/companies/{companyId}/agents`）**`required` 只有 `name`**（`minLength: 1`），
+`title` 是 `nullable: true` 的選填欄位——拿它當鍵，沒填的成員會同時被判成「缺」與「多」。
+
+⚠️ **平台的 `role` 欄位不是 Foundry 的角色**：它是平台自己的 12 值粗桶
+（`ceo｜cto｜cmo｜cfo｜security｜engineer｜designer｜pm｜qa｜devops｜researcher｜general`），
+多個 Foundry 角色會落在同一個值——實測本公司的 Tech Lead／Developer／Code Reviewer **三個都是 `engineer`**，
+Product Analyst 與 Scrum Master **都是 `pm`**。`role` 只影響平台 UI 分類，角色身分由 `name` 承載。
+
+⚠️ **同一個角色同時出現在「缺的」與「多出來的」兩堆＝對不上鍵，不是要建新的。**
+撞到就**停下報告**，不得在那個位置建第二個成員；由使用者裁定要改哪一邊——
+兩邊都不是 agent 能自己決定的（改 `org.yml` 的授權路徑見 `../config-schema.md`）。
+`name` 沒有平台層的唯一性保證，所以**同一個鍵配到多筆時同樣停下報告**，不得任挑一筆。
+
+**2026-09-06 全公司 8 名成員實測**（`org.yml` 宣告 9 個角色），差異共**三項**：
+
+| 宣告 `title` | 平台 `name`（對帳鍵） | 平台 `title`（顯示名） | 判定 |
+| --- | --- | --- | --- |
+| `CEO` | `CEO` | **`null`** | ✅ 對得上。**這一格就是不能拿平台 `title` 當鍵的證據**——它是樹根（`reports_to: user`），而 §8.2 要求由上而下建置，用 `title` 當鍵的話第一個動作就是在樹根建出第二個 CEO |
+| `Developer` | `Developer` | **`Developer（全端）`** | ✅ 對得上。顯示名與宣告不一致屬 §8.2 的**第五種差異**：只報告，不自動改 |
+| `PM` | （不存在） | （不存在） | 屬「缺的」那一堆，且是**預期的**——MYL-79／T7 才建 |
+
+其餘 6 個角色三欄一致，無差異。上表是**同一次實測的完整結果**，不是舉例。
+
+### 步驟 1：建立成員（缺的那一堆）
+
+```sh
+curl -s -X POST "${AUTH[@]}" -d "$(jq -n \
+  --arg t "<org.yml 的 title>" --arg sup "<上級的 AID>" \
+  '{name:$t, title:$t, role:"<平台 12 值之一>", reportsTo:$sup,
+    adapterType:"claude_local",
+    adapterConfig:{model:"<第 8 節對應的 model>", effort:"<對應的 effort>"},
+    permissions:{canCreateAgents:false, canCreateSkills:true}}')" \
+  "$PAPERCLIP_API_BASE/api/companies/<CID>/agents" | jq '{id,name,title,reportsTo}'
+```
+
+- **`name` 是唯一的必填欄位，而它就是對帳鍵**——`org.yml` 的 `title` 逐字填進 `name`，不得改寫、不得加括號說明。`title` 一併給是為了平台 UI 的顯示名，**它不參與對帳**（步驟 0 那張表的 `Developer（全端）` 就是兩者分岔的實例）。
+- **`reportsTo` 吃的是上級的 agent UUID**，所以**建置順序必須由上而下**：上級還不存在時這一格填不了。依 `org.yml` 的 `reports_to` 做一次拓樸排序再開始建，`reports_to: user` 的那個（＝CEO）是樹根。
+- **查證**：回傳的 `id` 即 `<AID>`；`GET /api/companies/<CID>/agents` 查得到該 `name`。
+
+### 步驟 2：權限
+
+```sh
+curl -s -X PATCH "${AUTH[@]}" \
+  -d '{"canCreateAgents":false,"canAssignTasks":true,"canCreateSkills":true}' \
+  "$PAPERCLIP_API_BASE/api/agents/<AID>/permissions"
+```
+
+- ⚠️ **端點是 PATCH，但 `canCreateAgents` 與 `canAssignTasks` 兩個欄位是必填**（平台 OpenAPI 的 `required`）。漏送不是「保持原值」而是整筆被拒 → 一樣要 **read-modify-write**，和 `labelIds` 同一個紀律。
+- ⚠️ **寫入與稽核讀的不是同一組欄位**：寫 `permissions.*`，但讀回來時 `canAssignTasks` **不在 `permissions` 底下**，在 `access.canAssignTasks`（旁邊還有 `taskAssignSource`、`membership`、`grants`）。兩組欄位可能給出相反的答案，**`canAssignTasks` 的稽核一律看 `access.*` ＋ `access.grants`**。⚠️ **這條只管 `canAssignTasks`**：實測 `GET /api/agents/me`，兩組欄位**完全不重疊**——`access` 只有 `{canAssignTasks, taskAssignSource, membership, grants}`，而 `canCreateAgents`／`canCreateSkills` 只活在 `permissions` 底下。所以上面前置閘門要查的 `canCreateAgents` 就是讀 `permissions.canCreateAgents`（該表寫的那條），照「一律看 `access.*`」去查會查到空。`org.yml` 的 `permissions` 值域（`assign_tasks`／`create_agents`／`create_skills`）與這兩組欄位的對應寫在 `../config-schema.md`，不寫進 `org.yml`。
+- **查證**：`GET /api/agents/<AID> | jq '{permissions, access}'`。
+
+### 步驟 3：掛 skill
+
+```sh
+curl -s -X POST "${AUTH[@]}" \
+  -d '{"mode":"add","desiredSkills":["<skill key>"]}' \
+  "$PAPERCLIP_API_BASE/api/agents/<AID>/skills/sync"
+```
+
+- `mode` 是 `add｜remove｜replace`。**除非要清空，否則永遠用 `add`**——`replace` 是全量語意。
+- 實際落點在 `adapterConfig.paperclipSkillSync.desiredSkills`，值形如 `local/<hash>/<skill 名>`（**參照式安裝**）。參照式的 skill **跟著 repo commit 走：改了 repo 不需要重新匯入**。
+- ⚠️ **公司層 skill 的匯入／更新，agent 一律 403 `skill_actor_restricted`**（見下方平台限制）。所以「skill 還不存在」與「skill 已存在只是沒掛上」是兩件事：後者本節做得了，前者要發卡請使用者匯入。
+- `org.yml` 的 `skills` 寫的是 **repo 相對路徑**（`skills/roles/<id>/SKILL.md`），平台的 key 是 `local/<hash>/<名稱>`。兩者不同形，**對應關係要在工單裡寫出來**，不要臨場猜。
+
+### 步驟 4：模型層
+
+```sh
+curl -s -X PATCH "${AUTH[@]}" \
+  -d '{"adapterConfig":{"model":"claude-opus-5","effort":"max"}}' \
+  "$PAPERCLIP_API_BASE/api/agents/<AID>"
+```
+
+- `org.yml` 的 `model_tier` → foundry-protocol 第 8 節「三層預設」→ 具體 `model`／`effort`。**權威是第 8 節，不是本檔**（本檔不複製那張對照表，複製了就會過期）。
+- ⚠️ **`adapterConfig` 的 PATCH 是合併語意**（要整批換得另外送 `replaceAdapterConfig: true`）。所以這一步不會洗掉步驟 3 寫進去的 `paperclipSkillSync`，反之亦然——但也因此**送錯的鍵不會被清掉**，只會多一個沒人用的欄位。
+- ⚠️ 第 8 節裡標為**建議值**的格（現為 PM 那一列），依「絕不自作主張採用建議值」，**未經使用者核可不得據以設定平台**。宣告在 `org.yml` 裡不等於核可。
+
+### 查證與它的兩個邊界
+
+**驗得回來的**：`name`（對帳鍵）、`title`、`reportsTo`、`permissions.*`、`access.*`、`status`——
+`GET /api/companies/<CID>/agents` 或 `GET /api/agents/<AID>` 都讀得到。
+
+**驗不回來的**（2026-09-06 以 agent 身分實測，兩項都不是 404）：
+
+| 想驗什麼 | 實際結果 | 落到哪 |
+| --- | --- | --- |
+| 別的 agent 的模型層與 skill 掛載 | `GET /api/agents/<別人的 AID>` 的 `adapterConfig` 回 **`{}`**（`GET /api/agents/me` 讀自己則完整可見） | `../SKILL.md` §8.2 成功判準第 3 條：列為**未證實** |
+| 別的 agent 掛了哪些 skill | `GET /api/agents/<AID>/skills` 回 `deny_missing_membership`（agent 不是 company member） | 同上 |
+
+**未證實不等於通過。** 這兩格的收法只有兩條：請使用者在面板確認，或由該成員自己讀
+`GET /api/agents/me` 回報。用「查不到」冒充「查過了」，正是 §4 共通規則要擋的事。
+
+### 本節刻意不做的三件事
+
+| 不做 | 為什麼 |
+| --- | --- |
+| 刪除／終止／暫停任何成員 | 三條路徑（`DELETE /api/agents/<id>`、`POST …/terminate`、`POST …/pause`）**都是 board-only，agent 打過去一律 403**。這正好與 `../SKILL.md` §8「只增不減」對齊——那條規則在本平台上連違反的機會都沒有 |
+| 改 instructions bundle | `instructions*` 相關欄位對 agent 403（MYL-33 實測）。角色規範一律靠**掛 skill** 進 context，不靠改 instructions |
+| 依平台實況回寫 `org.yml` | `org.yml` 是應然、不是平台的鏡子；`org-sync` **刻意不比對平台實況**（`../config-schema.md`）。而且 agent 本來就不得改該檔 |
+
 ## 平台限制（本 adapter 專屬，不上升為流程規則）
 
 下列限制是 Paperclip 的實作特性。遇到時照本節處理，**不要把它們寫進 foundry-protocol**——換平台時這些限制不成立。
@@ -188,6 +317,9 @@ curl -s -X PATCH "${AUTH[@]}" -d "$(jq -n --argjson c "$CUR" --arg b "<B>" \
 | `labelIds`／`blockedByIssueIds` 為全量替換 | 一律 read-modify-write（見上方「全量替換欄位」） |
 | 已結案工單的一般留言／PATCH 為惰性 | 需要重啟後續工作時帶 `"resume": true`；狀態退回帶 `"reopen": true` |
 | 互動卡（`ask_user_questions`／`suggest_tasks`／`request_confirmation`）非本介面 8 動詞 | 屬 protocol 第 4 節關卡與閘門的執行手段，走 `POST /api/issues/<ID>/interactions`；本 adapter 不重複定義 |
+| `PATCH /api/agents/<AID>/permissions` 名為 PATCH，`canCreateAgents`／`canAssignTasks` 卻是必填 | read-modify-write（同 `labelIds`）。見「provision_team」步驟 2 |
+| agent 權限「寫 `permissions.*`、讀 `access.*`」，兩者可能相反 | **限 `canAssignTasks`**——兩組欄位不重疊，`canCreateAgents`／`canCreateSkills` 只在 `permissions` 底下。該項稽核看 `access.*` ＋ `access.grants`。見「provision_team」步驟 2 |
+| 以 agent 身分讀**別的** agent，`adapterConfig` 回 `{}`；`GET /api/agents/<AID>/skills` 回 `deny_missing_membership` | 模型層與 skill 掛載跨 agent 驗不了，列為「未證實」由使用者確認。見「provision_team」查證一節 |
 
 ## 附錄 A：issue_ref（`MYL-12`）→ UUID
 
@@ -205,5 +337,8 @@ curl -s "${AUTH[@]}" "$PAPERCLIP_API_BASE/api/companies/<CID>/issues?view=compac
 | 所有 `GET`（issues／comments／documents／labels／goals／openapi.json） | 2026-09-03 於本公司實機執行驗證 |
 | `PATCH /api/issues/<ID>` 的欄位集合、`POST …/labels`、`POST …/goals`、`POST …/comments` 的 body schema | 依平台 `GET /api/openapi.json` 的 schema 定義 |
 | `POST /api/companies/<CID>/issues` 的 body | OpenAPI 未展開該 schema；欄位取自 issue 物件實際回傳欄位與既有開單實務 |
+| 「provision_team」一節的**讀取面**：`GET …/agents`（裸陣列、`role` 的 12 值粗桶、步驟 0 那張 8 名成員對帳表——含 CEO 的平台 `title` 為 `null` 與 `Developer（全端）` 的顯示名分岔）、`GET /api/agents/me` 的 `adapterConfig`、讀別人回 `{}`、`…/skills` 的 `deny_missing_membership` | 2026-09-06 於本公司以 agent 身分實機執行驗證（MYL-77） |
+| `POST /api/companies/<CID>/agents` 的 `required` 只有 `name`（`minLength: 1`）、`title` 為 `nullable: true` 的選填欄位——**對帳鍵定在 `name` 的全部依據** | 依平台 `GET /api/openapi.json` 的 schema 定義（2026-09-06 取，MYL-77） |
+| 「provision_team」一節的**寫入面**：`POST …/agents`、`PATCH …/permissions`、`POST …/skills/sync`、`PATCH /api/agents/<AID>` 的欄位與必填 | 依平台 `GET /api/openapi.json` 的 schema 定義。**本單未實跑任何寫入**——依工單邊界，真的在平台上建 agent 屬 MYL-79（T7）。第一次執行時逐步比對實際回傳，對不上就改回本節 |
 
 首次在新專案套用本 adapter 時，先用一張測試工單走一遍 `create_issue → set_labels → update_status → comment → list_issues`，確認無誤再正式使用。

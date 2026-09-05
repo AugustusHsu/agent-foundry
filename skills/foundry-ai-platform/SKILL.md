@@ -25,10 +25,12 @@ description: 軸 A（AI 平台，`.foundry/config.yml` 的 `ai_platform`）的�
 第三個相關但不同的東西是**模型供應商**（`model_routing`，管「哪一家的模型在跑這個角色」），
 權威在 `foundry-model-routing`；它與軸 A 的關係見 §6 最後一條——**軸 A 會限縮它的可行值域**。
 
-⚠️ 本文**不新增抽象動詞、不改任何既有動詞的定義**。軸 A 目前沒有任何動詞依它分派
-（`config-schema.md` 的 `ai_platform` 欄位說明也是這樣寫的），所以本文的形狀是
-**能力矩陣＋降級規則**，不是「介面＋adapter」。新增一個 AI 平台要做的是填滿 §3 的一欄
-（見 §7），不是覆蓋九個動詞——那是軸 B 的完整性定義，別套過來。
+⚠️ 本文**不定義任何抽象動詞，也不改既有動詞的定義**。軸 A 現在有一個動詞
+`provision_team`（MYL-77 增訂，把 `.foundry/org.yml` 的宣告套到平台上），但**它的權威在
+`foundry-platform` §8，不在本文**——本文的形狀仍是**能力矩陣＋降級規則**，
+不是「介面＋adapter」。新增一個 AI 平台要做的是填滿 §3 的一欄（見 §7），不是覆蓋九個動詞
+——那是軸 B 的完整性定義，別套過來；`provision_team` 同樣不適用「寧缺勿殘」，
+做不到就走 §4 的 `AP-4`（同 `foundry-platform` §5 的 MYL-77 裁定）。
 
 ## 1. 什麼時候載入本文
 
@@ -217,17 +219,21 @@ description: 軸 A（AI 平台，`.foundry/config.yml` 的 `ai_platform`）的�
 **只在 Paperclip 成立、換平台就沒有的：**
 
 - **指派＝喚醒。** GitHub／GitLab 的 issue 指派**不會喚醒任何 agent**（`S7`，
-  也是 `foundry-platform` §7 對照表的最後一列）。整套「交接鏈自動往下跑」建立在這一條上，
+  也是 `foundry-platform` §7 對照表「指派會不會喚醒 agent」那一列）。
+  整套「交接鏈自動往下跑」建立在這一條上，
   它是 Foundry 目前**最不可攜的一件事**——降級走 `AP-2`。
 - **互動卡會讓 run 停下來等。** 其他平台的留言不會擋住任何人（`AP-1`）。
 - **一張工單可以掛結構化的 blocker 並在解除時自動送喚醒事件。** 這是 Paperclip 的排程能力，
   留言慣例模擬得了語意、模擬不了喚醒。
 
+- **把 `org.yml` 的宣告變成一支真的存在的團隊。** 軸 B 的九個動詞裡沒有任何一個是「建組織」；
+  補這個缺口的是軸 A 的 `provision_team`（`foundry-platform` §8，MYL-77 增訂），而它
+  **只在有 agent 註冊表的平台上跑得動——軸 A 三個值裡只有 Paperclip 有**。
+  所以**可攜的是那份宣告，不是那支團隊**：`claude-code`／`codex` 上 `org.yml` 一字不改仍然
+  合法、`org-sync` 照樣綠，但它從那一刻起只是一份約束人的文件，降級走 `AP-4`。
+
 **任何平台都做不到（不是換平台就會好）：**
 
-- **建團隊。** 軸 B 的九個動詞裡**沒有任何一個是「建組織」**——`.foundry/org.yml` 目前是
-  **宣告**，沒有動詞會依它去平台上把人建出來。可攜的是那份宣告，不是那支團隊。
-  （把宣告變成動作屬 MYL-77／T5 的 `provision_team`，本文不預先規定它的形狀。）
 - **per-role 模型供應商路由在單 session 的殼上沒有承載處。** `ai_platform: claude-code`
   或 `codex` 時，一個 session 就是一家供應商，`model_routing` 的 per-role 設定**無處落地**——
   這不是 bug，是軸 A 對模型供應商可行值域的**限縮**。要真的異廠只能開兩個 session 分別扮演，
@@ -254,7 +260,7 @@ description: 軸 A（AI 平台，`.foundry/config.yml` 的 `ai_platform`）的�
 | --- | --- |
 | `SKILL.md`（本文） | 軸 A 的能力面、四欄對照表、降級規則 `AP-1`～`AP-6`、雙入口維護規則、誠實上限 |
 | `skills/foundry-platform/config-schema.md` | `ai_platform` 的欄位與枚舉權威（含 `org.yml` 側同名欄位） |
-| `skills/foundry-platform/SKILL.md` | **軸 B**：九個動詞與四份 adapter。§7 有跨平台對照表（那張是軸 B 的） |
+| `skills/foundry-platform/SKILL.md` | **軸 B**：九個動詞與四份 adapter。§7 跨平台對照表除標【軸 A】的那一列外都是軸 B。**§8 例外——那是軸 A 的 `provision_team`**，本文只引用不重寫 |
 | `skills/foundry-model-routing/SKILL.md` | 模型供應商（第三個概念，見 §0）。其 §0 指回本文 |
 | `skills/foundry-browser/SKILL.md` | `CAP-8` 的判級、補齊與降級全部以該檔為準 |
 | `templates/entry-file.md` | 雙入口檔模板，§8-A／§8-B 對應 §5 的可分岔段 |

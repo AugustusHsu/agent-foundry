@@ -10,7 +10,9 @@ devtools_platform: github   # 工具面：工單／狀態／看板放在哪
                             #    填 gitlab 等於自己走一次首跑驗證（adapters/gitlab.md 附錄 B）。
 
 # AI 平台面（選填，MYL-82）：agent 本身在哪裡執行與被喚醒。與上面的工具面正交。
-# 整段註解掉＝未宣告。目前沒有任何動詞依它分派，能力對照屬 MYL-78。
+# 整段註解掉＝未宣告。依它分派的動詞只有 provision_team（foundry-platform §8，
+# 把 .foundry/org.yml 宣告的團隊在平台上建出來，只有 paperclip 跑得動）；
+# 其餘軸 A 差異看 skills/foundry-ai-platform/ 的能力對照表。
 # ai_platform: paperclip    # paperclip | claude-code | codex
 
 # 對外可見面的鏡像平台（選填，MYL-39 T-2）。整段註解掉＝不鏡像。

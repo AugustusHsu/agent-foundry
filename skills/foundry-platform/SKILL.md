@@ -5,16 +5,21 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 
 # foundry-platform：平台 adapter 介面
 
-依 MYL-9 HLD §2 制定（repo 歸檔本：`docs/features/cross-platform/HLD.md`，下同）。本介面有 **9 個抽象動詞**，分屬兩條互相獨立的軸：
+依 MYL-9 HLD §2 制定（repo 歸檔本：`docs/features/cross-platform/HLD.md`，下同）。本檔定義 **3 個介面**，各自由不同的設定欄位分派：
 
-| 介面 | 動詞 | 由哪個設定欄位分派 | 管什麼 |
-| --- | --- | --- | --- |
-| **執行層** | §3.1–§3.8 共 8 個 | `devtools_platform` | 工單／狀態／里程碑／看板 |
-| **文檔投影** | §3.9 `publish_docs` | `docs`（宿主平台由 `mirror_platform`／`devtools_platform` 決定） | 源頭文檔 → 對外閱讀面 |
+| 介面 | 動詞 | 由哪個設定欄位分派 | 屬哪條軸 | 管什麼 |
+| --- | --- | --- | --- | --- |
+| **執行層** | §3.1–§3.8 共 8 個 | `devtools_platform` | 軸 B | 工單／狀態／里程碑／看板 |
+| **文檔投影** | §3.9 `publish_docs` | `docs`（宿主平台由 `mirror_platform`／`devtools_platform` 決定） | 軸 B | 源頭文檔 → 對外閱讀面 |
+| **組織層** | §8 `provision_team` | `ai_platform` | **軸 A** | `.foundry/org.yml` 的宣告 → 平台上真的存在的一支團隊 |
+
+⚠️ **「9 個動詞」指的是前兩列**（§3.1–§3.9）。`provision_team` 不是第 10 個——它由另一條軸分派，理由與界線見 §8 開頭，別把它讀成「九動詞再加一個」。
+
+⚠️ **「軸」在本檔曾經是另一個意思。** MYL-52 當時把上表前兩列稱為「兩條軸」，MYL-78 之後「軸」是 A／B 的專有名詞（軸 A＝agent 在哪個殼裡跑，軸 B＝工單與文檔在哪；定義見 `../foundry-ai-platform/SKILL.md` §0）。兩個切法不重疊：**執行層與文檔投影都在軸 B 之內**。本檔以下一律用「介面」稱前兩列的分別，§5 那段 `<details>` 保留當時的原文，指的是同一件事。
 
 每個支援的平台有一份對照文檔（`adapters/<name>.md`）把動詞翻成具體指令。流程規範（foundry-protocol）只引用抽象動詞，不綁定平台——新增平台時只需新增一份對照文檔，介面與流程都不動。
 
-**兩條軸為什麼要分開**（MYL-52 裁定，理由見 §5）：一個專案的工單可以在 A 平台、文檔面在 B 平台，這不是假設性的——**本 repo 自己就是**：`devtools_platform: paperclip`，而手冊投影到 GitHub wiki。把 `publish_docs` 掛在 `devtools_platform` 上分派，本 repo 會被判成「不支援文檔投影」。同一個道理：`model_routing` 那段也是獨立軸（見 `config-schema.md`），別混。
+**執行層與文檔投影為什麼要分開分派**（MYL-52 裁定，理由見 §5）：一個專案的工單可以在 A 平台、文檔面在 B 平台，這不是假設性的——**本 repo 自己就是**：`devtools_platform: paperclip`，而手冊投影到 GitHub wiki。把 `publish_docs` 掛在 `devtools_platform` 上分派，本 repo 會被判成「不支援文檔投影」。同一個道理：`model_routing` 那段也是獨立軸（見 `config-schema.md`），別混。
 
 ## 1. 使用方式
 
@@ -41,6 +46,8 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 ## 3. 動詞介面
 
 每個動詞定義：輸入、行為、成功判準。錯誤處理共通規則見 §4。
+
+**本節只有軸 B 的九個動詞**，全部由 `devtools_platform`／`docs` 分派。軸 A 的 `provision_team` 在 §8，不在本節——把它編成 §3.10 會讓「同一條軸上的第 10 個動詞」這個誤讀在編號上就成立。
 
 ### 3.1 init_structure
 
@@ -127,7 +134,26 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 - 新增平台（如 GitLab）：新增 `adapters/gitlab.md` **覆蓋該介面的全部動詞**＋在 `config-schema.md` 的對應枚舉補值，介面本文不改。做不到全覆蓋的不得上線——寧缺勿殘。
   - 執行層平台（`devtools_platform` 的值）＝§3.1–§3.8 的 8 個動詞全覆蓋。
   - 文檔投影宿主（被 `docs` 段指到的平台）＝`publish_docs` 完整定義（轉換規則、防手改比對依據、逐章比對方式），且 `docs.primary` 用得到的面都要涵蓋。
-  - **兩者互不蘊含**：只做執行層的平台不因為沒有 `publish_docs` 而殘缺，只做文檔面的目標也不必實作工單動詞。
+  - 組織層平台（`ai_platform` 的值）＝§8 `provision_team` 完整定義。**這一項的門檻與上面兩項不同**：軸 A 沒有「寧缺勿殘」，缺了是降級不是不合格，見下方 MYL-77 裁定。
+  - **三者互不蘊含**：只做執行層的平台不因為沒有 `publish_docs` 而殘缺，只做文檔面的目標也不必實作工單動詞，而軸 B 的平台**根本不在組織層這一軸上**——不是沒做完。
+
+  <details><summary><b>MYL-77 裁定：加 `provision_team` 為什麼沒有讓四份 adapter 全部不合格</b></summary>
+
+  同一個問題第二次出現，但答案的形狀跟 MYL-52 那次不一樣，所以不能照抄結論。逐份判：
+
+  | adapter | 是不是 `ai_platform` 的合法值 | 判定 |
+  | --- | --- | --- |
+  | `paperclip.md` | ✅ 是 | **要覆蓋，且已覆蓋**（該檔「provision_team」一節）。四份裡唯一同時承載軸 A 與軸 B 的一份 |
+  | `github.md` | ❌ 不是 | **不適用**，不列入本介面的覆蓋判定 |
+  | `gitlab.md` | ❌ 不是 | 同上 |
+  | `local-md.md` | ❌ 不是 | 同上 |
+
+  關鍵差別：MYL-52 那次，`paperclip` **有可能**被 `docs` 段指到卻沒有文檔面，那是「同一條軸上做不到」，所以必須改寫全覆蓋的定義才不會誤傷。這次三份軸 B adapter 連被 `ai_platform` 指到的可能性都沒有（枚舉是 `paperclip`｜`claude-code`｜`codex`，權威在 `config-schema.md`）——**不是能力不足，是不在這一軸**。§8 與那三份 adapter 因此都不用「降級」這個詞：降級的前提是同軸上撐不住。
+
+  三份軸 B adapter 仍各增了一節，但**那一節不是為了滿足全覆蓋**：它回答的是另一個問題——當一個專案的軸 B 是 GitHub／GitLab／local-md 時，`org.yml` 宣告的那份編制在**這個平台上**還看得到嗎（AC3／AC4）。答案是看得到，但只以文檔形式（見各該節）。
+
+  **真正的缺口在軸 A 這一側，而它刻意不擋上線**：`ai_platform` 的三個合法值裡，只有 `paperclip` 覆蓋得了 `provision_team`；`claude-code`／`codex` 沒有 agent 註冊表，覆蓋不了，也不會有 adapter 檔。依 `../foundry-ai-platform/SKILL.md` §7 最後一段，軸 A **沒有**「全覆蓋否則不得上線」的門檻，缺一項是降級（走該檔 `AP-4`）。所以 `ai_platform: codex` 的專案帶著這個缺口上線是允許的——**別把軸 B 的寧缺勿殘套過來**，套過來的結果是三個 AI 平台裡有兩個當場不合格。
+  </details>
 
   <details><summary><b>MYL-52 裁定：加第 9 個動詞為什麼沒有讓既有三份 adapter 全部不合格</b></summary>
 
@@ -145,11 +171,11 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 
 | 檔案 | 內容 |
 | --- | --- |
-| `SKILL.md`（本文） | 介面定義：9 動詞（8 執行層＋1 文檔投影）、共通詞彙、錯誤規則 |
-| `adapters/github.md` | 執行層動詞 → gh CLI 指令對照；**另含 `publish_docs` 的兩個投影面**（wiki 主閱讀面、mkdocs 精裝站） |
-| `adapters/gitlab.md` | 執行層動詞 → GitLab REST API v4 對照（含 Free／Premium 分岔）；**另含 `publish_docs` 的兩個投影面**（wiki、Pages）。**本 repo 無 GitLab 實例，全文未實跑**，證據等級見該檔附錄 B |
-| `adapters/local-md.md` | 執行層動詞 → `.foundry/board/` 檔案操作對照 |
-| `adapters/paperclip.md` | 執行層動詞 → Paperclip REST API 對照（含平台限制表） |
+| `SKILL.md`（本文） | 介面定義：軸 B 的 9 動詞（8 執行層＋1 文檔投影）、共通詞彙、錯誤規則；**§8 另定義軸 A 的 `provision_team`** |
+| `adapters/github.md` | 執行層動詞 → gh CLI 指令對照；**另含 `publish_docs` 的兩個投影面**（wiki 主閱讀面、mkdocs 精裝站）；末節寫組織層在本平台的文檔落點 |
+| `adapters/gitlab.md` | 執行層動詞 → GitLab REST API v4 對照（含 Free／Premium 分岔）；**另含 `publish_docs` 的兩個投影面**（wiki、Pages）；末節寫組織層在本平台的文檔落點。**本 repo 無 GitLab 實例，全文未實跑**，證據等級見該檔附錄 B |
+| `adapters/local-md.md` | 執行層動詞 → `.foundry/board/` 檔案操作對照；末節寫組織層退化成的 roster 檔 |
+| `adapters/paperclip.md` | 執行層動詞 → Paperclip REST API 對照（含平台限制表）；**另含 §8 `provision_team` 的唯一實作面**——四份裡唯一同時承載軸 A 的一份 |
 | `config-schema.md` | `.foundry/config.yml` 與 `.foundry/org.yml` 欄位說明（MYL-76 起兩份設定檔共用本檔）|
 | `config.example.yml` | 設定檔範例（含註解），`foundry-init` 據此產生實際檔案 |
 
@@ -175,14 +201,85 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 | `publish_docs` 主閱讀面 | **無**（documents 掛在單張工單上，不是一本手冊） | wiki（頁面**平的**、首頁 `Home`、側欄 `_Sidebar.md`） | wiki（**允許目錄層級**、首頁 `home`、側欄 `_sidebar`） |
 | `publish_docs` 精裝面 | 無 | 公開鏡像 repo ＋ Pages | Pages（`pages` job ＋ `public/` artifact） |
 | 指派會不會喚醒 agent | **會**（指派＝喚醒，`S7`） | 不會 | 不會 |
+| **【軸 A】** `provision_team` | ✅ `POST /companies/<CID>/agents` 起的四步（見 `adapters/paperclip.md`） | 本軸不適用 → 組織只剩文檔落點（`CODEOWNERS`＋`role:*` label＋roster） | 本軸不適用 → 同左，`CODEOWNERS` 另受 Premium 限制 |
+
+⚠️ **標【軸 A】那一列的欄位標題要換一條軸讀。** 其餘每一列的欄名都是 `devtools_platform` 的值（軸 B）；
+`provision_team` 由 `ai_platform` 分派，而 `github`／`gitlab` **不是 `ai_platform` 的合法值**——
+那兩格填的不是「這個 AI 平台做不到」，是「當專案的軸 B 是它時，組織宣告在這個平台上以什麼形式存在」。
+軸 A 三個平台自己的對照（`paperclip`／`claude-code`／`codex`）不在本表，在 `../foundry-ai-platform/SKILL.md` §3。
 
 **換平台時真正會咬人的三件事**（其餘差異照 adapter 走就好）：
 
 1. **喚醒面與可見面往往不是同一個平台。** 這不是假設：本 repo 執行在 paperclip、可見面鏡像到
-   github；來源專案 SuperOD 正本在自架 GitLab、鏡像到 GitHub。表格最後一列就是 `mirror_platform`
-   存在的全部理由——搬工單前先問「搬過去之後還叫得動人嗎」。
+   github；來源專案 SuperOD 正本在自架 GitLab、鏡像到 GitHub。表格「指派會不會喚醒 agent」
+   那一列就是 `mirror_platform` 存在的全部理由——搬工單前先問「搬過去之後還叫得動人嗎」。
 2. **「狀態」在三個平台是三種東西**（原生欄位／專案欄位／label），而 `cancelled` 是最容易掉的一態：
    gitlab 上它與 `done` 在平台層完全同形，漏掛 label 不會有任何地方報錯。
 3. **兩個 wiki 不是同一種 wiki。** 頁面層級、首頁與側欄命名、錨點 slug 演算法都不同，
    照抄轉換規則會得到「頁面渲染正常、連結按了不跳」的無聲失敗（`L16`）。投影面換宿主
    一律當成新的目標面重新驗一次錨點，不繼承前一個平台的驗證結果。
+
+## 8. 軸 A 介面：`provision_team`
+
+依 MYL-77 制定。承 MYL-76：`.foundry/org.yml` 讓一支團隊**可宣告**；本節讓那份宣告**可套用**。
+
+### 8.1 它為什麼不是第 10 個動詞
+
+三個理由，任一個成立就不該與 §3 同列；三個同時成立。
+
+1. **分派欄位不同。** §3 的九個動詞由 `devtools_platform`／`docs` 分派，本動詞由 `ai_platform` 分派。這不是分類癖：一個專案可以是 `devtools_platform: github` ＋ `ai_platform: paperclip`（工單在 GitHub、團隊在 Paperclip）。若 `provision_team` 跟著 `devtools_platform` 走，這個專案會被帶去 `adapters/github.md` 找 agent 註冊表、找不到，然後判成「本專案不支援建團隊」——而它明明建得出來。**這是 MYL-52 對 `publish_docs` 的同一個論證，換一條軸再跑一次**（§5 那段 `<details>` 的第 ② 點）。
+2. **覆蓋門檻不同。** 軸 B 是「寧缺勿殘」，少一個動詞不得上線；軸 A 缺一項是**降級**，帶著缺口上線是允許的（`../foundry-ai-platform/SKILL.md` §7 末段）。把兩者編在同一節，遲早有人拿同一把尺去量。
+3. **adapter 的形狀不同。** 軸 B 是「每個平台一份對照文檔」；軸 A **只有 `paperclip` 有落點**，`claude-code`／`codex` 沒有 agent 註冊表，不會有對照文檔，它們的規則寫在 `foundry-ai-platform` 的能力矩陣裡。硬要湊出兩份空的 adapter，就是 MYL-52 否決過的「憑空發明、沒有人驗得了」。
+
+### 8.2 介面定義
+
+- **輸入**：`.foundry/org.yml`（**唯一的編制輸入**，schema 權威見 `config-schema.md`）。本動詞**不吃「要建哪些角色」這類參數**——要改編制去改 `org.yml`，而那份檔案有自己的授權路徑（agent 不得自行改，見同一份 schema 的「誰能改 `org.yml`」）。另有兩個隱含輸入：`.foundry/config.yml` 的 `ai_platform`（決定讀哪一份對照），以及 foundry-protocol 第 8 節（`model_tier` 的高／中／低 → 實際 model／effort 的對應）。
+
+- **前置閘門**（四條全過才動手；任一條不過就**不做任何寫入**）：
+  1. `org.yml` 合法，且 `--selfcheck` 的 `org-sync` 是綠的。宣告本身歪掉還往平台上建，只是把錯誤放大成平台狀態。
+  2. `ai_platform` 的值有對照文檔。沒有（`claude-code`／`codex`）→ 走 §8.3 的降級，**這不是錯誤**，報告寫明即可。
+  3. **執行者持有建置權限。** 沒有就停下發卡，不得自我授權（`H6`）。本 repo 的 `create_agents` 依 MYL-61 卡 `f80e66b3` Q5 是**臨時**授權，用完收回——所以本動詞不得假設權限是常設的。
+  4. **建成員會持續花錢**（每個成員各自燒模型額度），觸發 `H3`。第一次在一個專案上跑本動詞**必須經使用者核可**；`H3` 不因為「org.yml 已經寫了」而豁免——宣告不是預算核可。
+
+- **行為**（先對帳，再逐角色收斂）：
+  1. **對帳**：讀平台現況，與 `org.yml` 的 `roles` 比對，分成三堆——**缺的**／**有但設定不符的**／**平台上多出來的**。**對帳鍵取宣告側的 `title` 而不是 `id`**：`title` 依 schema 全檔唯一且逐字等於組織圖節點名，`id` 只是 repo 內的名字，平台上不保證有承載處。
+     - **平台側由哪個欄位承載這個鍵，由對照文檔指定**，本節只定一條硬要求：**那個欄位必須是平台 schema 保證必填、非空的欄位**。理由是對帳鍵得對每個成員都有定義——拿一個選填欄位當鍵，只要有一個成員沒填，它就會**同時**落進「缺的」與「多出來的」兩堆，而照字面往下做就是在那個位置建出第二個他。**平台上剛好也有一個叫 `title` 的欄位時尤其要當心：同名不是同一個欄位。** 這不是假設——`adapters/paperclip.md` 上真的踩到了（實測平台 `title` 選填、樹根 CEO 的值是 `null`），該檔因此把承載欄位定在別處。**平台上找不到任何必填非空的身分欄位時就停下發卡**（`H6`），不得退而求其次挑一個選填欄位頂替——那等於把上面那個失敗模式原封不動接回來。
+  2. **缺的** → 建立成員。
+  3. **不符的** → 就地補齊四項：匯報線（`reports_to`）、模型層（`model_tier`）、掛載 skill（`skills`）、權限（`permissions`）。**只改對不上的那幾項**，不整批覆寫。
+     - 平台上的**顯示名**與宣告的 `title` 不一致是**第五種差異，不在這四項裡**：只列進報告，不自動改。顯示名是平台上別人看得到的東西，而且對帳既然不靠它，改它就純粹是替使用者決定一個外觀。
+  4. **多出來的** → **只列進報告，不動手**（理由見冪等）。
+
+- **冪等**：
+  - 重跑不得重建已存在的成員、不得清空既有設定；「已存在」以**對帳鍵**判定（不是以顯示名判定）。
+  - **本動詞只增不減。** 平台上多出來的成員一律只報告。三個理由缺一都不行：①刪成員是不可逆的破壞性操作，屬 `H5`，而且動到編制就是關卡 `G-C` 的範圍；②`org.yml` 是「應然」不是平台的鏡子（`config-schema.md` 明訂 `org-sync` **刻意不比對平台實況**），拿應然去裁剪實然會刪掉正在跑的東西；③在 Paperclip 上刪除／終止／暫停根本是 board-only，agent 打過去一律 403（見 `adapters/paperclip.md`）。
+  - 判準：同一份 `org.yml` 連跑兩次，**第二次應該全部落在「已符合」那一堆**。
+
+- **成功判準**（五條，缺一不算成功）：
+  1. `org.yml` 的每個 `roles` 項目在平台上都找得到對應成員；
+  2. 每個成員的匯報線、模型層、掛載 skill、權限四項與宣告一致，且**逐項用對照文檔標明的查證指令讀回來確認**——寫入 API 自己回 200 不算數（§4 共通規則）；
+  3. 查證讀不回來的項目**明列為「未證實」**，不得當成通過。adapter 有權限邊界時這種格子一定會出現（`adapters/paperclip.md` 現在就有兩個），把它算成通過等於用查不到冒充查過了；
+  4. 平台上多出來的成員列成清單交給使用者；
+  5. 重跑一次，三堆的分佈不變。
+
+- **失敗怎麼收**：
+  - 任一步失敗 → **停在該角色，不回滾已經建好的成員**。回滾就是刪除，刪除是 `H5`；而且本動詞是冪等的，從中斷處重跑本來就會收斂——回滾除了製造不可逆操作之外什麼也沒換到。把「已完成到哪一個角色」寫進工單，依第 2 節轉 `blocked` 或發卡。
+  - 權限不足（403）→ 依 §4，連續兩次同一指令失敗即停止重試，發卡請使用者執行，不空轉。
+  - 建到一半發現 `org.yml` 與規範對不上 → 停下，依 `O1` 判斷缺口在哪一邊，**不是就地改 `org.yml` 遷就平台**（agent 也改不得）。
+
+### 8.3 可攜性的誠實上限
+
+**這一節是規格正文，不是附註。** 理由見 MYL-61 `org-review` §7.4：組織層的落差如果不寫在規格裡，會等到導入做完才發現對不上，而那時候已經沒有便宜的退路了。
+
+| 層 | 內容 | 可攜性 | 換平台時實際會發生什麼 |
+| --- | --- | --- | --- |
+| **規則層** | foundry-protocol、角色 skill、模板、lint 檢查 | **100% 可攜** | 純 markdown＋Python，複製過去一行都不用改 |
+| **執行層** | §3 的九個動詞 | **可攜** | 換一份 adapter，介面與流程規範都不動（§5） |
+| **組織層** | 誰是誰、匯報線、權限、模型層 | **只在有 agent 註冊表的平台可攜** | 沒有註冊表時 `provision_team` 建不出任何東西，`org.yml` 退化成一份「**人**要扮演哪個角色」的對照表 |
+
+三件事要說清楚，否則上面那張表會被讀成「組織層做得不夠好」：
+
+1. **這不是本動詞沒做完，是這一層沒有平台無關的載體。** 「可以被指派、而且會醒過來的角色」是 Paperclip 這類 AI 平台的產物；GitHub／GitLab 上只有**人**與**權限**，沒有這種東西。九個抽象動詞裡也從來沒有一個是「建組織」——那個缺口是 MYL-61 `org-review` 盤出來的，不是本節造成的。
+2. **落差的形狀是「宣告可攜、套用不可攜」。** `org.yml` 是純 YAML，複製到任何專案都照樣被 `org-sync` 驗；驗得過不代表建得出來。導入一個 `ai_platform: codex` 的專案時，`org.yml` 一字不改仍然成立，但它從那一刻起只是一份**約束人的文件**。
+3. **剩下的三樣東西約束得了人，喚不醒任何東西。** 沒有註冊表的平台上，組織層只剩：角色定義（`skills/roles/`）、審查責任歸屬（`CODEOWNERS`）、「誰扮演哪個角色」對照表。三樣都是文檔，指派一個名字不會讓任何人開始工作——`../foundry-ai-platform/SKILL.md` 的 `AP-2` 講的那件事，在組織層原封不動再發生一次。
+
+**降級規則的權威不在本檔**：軸 A 上做不到 `provision_team` 時怎麼辦，以 `../foundry-ai-platform/SKILL.md` 的 `AP-4`（單一身分怎麼維持角色分工）為準，本節不另立一套。本節只負責兩件事：把上限寫進正文，以及要求**導入報告必須明列這一條**——與 `AP-2`／`AP-4` 的硬約束同一個要求，不得靜默略過。

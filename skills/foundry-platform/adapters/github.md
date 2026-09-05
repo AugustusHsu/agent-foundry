@@ -412,6 +412,51 @@ Foundry-Projection-Digest: <投影內容的 sha256>
 所以卡要一次問完兩件事，或在第一步的卡裡就講明還會有第二步——
 只問「可不可以開 wiki」會讓使用者以為按完就結束了。
 
+## 組織層：`provision_team` 在本軸不適用
+
+`provision_team`（`../SKILL.md` §8）由 `ai_platform` 分派，而 **`github` 不是 `ai_platform`
+的合法值**（枚舉是 `paperclip`｜`claude-code`｜`codex`，權威在 `../config-schema.md`）。
+所以本節**不是**「GitHub 上的 `provision_team` 怎麼降級」——**降級的前提是同一條軸上能力不足，
+這裡是根本不在這一軸**。用錯這個詞會讓人以為補一補就能建團隊。
+
+本節回答的是另一個問題：一個專案的軸 B 是 GitHub 時，`.foundry/org.yml` 宣告的那份編制
+**在 GitHub 上以什麼形式存在**。答案是**只以文檔形式存在**：GitHub 沒有 agent 註冊表，
+它有的是「人」與「權限」，沒有「可以被指派、而且會醒過來的角色」（`../SKILL.md` §8.3）。
+
+### 四個落點
+
+| 落點 | 承載編制的哪一部分 | 怎麼做 | 它的上限 |
+| --- | --- | --- | --- |
+| 角色定義 | 每個角色的判準與產出要求 | `skills/roles/<id>/SKILL.md`，跟著 repo 走（規則層 100% 可攜） | 純文件，GitHub 不讀它；沒有任何機制強制誰照著做 |
+| `CODEOWNERS` | 審查責任歸屬 | `.github/CODEOWNERS`：路徑 → GitHub 帳號／team，可搭 branch protection 要求核可 | 吃的是**帳號**不是角色。一人分飾多角時每一列都指向同一個帳號，於是它什麼也沒分開；而 GitHub 禁止自我核可，單一身分下這條保護只會變成擋住自己（`R5` 是同一個根） |
+| `role:*` label | 這張單「該由哪個角色做」 | 標準 label 集已含（`../SKILL.md` §2），用 `set_labels` 掛 | label **不會通知任何人**，它是給人看的分類 |
+| roster 對照表 | **誰扮演哪個角色** | 見下 | 手維護，無機械檢查 |
+
+### roster：唯一需要新增的東西
+
+`org.yml` 有 `id`／`title`／`reports_to`／`model_tier`／`skills`／`permissions`，
+唯獨沒有「這個角色**現在由誰扮演**」——在有 agent 註冊表的平台上，那一欄就是 agent 本身，
+所以宣告不必寫；到了 GitHub 沒有承載處，就得補一張表。四欄固定：
+
+| 角色（`org.yml` 的 `title`） | 扮演者（GitHub 帳號或人名） | 自何時起 | 備註 |
+| --- | --- | --- | --- |
+| Tech Lead | `@someone` | 2026-01-01 | 同時扮演 Code Reviewer，`M4` 因此不成立 |
+
+- **放哪**：本節**不預設檔名**。本 repo 的軸 B 是 paperclip，沒有實際使用本節；導入時在
+  `foundry-adopt` 的報告裡把路徑定死一個（`docs/` 底下的一份 .md 即可），寫進工單。
+  規格不指定路徑是刻意的——指定了又沒有人驗，只會多一個沒人維護的約定。
+- **`model_tier` 這一欄不轉寫過來**：模型層綁的是 agent 的設定，人沒有這個欄位。
+  換到本軸時 protocol 第 8 節退化為「這類工作值得花多少心力」的建議，不是可設定的值。
+- ⚠️ **這張表會過期而且沒有任何地方會報錯。** `--selfcheck` 的 `org-sync` 只比對
+  `org.yml` ↔ protocol 第 9／8 節，**看不到本表**。維護觸發點只有一個：交接的那一刻。
+
+### 硬約束（導入報告必須明列）
+
+指派一個 GitHub issue **不會喚醒任何人**（`S7`，也是 `../SKILL.md` §7 對照表
+「指派會不會喚醒 agent」那一列）。
+上面四個落點加起來仍然只約束得了人：`../../foundry-ai-platform/SKILL.md` 的 `AP-2`
+講的那件事，在組織層原封不動再發生一次。**不得靜默略過**——這與 `AP-2`／`AP-4` 同一個要求。
+
 ## 附錄 A：查 project 編號
 
 ```sh
