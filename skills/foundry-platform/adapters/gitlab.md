@@ -429,6 +429,48 @@ curl -s -H "$GL_AUTH" "$GL_API/wikis?with_content=1&per_page=100" | jq -r '.[]|"
 ——那是**該實例的狀況**，不是 GitLab 的產品特性。寫進 adapter 會讓所有 GitLab 專案繼承一個
 不存在的限制。實例層的異常留在該專案自己的文件裡。
 
+## 組織層：`provision_team` 在本軸不適用
+
+`provision_team`（`../SKILL.md` §8）由 `ai_platform` 分派，而 **`gitlab` 不是 `ai_platform`
+的合法值**（枚舉是 `paperclip`｜`claude-code`｜`codex`，權威在 `../config-schema.md`）。
+本節**不是**「GitLab 上的 `provision_team` 怎麼降級」——降級的前提是同一條軸上能力不足，
+**這裡是根本不在這一軸**。GitLab 沒有 agent 註冊表，它有的是「人」與「權限」，
+沒有「可以被指派、而且會醒過來的角色」（`../SKILL.md` §8.3）。
+
+本節回答的是：軸 B 是 GitLab 時，`.foundry/org.yml` 宣告的編制在 GitLab 上以什麼形式存在。
+
+### 四個落點（其中一個受版本分岔影響）
+
+| 落點 | 承載編制的哪一部分 | 怎麼做 | 它的上限 |
+| --- | --- | --- | --- |
+| 角色定義 | 每個角色的判準與產出要求 | `skills/roles/<id>/SKILL.md`，跟著 repo 走（規則層 100% 可攜） | 純文件，GitLab 不讀它 |
+| `CODEOWNERS` | 審查責任歸屬 | **Code Owners 屬 Premium 以上**（附錄 B 第 ③ 級推定）。有授權才有這個落點 | 吃的是**帳號**不是角色；一人分飾多角時每一列指向同一個帳號，等於沒分開 |
+| `role:*` label | 這張單「該由哪個角色做」 | `init_structure` 已建同一組（**非 scoped**，單冒號；scoped 的 `status::*` 是另一回事，別混） | label 不會通知任何人 |
+| roster 對照表 | **誰扮演哪個角色** | 見下 | 手維護，無機械檢查 |
+
+⚠️ **Free 版只剩三個落點。** 沒有 Code Owners 就沒有「審查責任綁在路徑上」這件事，
+審查歸屬只能靠 roster ＋ MR 上的人工指派。這與本檔開頭「版本分岔」那一節是同一個判斷點：
+**先探測授權等級再決定寫哪一套**，不要臨場猜。
+
+### roster：唯一需要新增的東西
+
+`org.yml` 沒有「這個角色**現在由誰扮演**」——在有 agent 註冊表的平台上那一欄就是 agent 本身，
+到了 GitLab 沒有承載處，就得補一張表。四欄固定：**角色（`org.yml` 的 `title`）｜扮演者
+（GitLab 帳號或人名）｜自何時起｜備註**（備註寫一人多角時哪幾條規則因此不成立，例如 `M4`）。
+
+- **放哪**：本節不預設檔名。GitLab 的 wiki 允許目錄層級，放 wiki 或 `docs/` 都行；
+  導入時在 `foundry-adopt` 的報告裡定死一個路徑並寫進工單。規格不指定是刻意的——
+  指定了又沒有人驗，只會多一個沒人維護的約定。
+- **`model_tier` 不轉寫過來**：模型層綁的是 agent 的設定，人沒有這個欄位。
+- ⚠️ **這張表會過期而且沒有任何地方會報錯**：`--selfcheck` 的 `org-sync` 只比對
+  `org.yml` ↔ protocol 第 9／8 節，看不到本表。維護觸發點只有交接的那一刻。
+
+### 硬約束（導入報告必須明列）
+
+指派一個 GitLab issue **不會喚醒任何人**（`../SKILL.md` §7 對照表最後一列）。
+四個落點加起來仍然只約束得了人：`../../foundry-ai-platform/SKILL.md` 的 `AP-2`
+講的那件事，在組織層原封不動再發生一次。**不得靜默略過**。
+
 ## 附錄 A：專案 id 與 issue 的兩個編號
 
 ```sh

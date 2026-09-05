@@ -46,6 +46,7 @@
 | 寫 BRD／PRD／HLD／LLD／測試計畫 | `templates/` 取對應模板，寫完跑 `make lint-doc TYPE=… FILE=…` |
 | 知道換到別的平台這步怎麼做 | `skills/foundry-platform/` ＋當前平台的 adapter（只讀一份，見 §4）；跨平台差異一眼可查走該 SKILL.md §7 對照表 |
 | 換 AI 平台（Claude Code／Codex）或查某項能力在這裡成不成立 | `skills/foundry-ai-platform/`——軸 A 的能力對照表與降級規則。**軸 A（agent 在哪裡跑）與軸 B（工單在哪）是兩回事**，別跟上一列混 |
+| 把 `.foundry/org.yml` 宣告的那支團隊在平台上建出來 | `skills/foundry-platform/SKILL.md` §8 `provision_team`（**軸 A 動詞，不是九動詞的第 10 個**）＋ `adapters/paperclip.md` 的同名節。沒有 agent 註冊表的平台跑不動它，上限見該 §8.3 |
 
 ### 目錄結構
 
@@ -56,8 +57,8 @@ agent-foundry/
 ├─ .foundry/org.yml         # 本專案的組織宣告（角色、匯報線、掛的 skill、權限、模型層）
 ├─ skills/
 │  ├─ foundry-protocol/     # 第 1 層：全隊硬規則（必掛；唯一豁免＝CEO，見 O3）
-│  ├─ foundry-platform/     # 平台抽象層：9 個抽象動詞＋各平台 adapter（4 份）
-│  ├─ foundry-ai-platform/  # 軸 A：AI 平台能力面、四欄對照表、降級規則（無動詞、不分派）
+│  ├─ foundry-platform/     # 平台抽象層：軸 B 九動詞＋adapter（4 份）；§8 另有軸 A 的 provision_team
+│  ├─ foundry-ai-platform/  # 軸 A：能力面、四欄對照表、降級規則（能力矩陣，不定義動詞）
 │  ├─ foundry-init/         # workflow：新專案首次導入
 │  ├─ foundry-adopt/        # workflow：既有專案漸進導入
 │  ├─ foundry-gates/        # workflow：調整關卡粒度
@@ -100,10 +101,10 @@ agent-foundry/
 | `skills/foundry-init/SKILL.md` | 只在導入全新專案時讀 |
 | `skills/foundry-platform/adapters/github.md` | 兩種用途各佔一半：`devtools_platform: github` 的動詞對照，與「鏡像模式」規格。要哪一個讀哪一節 |
 | `skills/foundry-platform/adapters/gitlab.md` | 同樣兩種用途：`devtools_platform: gitlab` 的動詞對照，與 `publish_docs` 的兩個投影面（wiki／Pages）。**先讀開頭的「版本分岔」**——Free 與 Premium 有四個動詞走法不同，判錯了不會報錯 |
-| `skills/foundry-platform/SKILL.md` | 9 個動詞的介面定義。只讀你要用的那個動詞那一節；§5 的「全覆蓋」裁定只在新增平台或新增文檔目標面時才需要 |
+| `skills/foundry-platform/SKILL.md` | 介面定義。只讀你要用的那個動詞那一節：軸 B 九動詞在 §3、軸 A 的 `provision_team` 在 §8；§5 的「全覆蓋」裁定只在新增平台或新增目標面時才需要 |
 | `skills/foundry-platform/config-schema.md` | `.foundry/config.yml` 與 `.foundry/org.yml` 的欄位權威。依段落取用——`gates`／`push`／`model_routing`／`docs`／`org.yml` 各段互相獨立，別整份載 |
 | `skills/foundry-ai-platform/SKILL.md` | 軸 A 能力面。查「某能力在這個平台成不成立」讀 §3 對照表；查「做不到要降級成什麼」讀 §4 的對應 `AP-n` 那一條 |
-| `skills/foundry-platform/adapters/paperclip.md` | 未達門檻但一樣別整份載：只讀當前平台那一份，不要四份都載 |
+| `skills/foundry-platform/adapters/paperclip.md` | 兩種用途：`devtools_platform: paperclip` 的動詞對照，與**唯一的軸 A 落點**（`provision_team` 的指令對照）。要哪一個讀哪一節 |
 <!-- FOUNDRY:BIG-FILES:END -->
 
 **減法原則**：先給最小必要上下文跑一輪，不滿意再補。不要為了「準備完整」而預先載入整個 `docs/`。

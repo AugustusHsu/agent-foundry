@@ -226,7 +226,7 @@ protocol 第 9 節的散文、`skills/roles/` 底下的角色 skill、以及在�
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
 | `foundry_org` | 整數 | ✅ | 本檔的 schema 版本，目前固定 `1`。與 `config.yml` 的 `foundry` **各自獨立**：兩份檔案的形狀不會一起變。讀取者遇到不認得的版本應停下報錯，不得猜著解析。 |
-| `ai_platform` | 枚舉 | ✅ | 這份組織宣告**在哪個軸 A 平台上實現**，值域同 `config.yml` 的同名欄位（`paperclip`｜`claude-code`｜`codex`，MYL-82 正名）。兩份檔案都寫時值必須一致（`org-sync` 比對）。**放在頂層不是每個角色一份**：一支團隊活在同一個 AI 平台上，混合編制沒有任何動詞支援得了。MYL-78 盤完軸 A 能力面後這一點沒有變——軸 A 依舊沒有動詞，`.foundry/org.yml` 依舊只是**宣告**而非把人建出來的指令（見 `foundry-ai-platform` §6「任何平台都做不到」），所以這裡仍然不開每角色一份的旋鈕。 |
+| `ai_platform` | 枚舉 | ✅ | 這份組織宣告**在哪個軸 A 平台上實現**，值域同 `config.yml` 的同名欄位（`paperclip`｜`claude-code`｜`codex`，MYL-82 正名）。兩份檔案都寫時值必須一致（`org-sync` 比對）。**放在頂層不是每個角色一份**：一支團隊活在同一個 AI 平台上，混合編制沒有任何動詞支援得了。MYL-77 給軸 A 補上 `provision_team`（`foundry-platform` §8）之後這一點更明確——那個動詞讀的就是本欄，一份 `org.yml` 只會被套到**一個** AI 平台上；每角色一份的旋鈕仍然不開。 |
 | `roles` | 序列 | ✅ | 角色宣告，順序建議照 protocol 第 9 節組織圖由上而下（只是可讀性，不影響判定）。 |
 
 每個 `roles` 項目：
@@ -251,7 +251,9 @@ protocol 第 9 節的散文、`skills/roles/` 底下的角色 skill、以及在�
 ⚠️ **寫入與稽核讀的不是同一組欄位**（本 repo 執行層實測）：設定時寫 `permissions.*`，
 但稽核要讀 `access.*` 與 `access.grants`——兩者可能給出相反的答案。所以本欄用 Foundry 級名稱
 宣告「應然」，平台欄位的對應寫在這張表與各平台 adapter，**不把平台欄位名寫進 `org.yml`**。
-真正把宣告套到平台上（含這組對應要怎麼驗）是抽象動詞 `provision_team` 的事，屬 MYL-77（T5）；
+真正把宣告套到平台上（含這組對應要怎麼驗）是軸 A 動詞 `provision_team` 的事，
+規格見 `SKILL.md` §8（MYL-77 定義），Paperclip 的指令對照見 `adapters/paperclip.md`
+的「provision_team」一節；**在平台上真的建出成員屬 MYL-79（T7）**。
 在那之前本檔只被 `org-sync` 讀。
 
 ### 誰能改 `org.yml`
