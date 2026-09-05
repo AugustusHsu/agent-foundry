@@ -157,6 +157,9 @@
 
 本 repo 的 workspace 是**共用**的，heartbeat run 可能併行；`X3` 起也一併收**「工具跑出來的結果跟來源字面不一樣」**這一類踩點——`X3`／`X4` 是 mkdocs 的渲染，`X5`／`X6` 是 CI 的 checkout 形狀與 git hook 的環境變數。共通的形狀是：**來源沒錯，錯的是它被放進了哪個環境**，所以錯誤訊息往往指向錯的地方。以下每一條都真的發生過。
 
+> ⚠️ 編號訂正（2026-09-06，MYL-76 收尾）：本節原本有**兩組重複的 `X5`／`X6`**，後加的那組已改編為 `X7`／`X8`。
+> 兩條的**內容一字未動**——本檔「只增不改」約束的是條目內容，不是讓重複的鍵留著；同一個 ID 指到兩件事，引用它的人分不出是哪一件。訂正前無任何檔案在本檔之外引用 `X5`／`X6`（已 grep 全 repo 確認）。
+
 - `X1` **commit 落到別人的分支。** 兩個 run 併行時 checkout 會互相干擾（MYL-23 的 commit 曾落到 MYL-27 的分支）。
   → **commit 前先驗 `git symbolic-ref --short HEAD`**，不要假設分支還是你切的那條。
 - `X2` **發佈互蓋。** MYL-25 收尾 run 以較舊的來源樹在 MYL-32 之後 push，蓋掉了 02／03 章的新內容。
@@ -173,14 +176,14 @@
   → 已修：`git_run()` 與測試的 `git()` 共用 `foundry_lint.git_env()`，把 `GIT_LOCATION_ENV` 那幾個變數清掉，讓 `-C` 說了算。
   → **用 worktree 迴避 `X1` 是對的**（HEAD 不會被併行 run 移走），但要知道它會換掉 hook 的環境。任何「shell out 去跑 git」的新程式碼都要走 `git_env()`。
 
-- `X5` **git 呼叫 hook 時會設 `GIT_DIR`，而它勝過 `git -C <路徑>`。** 於是「在臨時目錄造一個 repo 來測」這種測試，在 pre-commit 底下跑會被拉回**外層 repo**：臨時 repo 根本沒建起來，接著的 commit 觸發外層 hook、在臨時目錄找不到 `.pre-commit-config.yaml` 而整組紅。
+- `X7` **git 呼叫 hook 時會設 `GIT_DIR`，而它勝過 `git -C <路徑>`。** 於是「在臨時目錄造一個 repo 來測」這種測試，在 pre-commit 底下跑會被拉回**外層 repo**：臨時 repo 根本沒建起來，接著的 commit 觸發外層 hook、在臨時目錄找不到 `.pre-commit-config.yaml` 而整組紅。
   症狀極難認：**單獨跑 `make test` 全過，`git commit` 觸發同一組測試時全敗**，而且 `foundry-tests` 這個 hook 只在 staged 檔案含 `tools/` 時才觸發，所以它平常隱形，只在動到 `tools/` 的那次 commit 現形（MYL-52 撞上，當時 22 項全紅）。
   → 已修：`test_foundry_lint.py` 與 `tools/publish-docs/test_publish_gate.py` 在**模組載入時**就把 `os.environ` 裡的 `GIT_*` 清光，並各留一項回歸守衛。**要在程序層清，不是逐一傳 `env=`**——受測程式碼自己也會 shell out（`foundry_lint.git_run`），逐一傳只擋得住測試自己下的那幾道指令。日後新增「造臨時 repo」的測試，照抄這段。
-- `X6` **併行的 run 會改到共用 repo 的 `.git/config`，把整個工作區弄壞。** 2026-09-04 深夜實際發生：另一個 run（MYL-44 的 hook 驗證）在共用 repo 上設了 `core.bare = true`＋`user.name = 測試`／`user.email = test@example.com`，於是本 run 的 `git status`／`git add` 全部回 `fatal: 該動作必須在一個工作區中執行`——而 `git symbolic-ref` 之類不需要工作區的指令照常成功，看起來像 repo 還好好的。
+- `X8` **併行的 run 會改到共用 repo 的 `.git/config`，把整個工作區弄壞。** 2026-09-04 深夜實際發生：另一個 run（MYL-44 的 hook 驗證）在共用 repo 上設了 `core.bare = true`＋`user.name = 測試`／`user.email = test@example.com`，於是本 run 的 `git status`／`git add` 全部回 `fatal: 該動作必須在一個工作區中執行`——而 `git symbolic-ref` 之類不需要工作區的指令照常成功，看起來像 repo 還好好的。
   → **不要去改回別人的設定**（他們可能正靠那個設定跑），也不要卡住等。兩條路：
     1. 唯讀查看用 `git --git-dir=.git --work-tree=. <指令>`，這條不改任何東西就能繞過 `core.bare`。
     2. 要 commit 就**開自己的 linked worktree**：`git --git-dir=<repo>/.git worktree add "$PAPERCLIP_RUN_SCRATCH_DIR/wt-<單號>" <分支>`，把工作區檔案複製過去，在那裡跑 `make check` 與 commit。分支與 ref 是共用的，commit 一樣進得了本 repo。
-  → commit 時**顯式帶身分**（`git -c user.name=… -c user.email=… commit`），否則會用到別人留在 repo config 裡的測試身分。這一條與 `X1` 是同一類問題的兩種形態：`X1` 是 HEAD 被換掉，`X6` 是 config 被換掉。
+  → commit 時**顯式帶身分**（`git -c user.name=… -c user.email=… commit`），否則會用到別人留在 repo config 裡的測試身分。這一條與 `X1` 是同一類問題的兩種形態：`X1` 是 HEAD 被換掉，`X8` 是 config 被換掉。
 
 ### 兩份 nav 的結構性漂移 — **已收斂（2026-09-05，MYL-55）**
 
