@@ -26,6 +26,7 @@ MYL-55。本模組是 `publish_docs`（`skills/foundry-platform/SKILL.md` §3.9�
 
 import argparse
 import fnmatch
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -179,6 +180,75 @@ def version_of(tag: str, pattern: str) -> str:
     dash = literal.rfind("-")
     prefix = literal[: dash + 1] if dash >= 0 else literal
     return tag[len(prefix):] if prefix and tag.startswith(prefix) else tag
+
+
+# ── 已發佈的版本不重打（MYL-63，對應 SuperOD `T5`）─────────────────────────
+# `mike deploy` 對同名版本是**直接覆蓋** gh-pages 上那個目錄，不問也不警告。
+# 已經發出去、可能已被引用的那一版就這樣靜靜換了內容——`V3` 擋的是這件事。
+
+
+def published_versions(versions_json: str) -> list:
+    """讀 `mike` 寫在 gh-pages 根目錄的 `versions.json`，回傳已發佈的版本清單。
+
+    形狀是 `[{"version": "v1", "title": "v1", "aliases": ["latest"]}, …]`。
+    **只取 `version`，不取 `aliases`**——別名（`latest`）每次發佈都會被重新指向，
+    那是設計如此；把別名算成「已發佈版本」會讓第二版起全部被自己擋下。
+
+    空字串＝gh-pages 上還沒有這個檔（第一次發佈），回空清單。
+    **解析不出來就 raise**：讀不懂等於不知道有沒有撞版本，此時要擋下而不是放行——
+    放行的代價是覆蓋掉一版已發佈的手冊，那是不可逆的。
+    """
+    if not versions_json.strip():
+        return []
+    try:
+        data = json.loads(versions_json)
+    except ValueError as exc:
+        raise ConfigError(
+            f"versions.json 解析失敗（{exc}）——判斷不了版本是否已發佈，拒絕部署"
+        ) from exc
+    if not isinstance(data, list):
+        raise ConfigError("versions.json 不是 JSON 陣列，與 mike 的輸出形狀不符，拒絕部署")
+
+    out = []
+    for item in data:
+        name = str(item.get("version", "")).strip() if isinstance(item, dict) \
+            else str(item).strip()  # mike 也吃純字串陣列的舊格式
+        if name:
+            out.append(name)
+    return out
+
+
+def republish_decision(version: str, published: list, rebuild: bool) -> tuple:
+    """同一個版本號要不要放行再部署一次。回傳 `(放行?, 理由)`。
+
+    判準是**「這個版本號的內容有沒有變」**，不是「跑過幾次 `mike deploy`」。
+    兩條觸發路徑因此處置相反：
+
+    - **tag push**：git 拒絕把已存在的 tag 再推一次（除非 `-f` 或先刪再推），
+      所以這個事件對一個已發佈的版本再次觸發，本身就意味著 tag 被移動或重打。
+      版本已存在在這條路上是**違規的充分證據** → 擋下，要求 bump 下一版。
+    - **`workflow_dispatch` 重建**（`rebuild=True`）：有人手動輸入既有 tag 重建站台
+      （Pages 設定改過、CI 修好、建置環境換版）。tag 沒動＝同一顆 commit＝同樣的位元組；
+      版本已存在在這條路上是**預期狀態** → 放行。擋死它等於封掉唯一的重建手段。
+
+    ⚠️ 這個放行有一道**刻意留著的缺口**：本函式驗不了「tag 是否仍指向原本那顆
+    commit」。先移動 tag 再用 dispatch 重建，覆蓋仍會發生。要擋得住得把來源 sha
+    記在 gh-pages 上，而 `mike` 的 `versions.json` 不帶那個欄位。根治手段是 tag
+    ruleset（需要使用者權限），不是這裡再多一層——見 protocol `V3` 的「違反」段。
+    """
+    if version not in published:
+        return True, f"版本 `{version}` 尚未發佈過（gh-pages 現有：{'、'.join(published) or '無'}）"
+    if rebuild:
+        return True, (
+            f"版本 `{version}` 已發佈，但這次是 workflow_dispatch 重建路徑"
+            "——同一顆 commit 重建同樣的內容，不算重打"
+        )
+    return False, (
+        f"版本 `{version}` 已經發佈在 gh-pages 上，而這次是 tag 推送。"
+        "已發佈的手冊版本不重打（protocol `V3`）：tag 能對同一版再次觸發，"
+        "代表它被移動或刪除重打了。要修就 bump 下一版（打 handbook-v<N+1>），"
+        "不要覆蓋已經有人引用得到的那一版。"
+    )
 
 
 # ── 內容投影 ──────────────────────────────────────────────────────────────
@@ -364,6 +434,20 @@ def main(argv=None) -> int:
     d.add_argument("--config", default=".foundry/config.yml")
     d.add_argument("--tag", required=True)
 
+    # 離開碼刻意與 decide 分開：0＝放行、3＝撞到已發佈版本、2＝設定／輸入不合法。
+    # 3 這個值對齊來源專案 SuperOD 的 `release-archive`（同名目錄直接 exit 3）。
+    c = sub.add_parser(
+        "check-version",
+        help="比對 gh-pages 的 versions.json：這個版本是不是已經發佈過（`V3`）")
+    c.add_argument("--version", required=True)
+    c.add_argument(
+        "--versions-json", required=True,
+        help="gh-pages 根目錄那份 versions.json 的本機路徑；該分支還不存在時，"
+             "呼叫端要自己寫一個內容為 [] 的檔案")
+    c.add_argument(
+        "--rebuild", action="store_true",
+        help="這次是 workflow_dispatch 重建路徑——同版本放行（見 republish_decision）")
+
     b = sub.add_parser("build", help="產出站台工作區")
     b.add_argument("--src", default="docs/handbook")
     b.add_argument("--mkdocs", default="mkdocs.yml")
@@ -374,6 +458,20 @@ def main(argv=None) -> int:
 
     args = ap.parse_args(argv)
     try:
+        if args.cmd == "check-version":
+            versions_file = Path(args.versions_json)
+            if not versions_file.exists():
+                # 路徑打錯時若當成「沒有已發佈版本」，這道閘門就退化成恆真——
+                # 一個永遠放行的閘門比沒有閘門更糟，因為它看起來還在。
+                raise ConfigError(
+                    f"{versions_file} 不存在。取不到 gh-pages 的 versions.json 就"
+                    "判斷不了版本是否已發佈；gh-pages 還沒建出來時請明確寫入 `[]`"
+                )
+            ok, reason = republish_decision(
+                args.version, published_versions(read_text(versions_file)), args.rebuild)
+            print(f"{'✅' if ok else '❌'} {reason}", file=sys.stdout if ok else sys.stderr)
+            return 0 if ok else 3
+
         docs_cfg = _load_docs_cfg(Path(args.config))
         if args.cmd == "decide":
             publish, version, reason = mirror_site_decision(docs_cfg, args.tag)

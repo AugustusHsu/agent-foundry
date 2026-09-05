@@ -65,6 +65,37 @@ jobs:
           printf 'version=%s\n' "$VERSION"
           printf 'reason=%s\n' "$REASON"
 
+      # ── `V3`：已發佈的手冊版本不重打（MYL-63，對應 SuperOD `T5`）──────────
+      # `mike deploy` 對同名版本是直接覆蓋 gh-pages 上那個目錄，不問也不警告。
+      # 這一步排在 decide 之後、deploy 之前，所以擋下時**站上那一版原封不動**。
+      #
+      # ⚠️ `fetch-depth` 只要 1：這裡只需要 gh-pages 分支頂端的一個檔案，不解歷史。
+      #    這與 deploy job 需要 `fetch-depth: 0` 的理由（證據閘門要算 git diff，
+      #    known-drift `X5`）是兩回事，不要順手把這裡也改深。
+      #
+      # ⚠️ 值一律走 env，理由同上面那段：reason 內含反引號，展進 shell 會被執行掉。
+      - name: 檢查這個版本是不是已經發佈過
+        if: steps.decide.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.decide.outputs.version }}
+          # workflow_dispatch＝重建既有版本，刻意放行：判準是「同版本內容變了」，
+          # 不是「跑了幾次 mike」。重建同一顆 commit 產出同樣的位元組。
+          REBUILD: ${{ github.event_name == 'workflow_dispatch' && '--rebuild' || '' }}
+        run: |
+          VJ="$RUNNER_TEMP/versions.json"
+          if git fetch --depth=1 --quiet origin gh-pages 2>/dev/null; then
+            git show FETCH_HEAD:versions.json > "$VJ" 2>/dev/null || printf '[]\n' > "$VJ"
+          else
+            printf '[]\n' > "$VJ"   # gh-pages 還不存在＝一版都還沒發過
+          fi
+          printf '== gh-pages 現有版本 ==\n'
+          cat "$VJ"
+          # $REBUILD 刻意不加引號：空字串要展開成「沒有這個參數」，加了引號會變成
+          # 一個空的位置參數傳進 argparse。
+          # shellcheck disable=SC2086
+          python3 tools/publish-docs/site_docs.py check-version \
+            --version "$VERSION" --versions-json "$VJ" $REBUILD
+
   deploy:
     needs: gate
     if: needs.gate.outputs.publish == 'true'

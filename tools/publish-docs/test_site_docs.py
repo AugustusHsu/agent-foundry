@@ -149,6 +149,107 @@ class VersionTest(unittest.TestCase):
         self.assertEqual(site_docs.version_of("other-v1", "handbook-v*"), "other-v1")
 
 
+VERSIONS_JSON = """\
+[
+  {"version": "v1", "title": "v1", "aliases": ["latest"]},
+  {"version": "v2", "title": "v2", "aliases": []}
+]
+"""
+
+
+class PublishedVersionsTest(unittest.TestCase):
+    """`V3` 的資料面：讀得出 gh-pages 上已經有哪幾版。"""
+
+    def test_只取_version_欄位(self):
+        self.assertEqual(site_docs.published_versions(VERSIONS_JSON), ["v1", "v2"])
+
+    def test_別名不算已發佈版本(self):
+        """反例守衛：把 aliases 一起收進來的話，`latest` 會讓第二版起全部被擋。"""
+        self.assertNotIn("latest", site_docs.published_versions(VERSIONS_JSON))
+
+    def test_空字串等於還沒發過任何版本(self):
+        self.assertEqual(site_docs.published_versions(""), [])
+        self.assertEqual(site_docs.published_versions("  \n"), [])
+
+    def test_純字串陣列的舊格式也讀得出來(self):
+        self.assertEqual(site_docs.published_versions('["v1"]'), ["v1"])
+
+    def test_壞掉的_JSON_要_raise_而不是當成沒發過(self):
+        """讀不懂就擋下。回空清單等於放行，代價是覆蓋掉一版已發佈的手冊。"""
+        with self.assertRaises(site_docs.ConfigError):
+            site_docs.published_versions("{ 這不是 JSON")
+
+    def test_不是陣列時要_raise(self):
+        with self.assertRaises(site_docs.ConfigError):
+            site_docs.published_versions('{"version": "v1"}')
+
+
+class RepublishDecisionTest(unittest.TestCase):
+    """`V3` 的判斷面：同版本重打擋下，`workflow_dispatch` 重建放行。"""
+
+    def test_版本已發佈且是_tag_推送_擋下(self):
+        ok, reason = site_docs.republish_decision("v1", ["v1"], rebuild=False)
+        self.assertFalse(ok)
+        self.assertIn("V3", reason)
+        self.assertIn("bump", reason)  # 訊息要講得出「下一步做什麼」，不只說不行
+
+    def test_新版本放行(self):
+        """反例守衛：若判斷寫成「永遠擋下」，這一項會失敗。"""
+        ok, _ = site_docs.republish_decision("v2", ["v1"], rebuild=False)
+        self.assertTrue(ok)
+
+    def test_第一次發佈時清單是空的_放行(self):
+        ok, _ = site_docs.republish_decision("v1", [], rebuild=False)
+        self.assertTrue(ok)
+
+    def test_workflow_dispatch_重建同一版放行(self):
+        """重建同一顆 commit 不是「重打」——判準是內容變沒變，不是跑了幾次。"""
+        ok, reason = site_docs.republish_decision("v1", ["v1"], rebuild=True)
+        self.assertTrue(ok)
+        self.assertIn("workflow_dispatch", reason)
+
+    def test_重建路徑不會讓判斷整個失效(self):
+        """反例守衛：rebuild 若被寫成無條件放行，上面那項也會過；
+        這一項確保沒有 rebuild 時同一組輸入仍然是擋下的。"""
+        blocked, _ = site_docs.republish_decision("v1", ["v1"], rebuild=False)
+        allowed, _ = site_docs.republish_decision("v1", ["v1"], rebuild=True)
+        self.assertFalse(blocked)
+        self.assertTrue(allowed)
+
+
+class CheckVersionCliTest(unittest.TestCase):
+    """CI 的 `gate` job 直接吃這支的離開碼，所以離開碼本身要有測試守著。"""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.vj = self.tmp / "versions.json"
+        self.vj.write_text(VERSIONS_JSON, encoding="utf-8")
+
+    def run_cli(self, *extra):
+        return site_docs.main(
+            ["check-version", "--versions-json", str(self.vj), *extra])
+
+    def test_撞到已發佈版本回_3(self):
+        self.assertEqual(self.run_cli("--version", "v1"), 3)
+
+    def test_新版本回_0(self):
+        self.assertEqual(self.run_cli("--version", "v9"), 0)
+
+    def test_重建路徑回_0(self):
+        self.assertEqual(self.run_cli("--version", "v1", "--rebuild"), 0)
+
+    def test_versions_json_路徑不存在時回_2_而不是放行(self):
+        """路徑打錯若當成「沒有已發佈版本」，這道閘門就退化成恆真。"""
+        self.assertEqual(
+            site_docs.main(["check-version", "--version", "v1",
+                            "--versions-json", str(self.tmp / "nope.json")]), 2)
+
+    def test_gh_pages_還不存在時呼叫端寫_空陣列_放行(self):
+        self.vj.write_text("[]\n", encoding="utf-8")
+        self.assertEqual(self.run_cli("--version", "v1"), 0)
+
+
 class RewriteLinksTest(unittest.TestCase):
     ABS = "https://github.com/AugustusHsu/agent-foundry/blob/main"
 
