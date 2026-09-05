@@ -361,14 +361,15 @@ description: Foundry 團隊第 1 層核心工作規範，所有 Foundry agent �
 
 **違反：**兩支投影腳本共用的 `scripts/lib/publish-gate.sh` 會拒跑——找不到對應這版手冊 sha 的 `APPROVED` 記錄、或 `handbook_commit` 與 `git log -1 -- docs/handbook` 對不上，都直接擋下，公開面停在舊版。**這是本文少數真的擋得住的規則之一**；但閘門只管「有沒有跑腳本」，繞過腳本手動推公開面它攔不到，那條路的後果是公開面與 repo 不一致而無人察覺。`【機械】`
 
-### 手冊版本 tag（MYL-55 增訂）
+### 手冊版本 tag（MYL-55 增訂，MYL-63 補 `V3`）
 
 精裝站（`.foundry/config.yml` 的 `docs.mirror_site`）**打 tag 才發**。手冊因此第一次有了「我讀的是哪一版規則」：`mike` 把每個版本各自留在 Pages 上，站台有版本選擇器，舊版不會被新版蓋掉。
 
 - `V1` **tag 規範與時機**：tag 名為 `handbook-v<N>`，**只標手冊版本、不動 repo 全域版本號**；且必須在該版手冊的發佈審查 `verdict: APPROVED` **之後**才打——先打 tag 等於發佈一個還沒過審的版本，而版本一旦上站就有人引用得到。打 tag 與 push tag 屬第 9 節分級表「push main、force-push、**tag 發佈**」那一列，**使用者專屬、逐次同意，無常設授權**；agent 不得自行 `git tag` 後 push。
 - `V2` **開關要真的關得掉**：`docs.mirror_site.enabled: false` 時，**即使打了符合 `tag_pattern` 的 tag 也不發佈**。判斷的權威是設定檔，不是 CI workflow 的 `on: push: tags:`——後者是寫死的靜態 glob，改 `tag_pattern` 不會讓它跟著變，所以它只是粗篩。實作在 `tools/publish-docs/site_docs.py` 的 `mirror_site_decision()`，由 CI 的 `gate` job 呼叫；`enabled` 不是 true 時 `deploy` job 整個不跑。
+- `V3` **已發佈的版本不重打**：一個 `handbook-v<N>` 發出去之後，**那個版本號的內容就定了**。手冊要修就打下一版（`handbook-v<N+1>`），不要移動、刪除或重打已發佈的 tag。理由是版本化站台的整個用途就是「我引用的那一版還在」——把 `v1` 的內容換掉，等於讓所有指向 `v1` 的引用悄悄指到別的東西，而且**沒有任何痕跡**：`mike deploy` 對同名版本是直接覆蓋 gh-pages 上那個目錄，不問也不警告。判斷實作在 `site_docs.py` 的 `republish_decision()`，由 `gate` job 在 `publish=true` 之後、`deploy` 之前呼叫，撞版本時以離開碼 3 擋下。**`workflow_dispatch` 的重建路徑刻意放行**——判準是「同一個版本號的內容有沒有變」，不是「跑過幾次 `mike deploy`」；重建同一顆 commit 產出同樣的位元組，而擋死它等於封掉唯一的重建手段。刪除已發佈版本（`mike delete`）不歸本條管，那是使用者專屬的破壞性動作，走 `G-C`。
 
-**違反：**`V1` 沒有機械後盾中的「時機」那半——CI 不知道審查是哪一天過的，它只核對 tag 指到的那份手冊有沒有對應的 APPROVED 記錄（`publish-gate.sh`），所以「審查前就先打 tag」擋得住的前提是那時還沒寫審查記錄；審查記錄先寫好、tag 晚一點才打則本來就合規。真正擋不住的是 agent 自己 `git tag` 再 push——沒有任何 hook 攔 tag push，那條線純靠自律，而它的後果是使用者沒同意過的版本出現在公開站上。`V2` 有完整機械後盾（`gate` job ＋ `test_site_docs.py` 的反例測試）。`【自律】`＋`【機械】`
+**違反：**`V1` 沒有機械後盾中的「時機」那半——CI 不知道審查是哪一天過的，它只核對 tag 指到的那份手冊有沒有對應的 APPROVED 記錄（`publish-gate.sh`），所以「審查前就先打 tag」擋得住的前提是那時還沒寫審查記錄；審查記錄先寫好、tag 晚一點才打則本來就合規。真正擋不住的是 agent 自己 `git tag` 再 push——沒有任何 hook 攔 tag push，那條線純靠自律，而它的後果是使用者沒同意過的版本出現在公開站上。`V2` 有完整機械後盾（`gate` job ＋ `test_site_docs.py` 的反例測試）。`V3` 的機械後盾**是後盾不是前擋**：它擋在 `deploy` 之前，所以站上那一版原封不動，但 tag 在 git 上已經被移走了——真正的前擋是 GitHub 的 tag ruleset（需要使用者權限，本 repo 尚未設，見 MYL-39）。另有一道**刻意留著的缺口**：`workflow_dispatch` 路徑不驗「tag 是否仍指向原本那顆 commit」，先移動 tag 再用 dispatch 重建仍會覆蓋。要擋得住得把來源 sha 記在 gh-pages 上，而 `mike` 的 `versions.json` 只有 `version`／`title`／`aliases`，不帶那個欄位；dispatch 只有具寫入權的人按得動，這一段因此歸人為判斷。`【自律】`＋`【機械】`
 
 ### push：跨平台專案的權限設定（MYL-9／MYL-27 增訂）
 
@@ -560,7 +561,7 @@ Context 是**有限且共用**的資源：載進來的每一段都排擠了後�
 | `P1`～`P3` | push 權限分級 | 第 7、9 節 |
 | `M1`～`M6` | 模型升級規則（`M1`～`M3`）與供應商路由（`M4`～`M6`） | 第 8 節 |
 | `C1`～`C5` | 上下文預算與減法原則 | 第 10 節 |
-| `V1`／`V2` | 手冊版本 tag 與精裝站開關 | 第 7 節 |
+| `V1`～`V3` | 手冊版本 tag、精裝站開關、已發佈版本不重打 | 第 7 節 |
 
 規則：
 
