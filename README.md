@@ -14,8 +14,8 @@ agent-foundry/
 ├─ CLAUDE.md / AGENTS.md         # 接手入口(雙入口,正文相同、只差工具名對應段)
 ├─ .foundry/config.yml           # 本專案的平台、關卡、push 授權設定
 ├─ skills/                       # Agent skill 原始檔
-│  ├─ foundry-protocol/          # 核心規範(每個 agent 必掛):工單骨架、
-│  │                             #   狀態機、交接格式、HITL 閘門、commit 規則
+│  ├─ foundry-protocol/          # 核心規範(每個 agent 必掛,唯一豁免＝CEO,見 O3):
+│  │                             #   工單骨架、狀態機、交接格式、HITL 閘門、commit 規則
 │  ├─ foundry-platform/          # 平台抽象層:9 個抽象動詞＋各平台 adapter
 │  ├─ foundry-init/ adopt/ gates/ # 三個常設 workflow
 │  └─ roles/<角色>/              # 角色薄 skill:只寫該角色獨有的判準與產出格式,
@@ -52,7 +52,7 @@ make hooks   # 安裝 pre-commit hook,一台機器裝一次
 
 ## 三層 skill 結構
 
-1. **`skills/foundry-protocol/`** — 核心規範,每個 agent 必掛。工單骨架(Inputs/Outputs/驗收標準/未決事項)、狀態機與流轉條件、交接格式、HITL 閘門觸發條件、缺陷收容判準、文檔權威階序、commit/分支規則。
+1. **`skills/foundry-protocol/`** — 核心規範,每個 agent 必掛(唯一豁免是 CEO,理由見該檔 `O3`)。工單骨架(Inputs/Outputs/驗收標準/未決事項)、狀態機與流轉條件、交接格式、HITL 閘門觸發條件、缺陷收容判準、文檔權威階序、commit/分支規則。
 2. **`skills/roles/<角色>/`** — 角色薄 skill(約 60–120 行)。只寫該角色獨有的內容,共通規則引用第 1 層,不重抄。
 3. **`templates/`** — 共用文件骨架。模板只有一份,改了全隊同步。
 

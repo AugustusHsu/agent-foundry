@@ -19,7 +19,7 @@
 
 ## 2. 開場必讀順序
 
-1. **`skills/foundry-protocol/SKILL.md`** — 全隊硬規則，每個 agent 必掛。
+1. **`skills/foundry-protocol/SKILL.md`** — 全隊硬規則，每個 agent 必掛（唯一豁免是 CEO，理由見該檔 `O3`）。
    ⚠️ 全 repo 最大的一份，**不要整份讀**（見 §4）。先 `grep -n '^#\{1,3\} '` 取標題地圖，再讀需要的節。
 2. **`docs/standards/known-drift.md`** — 已知漂移與反悔錄。**動手前讀這份**：
    哪些 API 會 403、哪些提案已經被否決過、哪些缺口是使用者知情下保留的。
@@ -53,14 +53,14 @@ agent-foundry/
 ├─ CLAUDE.md / AGENTS.md    # 本檔（雙入口，正文相同、只差工具名對應段）
 ├─ .foundry/config.yml      # 本專案的平台、關卡、push 授權設定
 ├─ skills/
-│  ├─ foundry-protocol/     # 第 1 層：全隊硬規則（必掛）
+│  ├─ foundry-protocol/     # 第 1 層：全隊硬規則（必掛；唯一豁免＝CEO，見 O3）
 │  ├─ foundry-platform/     # 平台抽象層：9 個抽象動詞＋各平台 adapter（4 份）
 │  ├─ foundry-init/         # workflow：新專案首次導入
 │  ├─ foundry-adopt/        # workflow：既有專案漸進導入
 │  ├─ foundry-gates/        # workflow：調整關卡粒度
 │  ├─ foundry-model-routing/ # workflow：模型供應商路由（哪個角色用哪一家）
 │  ├─ foundry-browser/      # workflow：瀏覽器與視覺能力（L0～L3 探測、補齊、降級）
-│  └─ roles/<角色>/         # 第 2 層：角色薄 skill（7 個角色）
+│  └─ roles/<角色>/         # 第 2 層：角色薄 skill（9 個角色）
 ├─ templates/               # BRD / PRD / HLD / LLD / test-plan /
 │                           #   review-report / publish-review
 ├─ docs/

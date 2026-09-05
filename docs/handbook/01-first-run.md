@@ -4,7 +4,7 @@
 
 ## 事前檢查（只做一次）
 
-1. **確認 skill 已匯入 Paperclip**：公司 skill library 裡要有 `foundry-protocol` 與六個角色 skill（`role-product-analyst`、`role-tech-lead`、`role-scrum-master`、`role-developer`、`role-code-reviewer`、`role-qa-engineer`），且已指派給對應 agent。
+1. **確認 skill 已匯入 Paperclip**：公司 skill library 裡要有 `foundry-protocol`，以及 repo `skills/roles/` 底下的每一份角色 skill，且已指派給對應 agent。這裡不列名單也不寫數量——角色會增減，**目錄本身就是權威清單**，照 `skills/roles/` 現有的資料夾逐一核對即可（唯一例外：CEO 不掛 `foundry-protocol`，只掛 `role-ceo`，理由見 protocol `O3`）。
    - 注意：**skill 的匯入／更新只有你（使用者）能做**。Agent 呼叫 skill 寫入 API 一律被平台擋下（403 `skill_actor_restricted`），這不是故障（Pilot 卡點 #5）。
    - Skill 原始檔的權威版本在本 repo `skills/` 底下；匯入流程見 [README「Skill 怎麼匯入 Paperclip」](https://github.com/AugustusHsu/agent-foundry#readme)。
 2. **確認素材在 main 上**：agent 開工單時會逐項確認 Inputs 打得開；只存在於未合併分支的檔案，等於不存在（Pilot 卡點 #2 就是模板沒合入 main，開單當場卡住）。
