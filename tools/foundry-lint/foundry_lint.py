@@ -1782,6 +1782,11 @@ MAKEFILE_REL = "Makefile"
 INIT_SECTION_RE = re.compile(r"^## 2\. ", re.M)
 INIT_ITEM_RE = re.compile(r"^3\. ", re.M)
 INIT_NEXT_ITEM_RE = re.compile(r"^\d+\. ", re.M)
+#: 清單的最後一條是反向的 `- 不複製：…`，那行以後列的是**不會**被複製的路徑。
+#: 不截斷的話，把某個目錄從複製項移到那一行仍舊算「清單有列」＝假綠，而目標
+#: 專案的 `make check` 就掛在那個目錄上（MYL-86 CR R2，有實測反證）。截斷的
+#: 失效方向是安全的：真有複製項排到那行之後，結果是紅（看得見），不是綠。
+INIT_EXCLUDE_RE = re.compile(r"^\s*-\s*不複製[：:]", re.M)
 #: 清單裡的寫法一律是 `` `tools/<X>/`（全目錄） ``。單獨的 `` `tools/` `` 不命中。
 INIT_LISTED_RE = re.compile(r"`tools/([A-Za-z0-9._-]+)/?`")
 #: Makefile 裡的 `tools/<X>` 引用；`unittest discover tools/foundry-lint` 與
@@ -1801,7 +1806,12 @@ def makefile_tools_dirs(text: str) -> list:
 
 
 def init_copy_list_block(text: str) -> tuple:
-    """取出 foundry-init §2 第 3 點的複製清單原文，回傳 `(區塊, 錯誤原因)`。"""
+    """取出 foundry-init §2 第 3 點**要複製**的那段原文，回傳 `(區塊, 錯誤原因)`。
+
+    終點取兩個條件裡先出現的那一個：下一個編號項（`^\\d+\\. `），或那條反向的
+    `- 不複製：`。後者是 MYL-86 CR 的 R2——少了它，把某個目錄從複製項改寫到
+    「不複製」那行，本檢查照樣印綠，而那正是本檢查存在的理由那個情境。
+    """
     sec = INIT_SECTION_RE.search(text)
     if not sec:
         return "", "找不到 `## 2.` 這一節"
@@ -1812,8 +1822,9 @@ def init_copy_list_block(text: str) -> tuple:
     if not item:
         return "", "`## 2.` 這一節裡找不到以 `3. ` 起頭的編號項"
     rest = section[item.end():]
-    end = INIT_NEXT_ITEM_RE.search(rest)
-    return (rest[: end.start()] if end else rest), ""
+    ends = [m.start() for m in (INIT_NEXT_ITEM_RE.search(rest),
+                                INIT_EXCLUDE_RE.search(rest)) if m]
+    return (rest[: min(ends)] if ends else rest), ""
 
 
 def check_init_copy_list(root: Path) -> SelfcheckResult:
@@ -1830,6 +1841,12 @@ def check_init_copy_list(root: Path) -> SelfcheckResult:
     指到的目錄同樣是「複製過去卻跑不起來」，判準一樣，而不必切出 target 邊界的
     程式反而更短。反方向不管——清單列得比 Makefile 多是合理的（`templates/`
     那些跟 Makefile 無關），本檢查只擋「Makefile 有、清單沒有」這一個方向。
+
+    ⚠️ **本檢查在 foundry-init 產出的目標專案必紅，處置歸 MYL-87 AC0。**
+    複製清單自己寫著「不複製：`skills/foundry-init/`」，所以照它初始化出來的專案
+    一定沒有對照端，走到下面那句「對照端沒了」。這是政策題不是缺陷——「缺對照端
+    該 ⏭ 還是該產骨架」與 MYL-87 那四項是同一個政策，在這裡先斬會分岔（MYL-86
+    CR R1，該單留言有實測輸出）。
     """
     res = SelfcheckResult(
         "init-copy-list", "`Makefile` 引用到的 `tools/` 目錄都在 foundry-init 複製清單裡")

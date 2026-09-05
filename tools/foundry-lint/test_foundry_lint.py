@@ -661,6 +661,47 @@ class SelfcheckTest(unittest.TestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("錨點漂了" in f for f in res.failures), res.failures)
 
+    def test_目錄被移到不複製那一行就不算列過(self):
+        """CR R2 的反證：不截斷的話這個情境印綠，而目標專案的 make check 會掛。
+
+        Makefile 原封不動，只把 `tools/publish-docs/` 從複製項改寫到那條反向的
+        `- 不複製：` 上——複製清單的字面還在，但語意已經反過來了。
+        """
+        p = self.root / "skills" / "foundry-init" / "SKILL.md"
+        text = p.read_text(encoding="utf-8")
+        kept = [ln for ln in text.splitlines()
+                if "`tools/publish-docs/`（全目錄）" not in ln]
+        self.assertEqual(len(kept), len(text.splitlines()) - 1,
+                         "反例預期只砍掉一行；清單寫法變了，測試要跟著改")
+        moved = "\n".join(kept).replace(
+            "   - 不複製：`skills/foundry-init/`",
+            "   - 不複製：`skills/foundry-init/`、`tools/publish-docs/`", 1)
+        self.assertIn("不複製：`skills/foundry-init/`、`tools/publish-docs/`", moved,
+                      "反例的「不複製」那行已不是這個寫法，測試要跟著改")
+        p.write_text(moved + "\n", encoding="utf-8")
+        res = self._named("init-copy-list")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("tools/publish-docs/" in f and "複製清單沒有列它" in f
+                            for f in res.failures), res.failures)
+
+    def test_不複製那行以前的項目照樣算數(self):
+        """截斷點不能砍過頭，也不能被散文裡的「不複製」提前觸發。
+
+        現行清單最後一條複製項（`skills/roles/`）的說明文字裡就有一句
+        「照舊不複製。」——截斷條件是**行首**的 `- 不複製：`，所以那句不算數。
+        真被它提前截斷的話，`tools/publish-docs/` 那條會掉出區塊 ⇒ 假紅。
+        """
+        self.assertTrue(self._named("init-copy-list").passed)
+        block, why = foundry_lint.init_copy_list_block(
+            (self.root / "skills" / "foundry-init" / "SKILL.md")
+            .read_text(encoding="utf-8"))
+        self.assertEqual(why, "")
+        self.assertIsNone(foundry_lint.INIT_EXCLUDE_RE.search(block))
+        self.assertIn("照舊不複製", block, "散文裡那句「不複製」不該把區塊切掉")
+        self.assertEqual(set(foundry_lint.INIT_LISTED_RE.findall(block)),
+                         set(foundry_lint.makefile_tools_dirs(
+                             (self.root / "Makefile").read_text(encoding="utf-8"))))
+
     def test_清單列得比_Makefile_多不算失敗(self):
         """反方向不管：清單有 `templates/` 那類與 Makefile 無關的項目。"""
         p = self.root / "Makefile"
