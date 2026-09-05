@@ -16,7 +16,7 @@ agent-foundry/
 ├─ skills/                       # Agent skill 原始檔
 │  ├─ foundry-protocol/          # 核心規範(每個 agent 必掛):工單骨架、
 │  │                             #   狀態機、交接格式、HITL 閘門、commit 規則
-│  ├─ foundry-platform/          # 平台抽象層:8 個抽象動詞＋各平台 adapter
+│  ├─ foundry-platform/          # 平台抽象層:9 個抽象動詞＋各平台 adapter
 │  ├─ foundry-init/ adopt/ gates/ # 三個常設 workflow
 │  └─ roles/<角色>/              # 角色薄 skill:只寫該角色獨有的判準與產出格式,
 │                                #   共通規則一律引用 foundry-protocol

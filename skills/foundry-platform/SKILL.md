@@ -19,7 +19,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 ## 1. 使用方式
 
 1. 讀專案根目錄的 `.foundry/config.yml`（schema 見 `config-schema.md`），取得 `platform` 欄位。
-2. 依值載入對照文檔：`github` → `adapters/github.md`；`local-md` → `adapters/local-md.md`；`paperclip` → `adapters/paperclip.md`。
+2. 依值載入對照文檔：`github` → `adapters/github.md`；`gitlab` → `adapters/gitlab.md`；`local-md` → `adapters/local-md.md`；`paperclip` → `adapters/paperclip.md`。**只讀當前平台那一份**；要看跨平台差異走 §7 的對照表，不要把四份都載進來。
 3. 要做的操作對應到下方哪個動詞，就照對照文檔中該動詞的指令執行。
 4. 對照文檔沒有涵蓋的平台寫入操作，一律不做——需要新操作時先開單擴充介面，不得私下直呼平台指令繞過。
 5. 找不到 `.foundry/config.yml` 時視為專案尚未導入 Foundry：停下，走 `foundry-init`（新專案）或 `foundry-adopt`（既有開發中專案），不得自行猜測平台。
@@ -29,9 +29,9 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 
 所有動詞共用下列定義；兩份 adapter 都必須遵守，不得各自另創。
 
-- **issue_ref**：平台無關的工單參照。github＝issue 編號（`#12`）；local-md＝檔名主幹（`FND-12`）；paperclip＝`identifier`（`MYL-12`，API 參數另需 UUID，對照見該 adapter 附錄 A）。
+- **issue_ref**：平台無關的工單參照。github＝issue 編號（`#12`）；gitlab＝專案內編號 `iid`（`#12`，**不是**全域 `id`，對照見該 adapter 附錄 A）；local-md＝檔名主幹（`FND-12`）；paperclip＝`identifier`（`MYL-12`，API 參數另需 UUID，對照見該 adapter 附錄 A）。
 - **status**：六態，與 foundry-protocol 第 2 節一一對應：`todo`｜`in_progress`｜`in_review`｜`blocked`｜`done`｜`cancelled`。平台自身的狀態集比六態多時（如 paperclip 多一個 `backlog`），由 adapter 明定映射規則，**六態之外的值不得由 Foundry 流程寫入**。
-- **依賴**：工單間的硬依賴一律用 `link_issues` 的 `blocked_by` 關聯表達，不用工單內文的文字描述代替（foundry-protocol 第 2 節）。各平台的承載欄位由 adapter 定義（github＝`Blocked-by:` 留言慣例＋`blocked` label；local-md＝frontmatter `blocked_by`；paperclip＝`blockedByIssueIds`）。
+- **依賴**：工單間的硬依賴一律用 `link_issues` 的 `blocked_by` 關聯表達，不用工單內文的文字描述代替（foundry-protocol 第 2 節）。各平台的承載欄位由 adapter 定義（github＝`Blocked-by:` 留言慣例＋`blocked` label；gitlab＝Premium 用原生 `is_blocked_by` 關聯、Free 退回與 github 相同的留言慣例；local-md＝frontmatter `blocked_by`；paperclip＝`blockedByIssueIds`）。
 - **標準 label 集**（`init_structure` 建立，命名空間固定）：
   - `type:brd`、`type:prd`、`type:hld`、`type:lld`、`type:impl`、`type:review`、`type:test`、`type:docs`
   - `role:product-analyst`、`role:scrum-master`、`role:tech-lead`、`role:developer`、`role:code-reviewer`、`role:qa`
@@ -147,7 +147,42 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 | --- | --- |
 | `SKILL.md`（本文） | 介面定義：9 動詞（8 執行層＋1 文檔投影）、共通詞彙、錯誤規則 |
 | `adapters/github.md` | 執行層動詞 → gh CLI 指令對照；**另含 `publish_docs` 的兩個投影面**（wiki 主閱讀面、mkdocs 精裝站） |
+| `adapters/gitlab.md` | 執行層動詞 → GitLab REST API v4 對照（含 Free／Premium 分岔）；**另含 `publish_docs` 的兩個投影面**（wiki、Pages）。**本 repo 無 GitLab 實例，全文未實跑**，證據等級見該檔附錄 B |
 | `adapters/local-md.md` | 執行層動詞 → `.foundry/board/` 檔案操作對照 |
 | `adapters/paperclip.md` | 執行層動詞 → Paperclip REST API 對照（含平台限制表） |
 | `config-schema.md` | `.foundry/config.yml` 欄位說明 |
 | `config.example.yml` | 設定檔範例（含註解），`foundry-init` 據此產生實際檔案 |
+
+## 7. 跨平台對照表
+
+「換到別的平台，這一步怎麼做」的速查（MYL-56）。**本表不是規格，是索引**——每一格只給形狀，
+權威在對應的 adapter。三欄取 `paperclip`／`github`／`gitlab`，理由是這三個是有遠端平台的實作；
+`local-md` 是無 server 的退路（工單就是 `.foundry/board/` 裡的檔案），它的每一格都是「改檔案」，
+列進來只會沖淡真正的差異——要它的對照直接讀 `adapters/local-md.md`。
+
+| 面向 | paperclip | github | gitlab |
+| --- | --- | --- | --- |
+| 存取方式 | REST API（`curl`） | `gh` CLI ＋ GraphQL | REST API v4（`curl`）；`glab` 選配 |
+| issue_ref | `identifier`（`MYL-12`），API 另需 UUID | issue 編號（`#12`） | 專案內 `iid`（`#12`），非全域 `id` |
+| status 承載 | 原生 `status` 欄位（七態，映射到六態） | ProjectV2 的 Status 欄位（要三個 ID） | scoped label `status::*` |
+| `done` vs `cancelled` | 原生兩個不同值 | 關單 reason（`completed`／`not planned`） | **平台上無從區分**，唯一載體是 `status::` label |
+| label 增刪 | `labelIds` **全量替換** → read-modify-write | `--add-label`／`--remove-label` 增量 | `add_labels`／`remove_labels` 增量（`labels=` 是全量，不用） |
+| milestone | goal 物件 | 吃名稱 | 設定吃**數字 id**、查詢吃**名稱** |
+| `parent` | `parentIssueId` | sub-issue API（GraphQL） | 父單描述的 task list `- [ ] #<iid>` |
+| `blocked_by` | `blockedByIssueIds`（全量替換） | `blocked` label ＋ `Blocked-by:` 留言 | Premium：原生關聯；Free：同 github 的留言慣例 |
+| 看板 | 平台內建 | ProjectV2＋三 view（**view 只能 GraphQL 建**，`L11`） | 專案內建 board／issues 頁；roadmap 是 Premium |
+| 工單清單含不含 PR／MR | 不適用 | **REST `/issues` 會混進 PR**（要自行濾） | `/issues` **不含 MR** |
+| `publish_docs` 主閱讀面 | **無**（documents 掛在單張工單上，不是一本手冊） | wiki（頁面**平的**、首頁 `Home`、側欄 `_Sidebar.md`） | wiki（**允許目錄層級**、首頁 `home`、側欄 `_sidebar`） |
+| `publish_docs` 精裝面 | 無 | 公開鏡像 repo ＋ Pages | Pages（`pages` job ＋ `public/` artifact） |
+| 指派會不會喚醒 agent | **會**（指派＝喚醒，`S7`） | 不會 | 不會 |
+
+**換平台時真正會咬人的三件事**（其餘差異照 adapter 走就好）：
+
+1. **喚醒面與可見面往往不是同一個平台。** 這不是假設：本 repo 執行在 paperclip、可見面鏡像到
+   github；來源專案 SuperOD 正本在自架 GitLab、鏡像到 GitHub。表格最後一列就是 `mirror_platform`
+   存在的全部理由——搬工單前先問「搬過去之後還叫得動人嗎」。
+2. **「狀態」在三個平台是三種東西**（原生欄位／專案欄位／label），而 `cancelled` 是最容易掉的一態：
+   gitlab 上它與 `done` 在平台層完全同形，漏掛 label 不會有任何地方報錯。
+3. **兩個 wiki 不是同一種 wiki。** 頁面層級、首頁與側欄命名、錨點 slug 演算法都不同，
+   照抄轉換規則會得到「頁面渲染正常、連結按了不跳」的無聲失敗（`L16`）。投影面換宿主
+   一律當成新的目標面重新驗一次錨點，不繼承前一個平台的驗證結果。
