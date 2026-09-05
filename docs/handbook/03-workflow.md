@@ -1,6 +1,6 @@
 # 3. 流程會怎麼跑？
 
-> 最後對照 protocol `fbd70ff`（2026-09-05）
+> 最後對照 protocol `477350b`（2026-09-05）
 
 標準流程鏈（foundry-protocol 第 3 節）：
 
