@@ -53,6 +53,11 @@ push:
 docs:
   source: docs/handbook/     # 唯一可寫的真相，留在版控內
   primary: wiki              # 主閱讀面：wiki | repo | none
+  # 手冊裡指向 skills/、templates/、docs/pilot/ 的相對連結在 wiki（另一個 repo、頁面是平的）
+  # 一定失效。使用者於 MYL-52 互動卡 c79150e4（Q2）選 absolute：改寫成指回 repo 的絕對 URL。
+  # ⚠️ 這個選擇有一項知情前提：repo 日後轉回 private 時，這些連結對外會變 404。
+  #    wiki 的定位是內部主閱讀面，該情境下斷鏈可接受——要改就改這一欄，不要在腳本裡加特例。
+  link_policy: absolute      # absolute（改寫成絕對 URL）| plain（拆為純文字）
   mirror_site:
     enabled: true            # 精裝站（mkdocs）：本專案開
     trigger: tag             # tag | merge | manual

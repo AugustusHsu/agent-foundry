@@ -16,10 +16,11 @@ selfcheck: ## repo 規範自檢：雙入口同步、手冊 nav、錨點、規則
 
 # 每個工具各自 discover：unittest 會把 start dir 加進 sys.path，
 # 從共同上層 discover 會找不到受測模組。新增工具時在此追加一行。
-test: ## 工具單元測試（foundry-lint ＋ model-routing ＋ browser-probe）
+test: ## 工具單元測試（foundry-lint ＋ model-routing ＋ browser-probe ＋ publish-docs）
 	@python3 -m unittest discover tools/foundry-lint
 	@python3 -m unittest discover tools/model-routing
 	@python3 -m unittest discover tools/browser-probe
+	@python3 -m unittest discover tools/publish-docs
 
 hooks: ## 安裝 pre-commit hook（一台機器裝一次）
 	@pre-commit install

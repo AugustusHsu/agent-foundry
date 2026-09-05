@@ -32,6 +32,8 @@
 | L12 | 把 `L11` 的補救套到 Roadmap view 上：對 ROADMAP_LAYOUT 呼叫 `updateProjectV2View` 補 `visibleFieldIds` | `UNPROCESSABLE: "Roadmap views do not support visible fields."` | Roadmap 沒有「欄位可見性」這個概念，別在這裡重試。Roadmap 畫不出東西的真正原因見 `L13`——**不是**欄位沒顯示。（2026-09-04 MYL-43 實測） |
 | L13 | 純用 API 建出 Roadmap view，然後去看畫面 | **時間軸必定空白**：格線與月份標尺正常、左側列得出項目，但時間軸區域不畫任何條狀區間或里程碑點 | **兩個獨立成因，各自都足以造成空白，只修一個畫面照樣是空的**——這是本條最容易被寫漏的部分。**成因 A（UI 專屬，API 無設定點）**：view 的 Start／Target date 指向「無」。全 schema 掃過：ProjectV2 相關 mutation 共 32 個，動 view 的只有 `updateProjectV2View`，其 `ProjectV2ViewConfigurationInput` **只有 `visibleFieldIds` 一個欄位**，讀取型別 `ProjectV2ViewConfiguration` 也只有 `visibleFields`；設定入口只在 UI 的 `Roadmap` → `Date fields`，依 `H6` 發卡請使用者按。**成因 B（可自動化）**：項目的日期欄位根本沒有值——`updateProjectV2ItemFieldValue` 寫得進去。MYL-43 撤回後 39 張手抄 draft card 換成真 issue，原本帶的目標日沒有人補回來，於是 GraphQL 查 `fieldValues` 只回 `Status`，一筆 `ProjectV2ItemFieldDateValue` 都沒有。⚠️ **診斷時不要相信 `Date fields` 按鈕上那句提示**「*Your project needs at least one date or iteration field to get started.*」——它與事實不符：GraphQL 查得該專案 `目標日` 的 `dataType` 就是 `DATE`（`PVTF_lAHOAVyI0c4BiTdozhhU4zo`），研判是登出訪客沒按過 `Got it!` 的新手引導殘留。⇒ 本條是本 repo 目前**「機械驗證會騙人」最乾淨的樣板**：欄位在、值在、view 在、layout 正確，所有 `gh api` 斷言全綠，畫面就是空的。**視覺驗證不可被 API 斷言取代**，要舉例時舉這一條。（成因 A 與 schema 掃描：2026-09-04 MYL-43；成因 B、提示文字與畫面現況：2026-09-05 MYL-48 登出實測，附截圖） |
 | L14 | 從「repo 是 public」推論「掛在它上面的 Projects v2 看板也是 public」 | **推論不成立**。Projects v2 是帳號層物件，可見性與 repo 各自獨立；MYL-48 兩次「以為開了窗口」都栽在這裡 | 判定可見性**只能用登出瀏覽器實跑**，不要看設定畫面、也不要從 repo 可見性推。登出態的自我證明手法：頁首出現 `Sign in`／`Sign up`（`ref_loc=header+logged+out`）即排除「其實還登著」的假陽性；看板為 private 時同一網址回 404，該 404 同時證明 private 與登出兩件事。同一個根源還有另一個表現：**v2 看板只屬於帳號、不屬於 repo**，建好不會自動掛上去，要另外 `gh project link`；要確認掛上了沒有，查 GraphQL 的 `repository.projectsV2` 而不是 REST 的 `has_projects`（MYL-57 實測）。（2026-09-05 MYL-48 實測） |
+| L15 | `has_wiki: true` 之後直接 clone／push `<repo>.wiki.git`，期望 wiki repo 已經存在 | 兩邊都 `Repository not found`（clone 與 push 皆是）。**啟用 wiki 只是開開關，wiki 的 git repo 要等第一頁建立才成形**，而建第一頁**只有 UI 有入口**：REST 的 `repos/{o}/{r}/wiki` 是 404，GraphQL 沒有 wiki mutation，push 也不會把它生出來 | 依 `H6` 發卡請使用者在 `https://github.com/<o>/<r>/wiki/_new` 建任意一頁（內容隨意，下次投影會覆蓋），之後腳本才跑得動。⚠️ **不要把這個 `Repository not found` 讀成權限問題**：同一把 ssh 金鑰對主 repo `ls-remote` 正常，那個對照組就是「不是認證問題」的證明——沒跑對照組的話，這裡很容易被誤診成 token scope 不足而去換認證方式重試。（2026-09-05 MYL-52 實測：`has_wiki` 由 false 改 true 之後立即測，clone／push／REST 三條路全試過） |
+| L16 | 以為手冊裡的頁內錨點（`[主開發流程鏈](#1)`）投影到 wiki 之後照樣能跳，於是把投影的錨點改寫當成多餘的一步簡化掉 | **兩邊的 slug 演算法不同，而且失敗是無聲的**。手冊原文的 `#1`／`#3-hitl` 是寫給 mkdocs（Python-Markdown）的：它的 slugify 走 NFKD → ASCII，**中文整段被吃掉**，於是 `## 1. 主開發流程鏈` 的 id 就只剩 `1`。GitHub（wiki 與 repo blob 兩邊）**保留中文**，同一個標題算出來是 `1-主開發流程鏈`。錨點對不上時頁面照常渲染、連結照常可按，**只是按了不會跳**——沒有 404、沒有紅字、沒有任何一支 lint 會叫 | 投影**必須**依目標面的演算法重算錨點（`project_docs.github_slug()`／`github_anchors()` 就是幹這件事的），不能原樣搬。⚠️ **本機驗不了這件事**（見 `X4` 沒有渲染器），唯一算數的證據是抓實站渲染出來的 `id="user-content-…"` 來比對。2026-09-05 MYL-52 實測全綠：9 頁全取得、44 條內部連結目標頁存在、**9 個錨點全部在實站 id 集合裡找得到**，證明 `github_slug()` 與 GitHub 真實演算法一致（含 `## 3. HITL 發卡` → `3-hitl-發卡` 這種中英混排）。⇒ 改動投影的連結改寫邏輯後，**要重跑一次實站比對才算驗過**，本機測試全綠不構成證據 |
 
 ## 2. API 形狀陷阱：會回 4xx 但錯誤訊息不會告訴你原因
 
@@ -41,7 +43,7 @@
 | S2 | `PUT /api/issues/{id}/documents/{key}` 放 `content` → 400；沒帶 `baseRevisionId` → 409 | 必填 `format: "markdown"`＋`body`＋`baseRevisionId`（現行 revision id） |
 | S3 | `POST /api/issues` 開單 → 404 | 開單走 `POST /api/companies/{companyId}/issues`。該 endpoint 在 `openapi.json` 的 requestBody schema 是**空的**，欄位名以 GET 單一 issue 的回傳形狀為準 |
 | S4 | 開單時直接設 `status: in_progress` → 被別的 heartbeat 搶走 checkout，隨後自己發卡回 409 `Issue run ownership conflict` | 先建成 `todo`／`backlog`，**發完卡再轉狀態** |
-| S5 | `PATCH /api/issues/{id}` 的 `unblockDescriptor.owner` 填別的 agentId → 整個 PATCH 靜默不生效（`status`、`blockedByIssueIds` 一併沒寫入） | `owner` 只能填自己。要別的 agent 解鎖就用一級 blocker 掛該 agent 的工單 |
+| S5 | `PATCH /api/issues/{id}` 的 `unblockDescriptor.owner` 填別的 agentId → 整個 PATCH 靜默不生效（`status`、`blockedByIssueIds` 一併沒寫入） | `owner` 只能填自己。要別的 agent 解鎖就用一級 blocker 掛該 agent 的工單。⚠️ **2026-09-05（MYL-52）補測：填自己的 agentId（且自己就是 `assigneeAgentId`）也一樣整包靜默不生效**——`{"unblockDescriptor":{"owner":"<自己>","action":"…"}}` 送出去回 200、欄位全 null、`status` 沒變；把 `unblockDescriptor` 拿掉只送 `{"status":"blocked"}` 就成功。`openapi.json` 對這個欄位**沒有任何 schema**（同 `S3` 的空 requestBody），所以正確形狀無從查證。⇒ **要轉 `blocked` 就只送 `status`，解除路徑寫在工單留言**，不要為了填這個欄位反覆試——試錯會讓 `status` 一起寫不進去，看起來像「狀態改不動」 |
 | S6 | agent 把工單 PATCH 成 `in_review` → `invalid_issue_disposition` | 需先存在真實審查路徑（pending 的互動卡）。順序：**先發卡、再改狀態** |
 | S7 | 想把自己開的子單推進 `in_progress` → `in_progress issues require an assignee`；補上 `assigneeAgentId` 之後**再也 PATCH 不動那張單**，回 409 `Issue run ownership conflict` | **指派＝喚醒**，即使指派給「正在跑的自己」也一樣：Paperclip 會為那張子單另開一個併行 run，該 run 一 checkout 就成為單的擁有者，父 run 從此不能改它的狀態、也不能 `release`。而 `POST /api/heartbeat-runs/{id}/cancel` 是 **board-only（403）**，父 run 收不回來。⇒ 子單只要會被推進 `in_progress`，就**當成會生出一個併行 run 來設計**：先把它的描述與留言寫到足以讓那個 run 獨立完成，並明確寫出它**不該**碰什麼（尤其 git——共用 workspace 見 §5 `X1`）。不需要它跑起來就別指派，把單留在 `todo`。（2026-09-05 MYL-54 實測） |
 
@@ -141,12 +143,27 @@
   → 已修：`git_run()` 與測試的 `git()` 共用 `foundry_lint.git_env()`，把 `GIT_LOCATION_ENV` 那幾個變數清掉，讓 `-C` 說了算。
   → **用 worktree 迴避 `X1` 是對的**（HEAD 不會被併行 run 移走），但要知道它會換掉 hook 的環境。任何「shell out 去跑 git」的新程式碼都要走 `git_env()`。
 
+- `X5` **git 呼叫 hook 時會設 `GIT_DIR`，而它勝過 `git -C <路徑>`。** 於是「在臨時目錄造一個 repo 來測」這種測試，在 pre-commit 底下跑會被拉回**外層 repo**：臨時 repo 根本沒建起來，接著的 commit 觸發外層 hook、在臨時目錄找不到 `.pre-commit-config.yaml` 而整組紅。
+  症狀極難認：**單獨跑 `make test` 全過，`git commit` 觸發同一組測試時全敗**，而且 `foundry-tests` 這個 hook 只在 staged 檔案含 `tools/` 時才觸發，所以它平常隱形，只在動到 `tools/` 的那次 commit 現形（MYL-52 撞上，當時 22 項全紅）。
+  → 已修：`test_foundry_lint.py` 與 `tools/publish-docs/test_publish_gate.py` 在**模組載入時**就把 `os.environ` 裡的 `GIT_*` 清光，並各留一項回歸守衛。**要在程序層清，不是逐一傳 `env=`**——受測程式碼自己也會 shell out（`foundry_lint.git_run`），逐一傳只擋得住測試自己下的那幾道指令。日後新增「造臨時 repo」的測試，照抄這段。
+- `X6` **併行的 run 會改到共用 repo 的 `.git/config`，把整個工作區弄壞。** 2026-09-04 深夜實際發生：另一個 run（MYL-44 的 hook 驗證）在共用 repo 上設了 `core.bare = true`＋`user.name = 測試`／`user.email = test@example.com`，於是本 run 的 `git status`／`git add` 全部回 `fatal: 該動作必須在一個工作區中執行`——而 `git symbolic-ref` 之類不需要工作區的指令照常成功，看起來像 repo 還好好的。
+  → **不要去改回別人的設定**（他們可能正靠那個設定跑），也不要卡住等。兩條路：
+    1. 唯讀查看用 `git --git-dir=.git --work-tree=. <指令>`，這條不改任何東西就能繞過 `core.bare`。
+    2. 要 commit 就**開自己的 linked worktree**：`git --git-dir=<repo>/.git worktree add "$PAPERCLIP_RUN_SCRATCH_DIR/wt-<單號>" <分支>`，把工作區檔案複製過去，在那裡跑 `make check` 與 commit。分支與 ref 是共用的，commit 一樣進得了本 repo。
+  → commit 時**顯式帶身分**（`git -c user.name=… -c user.email=… commit`），否則會用到別人留在 repo config 裡的測試身分。這一條與 `X1` 是同一類問題的兩種形態：`X1` 是 HEAD 被換掉，`X6` 是 config 被換掉。
+
 ### 兩份 nav 的結構性漂移
 
 `mkdocs.yml`（私有站）與 `scripts/publish-handbook.sh` 內嵌的 heredoc `mkdocs.yml`（公開鏡像）是**兩份各自維護的 nav**。新增手冊章節時只改一份，公開站就會漏章——MYL-31 踩過這一類。
 
 短期以 `foundry-lint --selfcheck` 機械比對三者（磁碟章節數／私有 nav／腳本內嵌 nav）擋住；
 根治要讓腳本改為轉寫私有 `mkdocs.yml` 而非另寫一份，屬獨立工單範疇。
+
+**2026-09-05（MYL-52）補充：新增的第三個閱讀面沒有再加一份 nav。** wiki 的側欄
+（`_Sidebar.md`）由 `tools/publish-docs/project_docs.py` **轉寫私有 `mkdocs.yml` 的 nav**
+產生，正是上面那句「根治」的做法。`publish-handbook.sh` 的內嵌 heredoc **維持原樣未動**
+——改它會連動 `check_nav_sync` 綁定的區塊標記，不在該單範圍。所以現況是：
+**兩份手寫 nav ＋ 一份轉寫的**，漂移面沒有擴大，但也還沒收斂。
 
 ---
 

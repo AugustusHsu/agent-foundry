@@ -1,11 +1,20 @@
 ---
 name: foundry-platform
-description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（工單、狀態、里程碑、看板）做任何讀寫——開單、改狀態、留言、掛 label、查工單、建關聯、初始化平台骨架——先載入本文，依 .foundry/config.yml 的 platform 欄位選定 adapter 對照文檔，再照對照文檔執行具體指令。不得繞過 adapter 直接對平台下未列於對照文檔的寫入操作。
+description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（工單、狀態、里程碑、看板）做任何讀寫——開單、改狀態、留言、掛 label、查工單、建關聯、初始化平台骨架——或要把文檔投影到對外閱讀面（wiki、文檔站），先載入本文，依 .foundry/config.yml 的 platform／docs 欄位選定 adapter 對照文檔，再照對照文檔執行具體指令。不得繞過 adapter 直接對平台下未列於對照文檔的寫入操作。
 ---
 
 # foundry-platform：平台 adapter 介面
 
-依 MYL-9 HLD §2 制定（repo 歸檔本：`docs/features/cross-platform/HLD.md`，下同）。執行層（工單／進度／里程碑／看板）的所有操作收斂成 **8 個抽象動詞**；每個支援的平台有一份對照文檔（`adapters/<name>.md`）把動詞翻成具體指令。流程規範（foundry-protocol）只引用抽象動詞，不綁定平台——新增平台時只需新增一份對照文檔，介面與流程都不動。
+依 MYL-9 HLD §2 制定（repo 歸檔本：`docs/features/cross-platform/HLD.md`，下同）。本介面有 **9 個抽象動詞**，分屬兩條互相獨立的軸：
+
+| 介面 | 動詞 | 由哪個設定欄位分派 | 管什麼 |
+| --- | --- | --- | --- |
+| **執行層** | §3.1–§3.8 共 8 個 | `platform` | 工單／狀態／里程碑／看板 |
+| **文檔投影** | §3.9 `publish_docs` | `docs`（宿主平台由 `mirror_platform`／`platform` 決定） | 源頭文檔 → 對外閱讀面 |
+
+每個支援的平台有一份對照文檔（`adapters/<name>.md`）把動詞翻成具體指令。流程規範（foundry-protocol）只引用抽象動詞，不綁定平台——新增平台時只需新增一份對照文檔，介面與流程都不動。
+
+**兩條軸為什麼要分開**（MYL-52 裁定，理由見 §5）：一個專案的工單可以在 A 平台、文檔面在 B 平台，這不是假設性的——**本 repo 自己就是**：`platform: paperclip`，而手冊投影到 GitHub wiki。把 `publish_docs` 掛在 `platform` 上分派，本 repo 會被判成「不支援文檔投影」。同一個道理：`model_routing` 那段也是獨立軸（見 `config-schema.md`），別混。
 
 ## 1. 使用方式
 
@@ -14,6 +23,7 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 3. 要做的操作對應到下方哪個動詞，就照對照文檔中該動詞的指令執行。
 4. 對照文檔沒有涵蓋的平台寫入操作，一律不做——需要新操作時先開單擴充介面，不得私下直呼平台指令繞過。
 5. 找不到 `.foundry/config.yml` 時視為專案尚未導入 Foundry：停下，走 `foundry-init`（新專案）或 `foundry-adopt`（既有開發中專案），不得自行猜測平台。
+6. 要跑 `publish_docs` 時改讀 `docs` 段。對照文檔由**宿主平台**決定：`mirror_platform` 有值取它、否則取 `platform`（判定方式與 `config-schema.md` 的 `docs` 合法性規則同一條）——宿主是 `github` 時，`primary: wiki` 與 `mirror_site` 兩個面都在 `adapters/github.md` 的「§publish_docs」一節。`docs` 段缺席＝本專案不做文檔投影，此時 `publish_docs` 不可用，**這不是設定缺漏**。
 
 ## 2. 共通詞彙
 
@@ -83,26 +93,61 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
   - `blocked_by`：標記 `issue_ref` 被 `target_ref` 阻塞；`target_ref` 進入 `done` 前，`issue_ref` 依 foundry-protocol 第 2 節不得離開 `blocked`。
 - **成功判準**：關聯在平台側可查得（兩份 adapter 各自定義查法）；重複建立同一關聯冪等、不報錯。
 
+### 3.9 publish_docs
+
+把**源頭文檔**機械投影到一個對外閱讀面。判準只有一條，其餘規定都是它推導出來的：
+
+> **機械投影不是第二份真相。人只改源頭，投影一律機械產生且不接受手改。**
+
+（MYL-39 計畫 v3 用同一條否決過 E-2「手抄快照」。同一件事不能有兩套標準。）
+
+- **輸入**：
+  - `source_dir`：來源目錄，**唯一可寫的真相**（本 repo＝`docs/handbook/`）。
+  - `target`：目標面，取自 `.foundry/config.yml` 的 `docs.primary`（主閱讀面）或 `docs.mirror_site`（精裝面）。一個專案可以同時有兩個面，各自有自己的觸發時機。
+  - `trigger`：觸發時機，`on_merge_main`｜`on_tag`｜`manual`。宣告用途——動詞本身不排程，排程是 CI 或執行者的事。
+- **行為**：
+  1. **過前置閘門**：`source_dir` 的變更必須已合併進 main，且有對應的發佈審查證據（本 repo＝MYL-24 審查記錄 ＋ MYL-44 戳記旁路，見 foundry-protocol 第 7 節）。閘門不過就**不做任何寫入**。
+  2. **防手改偵測**：比對目標面現況是不是上一次投影推上去的那一份。不是就**拒絕覆蓋並報錯**，不得自行覆寫——覆寫等於把別人寫的東西靜靜刪掉。放棄目標面上的改動必須是人的顯式決定（旗標／參數），不是預設行為。
+  3. **投影**：來源 → 目標面的轉換必須是**確定性**的（同樣的來源永遠產出同樣的位元組），且轉換規則寫在 adapter，不留給執行者臨場判斷。
+  4. **逐章比對**：投影完成後逐章比對標題文字、章節數、內部連結目標、規則層戳記行是否存活。**不接受「應該搬完了」，缺一章就是紅燈**，紅燈時不得推送。
+- **成功判準**：目標面完整含有 `source_dir` 的全部章節；逐章比對表全綠；目標面留下可供下次防手改比對的投影記錄（本 repo＝commit trailer 記來源 sha 與內容摘要）。
+- **失敗即停**：上述任一步失敗都**不推送**，並原樣保留錯誤輸出。這個動詞沒有「先推上去再修」的模式——目標面是對外的。
+- **本動詞屬對外動作**：新開一個目標面（啟用 wiki、新建公開 repo、開 Pages）是關卡 C（`gates.external_actions: user`，不可調降），**不在本動詞授權範圍內**；本動詞只負責「已開通的管道」的例行同步（本 repo 依 MYL-23 分級表屬 P2）。
+
 ## 4. 錯誤處理共通規則
 
 - `issue_ref` 或 `target_ref` 不存在 → 立即報錯並停止該操作，**不得靜默略過、不得自動開新單代替**。
 - 平台指令失敗（權限、網路、認證）→ 原樣保留錯誤輸出，依 foundry-protocol 第 2 節判斷是否轉 `blocked`；連續兩次同指令失敗即停止重試。
-- 寫入類動詞（除 `list_issues` 外全部）執行後，用對照文檔標明的查證指令確認結果，才算完成。
+- 寫入類動詞（**除 `list_issues` 外全部，含 `publish_docs`**）執行後，用對照文檔標明的查證指令確認結果，才算完成。`publish_docs` 的查證就是 §3.9 的逐章比對表——腳本自己回報成功不算數（known-drift `X2`：發佈互蓋過，當時腳本也回報成功）。
 
 ## 5. 跨平台相容原則（MYL-9 HLD §6.3）
 
 - 本文與兩份對照文檔皆為純 markdown＋YAML frontmatter，任何 agent runtime（Claude Code、Codex 等）或人類皆可直接閱讀照做，不依賴特定 runtime 專屬功能。
 - 對照文檔中的指令一律是可直接在 shell 執行的完整範例（含佔位符說明），不是偽代碼。
-- 新增平台（如 GitLab）：新增 `adapters/gitlab.md` 覆蓋全部 8 個動詞＋在 `config-schema.md` 的 `platform` 枚舉補值，介面本文不改。做不到全覆蓋的平台不得上線——寧缺勿殘。
+- 新增平台（如 GitLab）：新增 `adapters/gitlab.md` **覆蓋該介面的全部動詞**＋在 `config-schema.md` 的對應枚舉補值，介面本文不改。做不到全覆蓋的不得上線——寧缺勿殘。
+  - 執行層平台（`platform` 的值）＝§3.1–§3.8 的 8 個動詞全覆蓋。
+  - 文檔投影宿主（被 `docs` 段指到的平台）＝`publish_docs` 完整定義（轉換規則、防手改比對依據、逐章比對方式），且 `docs.primary` 用得到的面都要涵蓋。
+  - **兩者互不蘊含**：只做執行層的平台不因為沒有 `publish_docs` 而殘缺，只做文檔面的目標也不必實作工單動詞。
+
+  <details><summary><b>MYL-52 裁定：加第 9 個動詞為什麼沒有讓既有三份 adapter 全部不合格</b></summary>
+
+  加 `publish_docs` 時，本節原本寫的是「新增平台要覆蓋全部 8 個動詞」，字面上會讓 `github.md`／`paperclip.md`／`local-md.md` 當場全部不合格。三條路擺在眼前，選的是第三條——**改寫「全覆蓋」的定義**，理由如下：
+
+  - **① 三份 adapter 全部補齊 `publish_docs`：否決。** Paperclip 沒有文檔面（它的 documents 掛在單張工單上，不是一本手冊），補出來的會是憑空發明的東西，而發明出來的規格沒有人驗得了。
+  - **② 把 `publish_docs` 標為選配動詞：否決。** 選配只是讓分派錯軸這件事靜默下來，沒有解決它。**本 repo 就是決定性反例**：`platform: paperclip`、文檔面卻在 GitHub wiki。若 `publish_docs` 跟著 `platform` 分派，本 repo 讀到的是 `adapters/paperclip.md`，得到「本平台不支援文檔投影」——而本 repo 正在做文檔投影。選配讓這個矛盾不報錯，不代表它不存在。
+  - **③ 改寫定義（採用）**：`publish_docs` 由 `docs` 段分派（宿主取 `mirror_platform`／`platform`），與執行層的 `platform` 正交；「全覆蓋」改為**每個介面各自全覆蓋**。既有三份 adapter 維持為執行層 adapter，全部仍然合格；`github.md` 另外多一個身分——它同時是 wiki 與 mkdocs 精裝站兩個文檔投影面的對照文檔。
+
+  「寧缺勿殘」的原意（不讓半套平台上線）因此完整保留：殘不殘的判準是「**宣告支援的那個介面有沒有做完**」，而不是「有沒有做完所有介面」。
+  </details>
 - **平台專屬限制寫在 adapter，不上升為流程規則**（MYL-35）：某平台的欄位語意、權限例外、API 怪癖（如 paperclip 的 `labelIds` 全量替換、`skill_actor_restricted` 403）一律收在該 adapter 的「平台限制」一節；foundry-protocol 與角色 skill 只引用抽象動詞與六態，換平台時**只換 adapter、不改規範**。判準：一句規則若在其他平台字面上不成立，它就屬於 adapter。
 
 ## 6. 檔案地圖
 
 | 檔案 | 內容 |
 | --- | --- |
-| `SKILL.md`（本文） | 介面定義：8 動詞、共通詞彙、錯誤規則 |
-| `adapters/github.md` | 動詞 → gh CLI 指令對照 |
-| `adapters/local-md.md` | 動詞 → `.foundry/board/` 檔案操作對照 |
-| `adapters/paperclip.md` | 動詞 → Paperclip REST API 對照（含平台限制表） |
+| `SKILL.md`（本文） | 介面定義：9 動詞（8 執行層＋1 文檔投影）、共通詞彙、錯誤規則 |
+| `adapters/github.md` | 執行層動詞 → gh CLI 指令對照；**另含 `publish_docs` 的兩個投影面**（wiki 主閱讀面、mkdocs 精裝站） |
+| `adapters/local-md.md` | 執行層動詞 → `.foundry/board/` 檔案操作對照 |
+| `adapters/paperclip.md` | 執行層動詞 → Paperclip REST API 對照（含平台限制表） |
 | `config-schema.md` | `.foundry/config.yml` 欄位說明 |
 | `config.example.yml` | 設定檔範例（含註解），`foundry-init` 據此產生實際檔案 |

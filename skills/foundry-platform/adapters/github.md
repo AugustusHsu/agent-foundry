@@ -308,6 +308,77 @@ gh issue list --state all --limit 500 --json number,state,body \
 | 接受鏡像端的任何寫入 | 見本節開頭：唯讀。要改回來源端改。 |
 | 鏡像父子／`blocked_by` 關係 | 掛關係要求兩邊都已存在鏡像，牽涉建單順序與重試語意，本規格不定；先讓三個時機穩定。 |
 
+## publish_docs（文檔投影目標面）
+
+本檔除了是執行層 adapter，也承載 `publish_docs`（SKILL.md §3.9）的兩個目標面。
+**這一節與上面的執行層動詞互相獨立**：`docs` 段選這裡，`platform` 選上面，
+一個專案可以只用其中一邊（MYL-52 裁定，理由見 SKILL.md §5）。
+本節在「宿主平台是 github」時適用——宿主的判定同 `../config-schema.md` 的 `docs` 合法性規則：
+`mirror_platform` 有值取它、否則取 `platform`。本 repo 屬後者之外的情況（`platform: paperclip`
+而文檔面在 github），所以要靠 `mirror_platform: github` 或在工單裡明講，別靠讀者猜。
+
+| 設定 | 指令 | 定位 | 觸發時機 |
+| --- | --- | --- | --- |
+| `docs.primary: wiki` | `bash scripts/publish-wiki.sh` | **主閱讀面**：合併 main 即同步 | `merge` |
+| `docs.mirror_site` | `bash scripts/publish-handbook.sh` | 精裝面：公開鏡像 repo ＋ Pages | `manual`（`tag` 觸發屬 MYL-39 N5，尚未做） |
+
+兩者共用同一道前置閘門 `scripts/lib/publish-gate.sh`（MYL-24 審查證據 ＋ MYL-44 戳記旁路）。
+閘門可單獨執行以排查：`bash scripts/lib/publish-gate.sh <repo 根>`——只判斷，不 clone 不 push。
+
+### `primary: wiki` 的轉換規則
+
+wiki 是**另一個 git repo**（`<repo>.wiki.git`），頁面是平的、沒有目錄層級。
+轉換由 `tools/publish-docs/project_docs.py` 執行，四條規則全部是載體差異逼出來的：
+
+| # | 規則 | 為什麼 |
+| --- | --- | --- |
+| 1 | `index.md` → `Home.md`，其餘章節同名平移 | wiki 的首頁頁名固定是 `Home` |
+| 2 | 章間連結去掉 `.md`（`04-x.md` → `04-x`） | wiki 頁面 URL 是 `.../wiki/<頁名>`，沒有副檔名。去掉之後是**單純的相對 URL 解析**，不倚賴 wiki 專屬的連結改寫魔法——這點重要，因為本機驗不了 wiki 渲染（`X4`） |
+| 3 | 錨點由 mkdocs slug 換算成 GitHub slug | Python-Markdown 預設 slugify 丟掉非 ASCII（`## 3. HITL 發卡` → `#3-hitl`），GitHub 保留 CJK（`#3-hitl-發卡`）。**照抄過去必然全斷** |
+| 4 | 指向 repo 內部路徑（`skills/`、`templates/`、`docs/pilot/`）的相對連結依 `docs.link_policy` 改寫 | 相對路徑在 wiki 一定失效。`absolute`＝改寫成 `https://github.com/<repo>/blob/main/<路徑>`；`plain`＝比照公開鏡像拆成純文字 |
+
+側欄 `_Sidebar.md` **由私有 `mkdocs.yml` 的 nav 轉寫**，不另手寫一份——
+手寫就會變成 known-drift 記的「兩份 nav」再加一份。頁尾 `_Footer.md` 放「請勿直接編輯」與來源 commit。
+
+### `primary: wiki` 的防手改偵測
+
+投影 commit 的訊息帶兩行 trailer：
+
+```
+Foundry-Projection: <來源手冊 commit sha>
+Foundry-Projection-Digest: <投影內容的 sha256>
+```
+
+同步前的判定，兩層都要過：
+
+1. wiki 的 HEAD 訊息**必須帶 trailer**。UI 上的編輯留下的是 GitHub 自己的訊息（`Updated Home (markdown)`），trailer 當場消失。
+2. wiki 現況重算出來的摘要**必須等於** trailer 記的那個。光抄 trailer 沒有用——內容對不上一樣擋下。
+
+任一層不過就**拒絕覆蓋並報錯**，印出三條處置（搬回源頭／在 wiki 還原／`--bootstrap` 顯式放棄）。
+`--bootstrap` 是唯一的旁路，且必須由人在指令列打出來：放棄別人的編輯是人的決定，不是腳本的預設行為。
+
+### 查證（動詞的成功判準）
+
+`scripts/publish-wiki.sh` 推送前會跑 `tools/publish-docs/compare_projection.py`，逐章比對
+標題文字／章節數／內部連結目標／MYL-44 戳記行，輸出對照表；**任一格紅就 exit 1、不推送**。
+把該表貼進工單即為證據。腳本自己回報成功不算查證（`X2` 踩過：發佈互蓋時腳本也說成功）。
+
+⚠️ 對照表證得了「投影自我一致」，**證不了** GitHub 實際算出來的錨點字串等於我們算的那個。
+那件事本機沒有渲染器可驗（`X4`），只能在 wiki 實站點一遍。表格因此把錨點另列一欄標「待實站驗」。
+
+### 開通目標面不在本節授權內
+
+啟用 wiki（`has_wiki: true`）、新建公開鏡像 repo、開 Pages——都是**新開對外資源**，
+屬關卡 C（`gates.external_actions: user`，不可調降），發卡請使用者執行。
+本節的兩支腳本只負責**已開通管道**的例行同步（P2）。
+
+⚠️ **開通 wiki 是兩步，不是一步**（`L15`，2026-09-05 MYL-52 實測）：
+`has_wiki: true` 只是開開關，wiki 的 git repo 要等**第一頁建立**才成形。
+在那之前 `<repo>.wiki.git` 的 clone 與 push 都回 `Repository not found`，
+而建第一頁**只有 UI 有入口**（REST 的 `repos/{o}/{r}/wiki` 是 404，GraphQL 沒有 wiki mutation）。
+所以卡要一次問完兩件事，或在第一步的卡裡就講明還會有第二步——
+只問「可不可以開 wiki」會讓使用者以為按完就結束了。
+
 ## 附錄 A：查 project 編號
 
 ```sh

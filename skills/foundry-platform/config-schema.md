@@ -120,6 +120,7 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 | --- | --- | --- | --- |
 | `docs.source` | 字串 | ✅（有本段時） | 來源目錄，相對 repo 根、以 `/` 結尾。這是唯一可寫的真相。 |
 | `docs.primary` | 枚舉 | ✅（有本段時） | 主閱讀面：`wiki`（投影到平台 wiki）｜`repo`（不投影，讀者直接讀 repo 內的 `source`）｜`none`（不對外提供閱讀面）。 |
+| `docs.link_policy` | 枚舉 | ─（預設 `absolute`，MYL-52 增訂） | 來源裡指向 repo 內部路徑（`skills/`、`templates/` 之類）的相對連結，投影時怎麼處理：`absolute`＝改寫成指回 repo 的絕對 URL；`plain`＝拆為純文字。**投影面的頁面是平的，這些相對路徑在那邊一定失效，所以沒有「原樣保留」這個選項。** |
 | `docs.mirror_site` | 物件 | ─ | 精裝站（mkdocs 之類）。**整段缺席＝不建精裝站。** |
 | `docs.mirror_site.enabled` | 布林 | ✅（有本段時） | 顯式 `false`＝設定保留、暫時關閉；與整段缺席的差別只在於保不保留下面幾欄。 |
 | `docs.mirror_site.trigger` | 枚舉 | ✅（`enabled: true` 時） | 何時重建：`tag`｜`merge`（合併進 main 即發）｜`manual`（人工執行）。 |
@@ -133,6 +134,15 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 
 寫入者：使用者，或經使用者核可的計畫。`foundry-init` **目前不詢問本段**，導入的專案預設整段缺席
 （＝只有源頭、沒有投影面）；要投影時再補寫。
+
+**怎麼執行**（MYL-52 增訂）：本段只宣告「投影到哪」，實際動作是抽象動詞 `publish_docs`
+（`SKILL.md` §3.9）。載入哪份對照文檔由**宿主平台**決定，判定方式同上面的合法性規則
+（`mirror_platform` 有值取它、否則取 `platform`）——例如宿主是 `github` 時，
+`primary: wiki` 與 `mirror_site` 兩個面的具體指令都在 `adapters/github.md` 的 `publish_docs` 一節。
+上面那句「投影前先確認現況就是上次推上去的內容」在該節有具體的比對依據，不是原則宣示。
+
+⚠️ 本段只宣告**已開通的管道**。開通投影面本身（啟用 wiki、新建公開 repo、開 Pages）
+是關卡 C（`gates.external_actions: user`，不可調降），不因為寫進本段而獲得授權。
 
 ## 合法性總則
 
