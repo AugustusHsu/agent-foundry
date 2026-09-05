@@ -1,0 +1,948 @@
+
+<!doctype html>
+<html lang="zh-TW" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Foundry — 跑在 Paperclip 上的 AI 開發團隊規範與手冊">
+      
+      
+      
+        <link rel="canonical" href="https://augustushsu.github.io/agent-foundry/v1/03-workflow/">
+      
+      
+        <link rel="prev" href="../02-commands/">
+      
+      
+        <link rel="next" href="../04-decision-points/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>3. 流程會怎麼跑？ - Foundry Handbook</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-orange" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#3" class="md-skip">
+          跳轉到
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="頁首">
+    <a href=".." title="Foundry Handbook" class="md-header__button md-logo" aria-label="Foundry Handbook" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Foundry Handbook
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              3. 流程會怎麼跑？
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-orange" data-md-color-accent="deep-orange"  aria-label="切換至深色模式"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="切換至深色模式" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-orange" data-md-color-accent="deep-orange"  aria-label="切換至淺色模式"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="切換至淺色模式" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜尋" placeholder="搜尋" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="搜尋">
+        
+        <button type="reset" class="md-search__icon md-icon" title="清除" aria-label="清除" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜尋引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/AugustusHsu/agent-foundry" title="前往倉庫" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AugustusHsu/agent-foundry
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="導覽列" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Foundry Handbook" class="md-nav__button md-logo" aria-label="Foundry Handbook" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Foundry Handbook
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/AugustusHsu/agent-foundry" title="前往倉庫" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AugustusHsu/agent-foundry
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    手冊首頁
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../01-first-run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. 第一次使用走查
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../02-commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. 我該下什麼指令？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. 流程會怎麼跑？
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. 流程會怎麼跑？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目錄">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目錄
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 0 段：選題／提需求
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-product-analyst" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 1 段：需求（Product Analyst）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-tech-lead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 2 段：設計（Tech Lead）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-scrum-master" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 3 段：拆單（Scrum Master）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-developer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 4 段：實作（Developer）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-code-reviewer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 5 段：審查（Code Reviewer）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-qa-engineer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 6 段：測試（QA Engineer）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 7 段：結案
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        狀態機速查
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../04-decision-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. 我要在哪幾個點做決定？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../05-troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    5. 故障排除
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../06-org-structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    6. 團隊是怎麼編制的？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../07-workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    7. 團隊有哪些固定 workflow？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../08-cross-platform/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    8. 怎麼把這套流程帶到其他專案？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目錄">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目錄
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 0 段：選題／提需求
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-product-analyst" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 1 段：需求（Product Analyst）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-tech-lead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 2 段：設計（Tech Lead）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-scrum-master" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 3 段：拆單（Scrum Master）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-developer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 4 段：實作（Developer）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-code-reviewer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 5 段：審查（Code Reviewer）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-qa-engineer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 6 段：測試（QA Engineer）
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第 7 段：結案
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        狀態機速查
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="3">3. 流程會怎麼跑？<a class="headerlink" href="#3" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>最後對照 protocol <code>fbd70ff</code>（2026-09-05）</p>
+</blockquote>
+<p>標準流程鏈（foundry-protocol 第 3 節）：</p>
+<div class="highlight"><pre><span></span><code>需求 ──▶ 設計 ──▶ 拆單 ──▶ 實作 ──▶ 審查 ──▶ 測試 ──▶ 結案
+ PA       TL       SM       Dev      CR       QA
+</code></pre></div>
+<p>每一棒要交出規定的交接物，<strong>交接物不齊，下一棒有權直接退回、不開工</strong>。交接一律發生在工單留言或工單文件上，不依賴私下對話。</p>
+<p>下面用 Pilot 的真實案例（foundry-lint，MYL-16 → MYL-21）把每一段走一遍。每段格式固定：誰接手、產出什麼、什麼條件才往下走、Pilot 實際發生的事。</p>
+<h2 id="0">第 0 段：選題／提需求<a class="headerlink" href="#0" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>誰</strong>：你（使用者）＋ CEO。</li>
+<li><strong>產出</strong>：一個確定要做的題目。</li>
+<li><strong>往下走的條件</strong>：題目由你明確選定或提出——agent 不得自行挑題開跑。</li>
+<li><strong>Pilot 實際</strong>：CEO 發選題卡（<code>ask:MYL-6:pilot-topic:v1</code>），使用者 2026-09-02 選定「foundry-lint 文件檢查器」。</li>
+</ul>
+<h2 id="1-product-analyst">第 1 段：需求（Product Analyst）<a class="headerlink" href="#1-product-analyst" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>誰</strong>：Product Analyst 接手，開需求單。</li>
+<li><strong>產出</strong>：BRD（為什麼做、成功長怎樣）＋ PRD（具體要有什麼行為），用 <code>templates/</code> 骨架，存 <code>docs/features/&lt;模組&gt;/</code>。</li>
+<li><strong>往下走的條件</strong>：</li>
+<li>需求取捨經你確認（互動卡）——文件正文只放你明確確認過的需求；</li>
+<li>未決事項清空；</li>
+<li>BRD／PRD 定稿經你核可（確認卡）；</li>
+<li>交接 Tech Lead 前，交接物齊：BRD／PRD 路徑＋已確認的決策清單。</li>
+<li><strong>Pilot 實際</strong>：MYL-16。起草（commit <code>07b8865</code>）→ 四項取捨經 <code>ask:MYL-16:lint-requirements:v1</code> 確認 → 定稿（<code>ac0c180</code>）→ 定稿核可卡 <code>confirmation:MYL-16:prd-final:ac0c180</code> → 交接核可卡 <code>confirmation:MYL-16:handoff-techlead:ac0c180</code>（2026-09-03 核可）→ MYL-16 結單，Tech Lead 開工。</li>
+</ul>
+<h2 id="2-tech-lead">第 2 段：設計（Tech Lead）<a class="headerlink" href="#2-tech-lead" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>誰</strong>：Tech Lead。</li>
+<li><strong>產出</strong>：HLD（系統長什麼樣、為什麼這樣選，含 ADR）＋ LLD（Developer 照著寫就行），存 <code>docs/features/&lt;模組&gt;/</code>。</li>
+<li><strong>往下走的條件</strong>：</li>
+<li>LLD 完成度達標——Developer 讀完不需再做任何設計決策；</li>
+<li>重大選型有 ADR（選項＋取捨＋結論三段齊）；</li>
+<li>設計定稿經你核可，Scrum Master 才能據以拆單。</li>
+<li><strong>Pilot 實際</strong>：MYL-17。HLD／LLD 含 ADR-1～3 技術選型（commit <code>76f3089</code>）→ 核可卡 <code>confirmation:MYL-17:handoff-sm:76f3089</code>（2026-09-03 核可）→ MYL-18 拆單解除阻塞。</li>
+</ul>
+<h2 id="3-scrum-master">第 3 段：拆單（Scrum Master）<a class="headerlink" href="#3-scrum-master" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>誰</strong>：Scrum Master。</li>
+<li><strong>產出</strong>：合格工單鏈——每張單過四段骨架判準、單一交付物、可獨立驗收、附設計文件路徑；硬依賴用 <code>blockedByIssueIds</code> 掛好。</li>
+<li><strong>往下走的條件</strong>：工單四段齊全、Inputs 逐項可存取、依賴鏈沒有環也沒有隱藏前置；Tech Lead 核對拆單能對應回設計文件章節。</li>
+<li><strong>Pilot 實際</strong>：MYL-18 拆出 <strong>MYL-19（實作）→ MYL-20（審查）→ MYL-21（測試）</strong> 三張一鏈。</li>
+</ul>
+<h2 id="4-developer">第 4 段：實作（Developer）<a class="headerlink" href="#4-developer" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>誰</strong>：Developer 領單。</li>
+<li><strong>產出</strong>：一單一分支上的程式碼＋測試，加<strong>三段式交付回報</strong>：(1) 執行項目追蹤（AC 逐條對應做了什麼、在哪個檔案）；(2) 矛盾與風險警告；(3) 驗證與測試建議。外加分支名與 commit 訊息草案。</li>
+<li><strong>往下走的條件</strong>：每條 AC 自驗有證據、測試全綠、分支上只有本單變更、三段式回報齊。<strong>AC 逐條對應，不多做也不少做</strong>——順手改善記進風險警告，不動手。</li>
+<li><strong>Pilot 實際</strong>：MYL-19。分支 <code>feat/MYL-19-foundry-lint</code>，實作 CLI＋測試（commit <code>7bf8c6e</code>、<code>1451c4f</code>）→ 交付確認卡 <code>confirmation:MYL-19:delivery:1451c4f</code>（2026-09-03 核可）→ 交棒審查。</li>
+<li>⚠️ 此處踩過卡點 #3：確認卡核可後 Developer 先把分支合入 main 才進審查，順序倒置。現行規範已補「合併時點」條款：<strong>掛有審查單的分支，一律審查 APPROVED 之後才合併</strong>；你的核可＝同意交付進入審查，不等於合併授權。</li>
+</ul>
+<h2 id="5-code-reviewer">第 5 段：審查（Code Reviewer）<a class="headerlink" href="#5-code-reviewer" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>誰</strong>：Code Reviewer。</li>
+<li><strong>產出</strong>：標準審查報告，結尾必有明確 Verdict：<code>✅ APPROVED</code> 或 <code>❌ CHANGES REQUESTED</code>＋重大瑕疵清單（每項含位置／問題／期望）。報告貼工單留言<strong>並</strong> commit 進 repo（<code>docs/features/&lt;模組&gt;/review-report.md</code>，卡點 #6 後的新規）。</li>
+<li><strong>往下走的條件</strong>：四維審查（AC 證據、設計符合度、安全與資料正確性、可維護性）全過且分支已收尾 → APPROVED；否則退回 Developer，複審只對上一輪清單逐項驗。</li>
+<li><strong>Pilot 實際</strong>：MYL-20。7 條 AC 實測全過，Verdict <code>✅ APPROVED</code>；報告後補轉錄為 <code>docs/features/foundry-lint/review-report.md</code>。</li>
+</ul>
+<h2 id="6-qa-engineer">第 6 段：測試（QA Engineer）<a class="headerlink" href="#6-qa-engineer" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>誰</strong>：QA Engineer。</li>
+<li><strong>產出</strong>：測試計畫（<code>templates/test-plan.md</code> 骨架，AC 一條不漏、邊界優先）＋執行結果；有缺陷則出三段式缺陷報告（重現步驟／預期／實際）＋成因工單判定建議。</li>
+<li><strong>往下走的條件</strong>：全數測項綠燈 → 結案；有缺陷 → 依 protocol 第 5 節收容判定表處理（能退回原單就不開新單）。</li>
+<li><strong>Pilot 實際</strong>：MYL-21。測試計畫 15 測項全過、無缺陷（commit <code>c26c442</code>），結單。</li>
+</ul>
+<h2 id="7">第 7 段：結案<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<p>每張單轉 <code>done</code> 的鐵則：<strong>AC 逐條有驗證證據、分支已收尾（合併或註明保留原因）。只有宣稱、沒有證據，不得結案。</strong></p>
+<p>另一項 Definition of Done（MYL-12 決議，MYL-24 改為自動化）：<strong>動到 <code>docs/handbook/</code> 的工單，結案前必須同步對外的主閱讀面。</strong>這件事現在由 agent 自己走完，不再逐次問你——你在 push 分級表裡把「既有公開管道的內容同步」列為 P2 常設授權（<a href="../04-decision-points/">第 4 章</a>），agent 就在授權範圍內代行。四個步驟：</p>
+<ol>
+<li>手冊變更合併進 main。</li>
+<li>執行 agent 寫<strong>發佈審查記錄</strong>（<code>docs/publish-reviews/&lt;工單編號&gt;.md</code>），逐項自檢 P2 三前提——來源已合併、範圍只動 <code>docs/handbook/</code>、連結改寫輸出無異常——外加公開適切性檢查（有沒有機敏資訊、內部路徑對外部讀者讀不讀得通、連結會不會斷）。三項全過才給 <code>APPROVED</code>。</li>
+<li>審查記錄 commit 進 repo。</li>
+<li>同步主閱讀面（本專案是 wiki，執行 <code>scripts/publish-wiki.sh</code>）。腳本有<strong>證據閘門</strong>：核對不到對應這版手冊的 APPROVED 記錄就拒跑，跳過審查直接發佈是做不到的。閘門綁的是手冊內容的 commit sha，所以「審查通過後又偷改手冊」也會被擋。</li>
+</ol>
+<p>自檢有任一前提不成立（例如變更還沒合併進 main），agent 不會硬發，結案留言會註明「主閱讀面未同步」與原因，結案本身不被卡住。</p>
+<p>還有<strong>第五步，但它不是結案條件</strong>：版本化的精裝站要不要跟著發一版，由你決定——打 <code>handbook-v&lt;N&gt;</code> tag 就會觸發 CI 建站。tag 發佈屬你專屬，agent 不會自己打（<a href="../04-decision-points/">第 4 章</a>）。</p>
+<p><strong>要你出面的還有一種情況</strong>：發佈範圍或投影規則本身要改（不只是同步內容），那是 P3，會發卡問你。</p>
+<ul>
+<li><strong>Pilot 實際</strong>：MYL-19～21 依序結案後，Pilot 主單（MYL-6）收尾：六個卡點的規範修正回寫 repo（commit <code>f5dd989</code> 等），修正後的 skill 由使用者重新匯入 Paperclip（決策點 #7，agent 無權執行）。</li>
+</ul>
+<h2 id="_1">狀態機速查<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<p>工單只有六個狀態，流轉條件都是可判定的（詳見 protocol 第 2 節）：</p>
+<div class="highlight"><pre><span></span><code>blocked ──前置done/Inputs可用/卡已回──▶ todo ──領單──▶ in_progress
+   ▲                                                      │
+   └────遇阻塞或觸發 HITL 閘門────────────────────────────┘
+                                                          │交付完成且自檢過AC
+cancelled（需求不再成立，留言註明）          in_review ◀──┘
+                                              │審查過──▶ done
+                                              └退回──▶ in_progress（附具體缺陷清單）
+</code></pre></div>
+<p>看板上一張單長時間不動，先看它的狀態與留言——<code>blocked</code> 的單必附阻塞原因與解除路徑，見<a href="../05-troubleshooting/">第 5 章</a>。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  回到頂端
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u8907\u88fd", "clipboard.copy": "\u8907\u88fd", "search.result.more.one": "\u6b64\u9801\u5c1a\u6709 1 \u500b\u7b26\u5408\u7684\u9805\u76ee", "search.result.more.other": "\u6b64\u9801\u5c1a\u6709 # \u500b\u7b26\u5408\u7684\u9805\u76ee", "search.result.none": "\u6c92\u6709\u7b26\u5408\u7684\u9805\u76ee", "search.result.one": "\u627e\u5230 1 \u500b\u7b26\u5408\u7684\u9805\u76ee", "search.result.other": "\u627e\u5230 # \u500b\u7b26\u5408\u7684\u9805\u76ee", "search.result.placeholder": "\u6253\u5b57\u9032\u884c\u641c\u5c0b", "search.result.term.missing": "\u7f3a\u5c11\u5b57\u8a5e", "select.version": "\u9078\u64c7\u7248\u672c"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
