@@ -30,7 +30,7 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
 | Q1 | **軸 B：文檔與協作工具** `github`｜`gitlab`｜`local-md`｜`paperclip` | `devtools_platform` | 本步卡 |
 | Q2 | **軸 A：AI 平台** `paperclip`｜`claude-code`｜`codex`（可答「不宣告」） | `ai_platform` | 本步卡 |
 | Q3 | **文檔目標面**：要不要文檔投影面；要的話 `docs.primary` 取哪一面 | `docs` 段 | 本步卡 |
-| Q4 | **組織**：要不要建團隊、用哪份 `org.yml` | `.foundry/org.yml` | 本步卡 |
+| Q4 | **組織**：要不要建團隊（要 ⇒ `org.yml` 內容依 protocol 第 9 節推導，非自由填） | `.foundry/org.yml` | 本步卡 |
 | Q5 | **branch push 權限** `user`｜`tech-lead` | `push.branch_push` | 本步卡 |
 | Q6 | **平台側資源建立同意**（僅 github 模式） | ─（授權證據） | 本步卡 |
 | Q7 | **關卡粒度** | `gates` 段 | **步驟 4** 的 gates 確認卡 |
@@ -52,7 +52,10 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
      不是設定缺漏（見 `config-schema.md`）。**不得由 agent 依「現在是誰在跑」自行填入**：
      agent 觀察到的是自己這一輪的殼，不一定是該專案長期要用的殼。
    - **文檔目標面**（Q3）：未答視同不啟用 `docs` 段。
-   - **組織**（Q4）：未答視同不產生 `.foundry/org.yml`。
+   - **組織**（Q4）：未答視同不產生 `.foundry/org.yml`。**卡上要講明這一題問的只是「產不產這份檔」**——
+     答「要」之後編制照複製過去的 protocol 第 9 節那張圖推導（§2 第 5 點），**沒有一格是自由填的**，
+     所以不要在卡上給「用哪份 `org.yml`」這種選擇（沒有第二份可選，也刻意不提供範本檔，
+     理由見 `config-schema.md` 該節末）。
    - **branch push 權限**（`push.branch_push`）：`user`（每次 push 都問）或 `tech-lead`（分支 push＋開 PR 自動）。這是常設授權的給予，屬關卡 C，只能使用者拍板；卡上未選視同 `user`。
    - **平台側資源建立同意**（僅 github 模式需要）：卡上明列步驟 3 將建立的資源——標準 label 集、milestone 容器、名為「Foundry」（或使用者指定標題）的 ProjectV2＋三個 view。此欄的同意即 protocol 決策點 7（平台動作）的授權證據；未同意前不得執行步驟 3。
 2. **前置檢查**（依選定平台，任一項不過就停下回報，不得帶病續跑）：
@@ -78,14 +81,25 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    - `skills/foundry-model-routing/SKILL.md`
    - `skills/foundry-ai-platform/SKILL.md`——軸 A 的能力對照表與降級規則；步驟 1 Q2 與
      步驟 5 報告的降級清單都要引用它，目標專案沒有這份就查不到自己缺了什麼。
+   - `skills/foundry-browser/SKILL.md`——**同上一條的理由，被指到的換成它**：`AP-5` 把
+     `CAP-8` 的判級、補齊與降級**整條**交給這份檔（`foundry-ai-platform` §4），而報告第 3 點
+     要求逐項寫出降級規則。走到 `CAP-8` 就會指過來，缺了這份的目標專案答不出來。
    - `templates/`（全目錄）
    - `tools/foundry-lint/`（全目錄）——機械層閘門的本體，步驟 2.5 的 CI 與 hook 都靠它。
    - `tools/model-routing/`（全目錄）——`foundry-model-routing` 步驟 1 的盤點腳本；沒有它，
      那份 workflow 的第一步只能靠猜。
-   - `skills/roles/`（全目錄）——**僅步驟 1 Q4 答「要建團隊」時複製**。理由是 `org.yml` 每個角色的
-     `skills[]` 都指向這裡，而 `org-sync` 會逐條驗路徑存在：不帶這個目錄就產 `org.yml`，
-     目標專案一跑自檢就是九條「掛的 skill 不存在」（實測，MYL-78）。Q4 答「不建團隊」時
-     不產 `org.yml`，這個目錄也就沒有存在的理由，照舊不複製。
+   - `tools/browser-probe/`（全目錄）——`AP-5` 明寫「判級不得憑設定檔外觀，要跑 `make browser`」，
+     而 `make browser` 就是這支腳本。只帶上面那份 SKILL.md 不帶它，那句要求在目標專案無法執行。
+   - `tools/publish-docs/`（全目錄）——**這一項與 `docs` 段開不開無關**，它是被 `Makefile` 綁進來的：
+     步驟 2.5 會把 `Makefile` 整份複製過去，而它的 `test:` target 逐一 `unittest discover`
+     上面每一個 `tools/` 目錄。少任何一個，目標專案第一次跑 `make check` 就掛——而 `make check`
+     正是入口檔叫每個新 session 跑的那一行。⚠️ **這個對應關係目前沒有任何自檢在管**
+     （MYL-78 發現，`Makefile` 的 `test:` 上方已加維護提示；機械化另立單）。
+   - `skills/roles/`（全目錄）——**要建團隊時才複製**。兩個 workflow 各自的觸發點：
+     init＝步驟 1 Q4 答「要建團隊」；adopt＝使用者在 §2 卡上勾了 M4（`foundry-adopt` §3.4）。
+     理由是 `org.yml` 每個角色的 `skills[]` 都指向這裡，而 `org-sync` 會逐條驗路徑存在：
+     不帶這個目錄就產 `org.yml`，目標專案一跑自檢就是九條「掛的 skill 不存在」（實測，MYL-78）。
+     反過來，不建團隊時不產 `org.yml`，這個目錄也就沒有存在的理由，照舊不複製。
    - 不複製：`skills/foundry-init/`（目標專案用不到）。
      ⚠️ **MYL-78 修正**：本行原本還列著 `skills/roles/`，理由是「組織分工屬 agent-foundry
      自身設定，MYL-14 範疇」。那個理由在 MYL-76 之後不成立了——protocol 第 9 節被逐字複製過去，
@@ -164,19 +178,25 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
 2. **產出清單**：config 路徑與各欄最終值（gates 選定含確認卡識別碼或既有選定出處）、
    **有產 `org.yml` 時附編制表**、複製的檔案清單、`init_structure` 建立的平台側資源與查證結果。
 3. **軸 A 能力落差與降級（MYL-78 增訂）**：查 `foundry-ai-platform` §3 對照表選定平台那一欄，
-   **逐項列出 ⚠️／❌ 的能力、對應的降級規則編號、以及降級後誰負責、證據長什麼樣**。
+   **凡不是 ✅ 的格子逐項列出**——⚠️／❌／**❓ 三種都要**——寫出能力代號、對應的降級規則編號、
+   以及降級後誰負責、證據長什麼樣。
    - 這一節**不得省略也不得寫「無」**：`claude-code` 與 `codex` 在 `CAP-4`（提問取得裁定）與
      `CAP-5`（指派＝喚醒）兩項都是 ❌，任何非 paperclip 的導入至少有兩條要寫。
+   - **❓ 不准跳過**，寫法是「未驗證，選用此值等於自己走一次首跑驗證」（照抄
+     `config-schema.md` 對 `gitlab` 的既有寫法）。理由在 `foundry-ai-platform` §3 讀表須知
+     第 3 點已經定死：**❓ 是「沒驗過」，不得當成「應該可以」使用**——而一個不必進報告的狀態，
+     實務上就會被當成沒問題。`codex` 欄目前多數格是 ❓，只列 ⚠️／❌ 會產出一份看起來合規、
+     實際上大半狀態不明的報告，而使用者要靠這份報告決定敢不敢用。
    - 選 `paperclip` 時仍要寫，內容是「甲組能力等於所生 adapter」與該 adapter 的實際判級。
    - ⚠️ 特別點名 `AP-1` 的後果：降級後 HITL 閘門從**擋得住**變成**擋不住**（留言不會讓人停下來），
      這句話要出現在報告裡，不要讓使用者以為換平台沒有代價。
 4. **待辦**：github 模式的人工步驟清單（§3 第 4 點）；有產 `org.yml` 時**還要人工建哪幾個 agent**；其他未竟事項。
-4. **下一步指引**（連到說明層網站 <https://augustushsu.github.io/agent-foundry/>；舊網址 `foundry-handbook` 自 MYL-55 起**直接斷、不轉址**，見 known-drift `R7`）：
+5. **下一步指引**（連到說明層網站 <https://augustushsu.github.io/agent-foundry/>；舊網址 `foundry-handbook` 自 MYL-55 起**直接斷、不轉址**，見 known-drift `R7`）：
    - 首次上手與日常指令 → 第 1、2 章（first-run、commands）
    - 開發流程與工單骨架 → 第 3 章（workflow）
    - 三關卡與決策點對照 → 第 4 章（decision-points）
    - 常設 workflow（gates 調整等）→ 第 7 章（workflows）
-5. 收尾 commit：把本次新增的所有檔案（`.foundry/`、`skills/`、`templates/`、報告）在 `<TARGET>` commit（gitmoji 風格、繁中標題）；push 依該專案 push 授權規則，未授權就停在本地並於報告註明。
+6. 收尾 commit：把本次新增的所有檔案（`.foundry/`、`skills/`、`templates/`、報告）在 `<TARGET>` commit（gitmoji 風格、繁中標題）；push 依該專案 push 授權規則，未授權就停在本地並於報告註明。
 
 ## 6. 驗收自查
 
@@ -193,5 +213,7 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
       已就位或已列入報告待辦。
 - [ ] `init_structure` 查證通過且重跑冪等；github 模式的人工待辦已列入報告。
 - [ ] gates 段是使用者選定（確認卡回覆或既有選定紀錄），非 agent 推定。
-- [ ] 初始化報告含**軸 A 能力落差與降級**一節，且非 paperclip 平台至少列出 `CAP-4`／`CAP-5` 兩條。
+- [ ] 初始化報告含**軸 A 能力落差與降級**一節，且拿 `foundry-ai-platform` §3 選定平台那一欄
+      **逐格對過**：凡不是 ✅ 的（⚠️／❌／❓ 皆算）都在報告裡有一條，一格都不漏
+      （非 paperclip 平台至少會有 `CAP-4`／`CAP-5` 兩條 ❌；選 `codex` 時 ❓ 的那些同樣要寫）。
 - [ ] 初始化報告已產出並含下一步指引；新增檔案已 commit。
