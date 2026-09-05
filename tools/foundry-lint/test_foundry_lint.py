@@ -1043,5 +1043,48 @@ class MirrorReconCheckTest(unittest.TestCase):
         self.assertIn("來源端 1 張、鏡像端 1 張", res.summary)
 
 
+class FetchMirrorIssuesTest(unittest.TestCase):
+    """`fetch_mirror_issues` 撈兩份清單，**兩份都會截斷**。"""
+
+    ISSUE = {"number": 2, "state": "OPEN", "body": "Foundry-Source: paperclip/MYL-58\n\n內文"}
+
+    def fake_gh(self, issues, items):
+        def gh(root, *args):
+            if args[0] == "issue":
+                return issues, ""
+            if args[0] == "project" and args[1] == "list":
+                return {"projects": [{"number": 1, "title": "Foundry"}]}, ""
+            return {"items": items}, ""
+        return gh
+
+    def run_fetch(self, issues, items):
+        with mock.patch.object(foundry_lint, "gh_json",
+                               side_effect=self.fake_gh(issues, items)):
+            return foundry_lint.fetch_mirror_issues(Path("/x"), "Foundry", "@me")
+
+    def test_兩份清單都沒滿時不報截斷(self):
+        (issues, truncated), why = self.run_fetch(
+            [self.ISSUE], [{"content": {"number": 2}, "status": "Todo"}])
+        self.assertEqual(why, "")
+        self.assertFalse(truncated)
+        self.assertEqual([(m.ref, m.status) for m in issues], [("MYL-58", "Todo")])
+
+    def test_看板項目撈到上限也算截斷(self):
+        # 反例：只看 issue 清單的話這裡會回 truncated=False，於是查不到的
+        # Status 變成空字串、每張都報成「狀態不同步」——紅燈理由是錯的。
+        items = [{"content": {"number": n}, "status": "Todo"}
+                 for n in range(foundry_lint.MIRROR_LIST_LIMIT)]
+        (_, truncated), why = self.run_fetch([self.ISSUE], items)
+        self.assertEqual(why, "")
+        self.assertTrue(truncated)
+
+    def test_issue_清單撈到上限算截斷(self):
+        issues = [dict(self.ISSUE, number=n)
+                  for n in range(foundry_lint.MIRROR_LIST_LIMIT)]
+        (_, truncated), why = self.run_fetch(issues, [])
+        self.assertEqual(why, "")
+        self.assertTrue(truncated)
+
+
 if __name__ == "__main__":
     unittest.main()

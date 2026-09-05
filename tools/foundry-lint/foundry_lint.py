@@ -972,6 +972,10 @@ def fetch_mirror_issues(root: Path, project_title: str, project_owner: str):
 
     **沒有對應標記的 issue 不進結果**：那是人手開的，不歸鏡像管，
     當成孤兒清掉會誤傷。
+
+    截斷旗標**兩份清單都要看**：issue 清單決定有哪些鏡像單，看板項目清單決定
+    它們的 Status。後者被截斷時查不到的 Status 會變成空字串，於是每一張都報成
+    「狀態不同步」——紅燈方向是安全的，但理由是錯的，讀者會去追一個不存在的漂移。
     """
     raw, why = gh_json(root, "issue", "list", "--state", "all",
                        "--limit", str(MIRROR_LIST_LIMIT),
@@ -994,6 +998,7 @@ def fetch_mirror_issues(root: Path, project_title: str, project_owner: str):
                          "--limit", str(MIRROR_LIST_LIMIT))
     if items is None:
         return None, why
+    truncated = truncated or len(items.get("items", [])) >= MIRROR_LIST_LIMIT
     status_by_number = {
         it["content"]["number"]: it.get("status") or ""
         for it in items.get("items", [])
@@ -1100,7 +1105,7 @@ def check_mirror_recon(root: Path) -> SelfcheckResult:
     mirrors, truncated = fetched
     if truncated:
         res.failures.append(
-            f"鏡像端 issue 數達 `--limit {MIRROR_LIST_LIMIT}` 上限，結果可能被截斷"
+            f"鏡像端 issue 或看板項目數達 `--limit {MIRROR_LIST_LIMIT}` 上限，結果可能被截斷"
             "——截斷過的對帳會把漏建報成全過，先把上限提高或改分頁再跑"
         )
 
