@@ -82,14 +82,35 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    - `tools/foundry-lint/`（全目錄）——機械層閘門的本體，步驟 2.5 的 CI 與 hook 都靠它。
    - `tools/model-routing/`（全目錄）——`foundry-model-routing` 步驟 1 的盤點腳本；沒有它，
      那份 workflow 的第一步只能靠猜。
-   - 不複製：`skills/foundry-init/`（目標專案用不到）、`skills/roles/`（組織分工屬 agent-foundry 自身設定，MYL-14 範疇）。
+   - `skills/roles/`（全目錄）——**僅步驟 1 Q4 答「要建團隊」時複製**。理由是 `org.yml` 每個角色的
+     `skills[]` 都指向這裡，而 `org-sync` 會逐條驗路徑存在：不帶這個目錄就產 `org.yml`，
+     目標專案一跑自檢就是九條「掛的 skill 不存在」（實測，MYL-78）。Q4 答「不建團隊」時
+     不產 `org.yml`，這個目錄也就沒有存在的理由，照舊不複製。
+   - 不複製：`skills/foundry-init/`（目標專案用不到）。
+     ⚠️ **MYL-78 修正**：本行原本還列著 `skills/roles/`，理由是「組織分工屬 agent-foundry
+     自身設定，MYL-14 範疇」。那個理由在 MYL-76 之後不成立了——protocol 第 9 節被逐字複製過去，
+     而 `org-sync` 把 `org.yml` 的角色集合綁死在那張圖上，目標專案的編制**不是**它自己的決策。
+     角色集合既然跟著規範走，實作那組角色的 skill 就必須一起走。
 4. 逐檔規則：目標檔不存在 → 複製；已存在且內容相同 → 跳過；已存在且不同 → 停止並回報（見 §0）。
 5. **`.foundry/org.yml`（僅步驟 1 Q4 答「要建團隊」時，MYL-78 增訂）**：依 `config-schema.md`
    的 `.foundry/org.yml` 一節產生，欄位含 `foundry_org`／`ai_platform` ＋各角色的
    `id`／`title`／`reports_to`／`skills[]`／`permissions[]`／`model_tier`。
    - **`ai_platform` 兩份檔案都寫時值必須一致**——`--selfcheck` 的 `org-sync` 會比對，不一致擋下。
-   - 編制內容由使用者決定：可沿用 `<SRC>/.foundry/org.yml` 的九角色為底，也可只寫實際要建的幾個。
-     **不得由 agent 憑空指派角色給不存在的人**。
+   - ⚠️ **編制不是在這一步自由填的，它已經被上一步複製過去的 protocol 第 9 節綁死。**
+     `org-sync` 對「本檔的角色集合」與「第 9 節組織圖的節點集合」做**雙向**相等比對：多宣告一個
+     報錯，少宣告一個也報錯。所以本步實際要做的是**把第 9 節那張圖抄成機器可讀的形狀**——
+     角色集合照抄、`reports_to` 照組織圖的父子關係、`model_tier` 照第 8 節分層表。
+     沿用 `<SRC>/.foundry/org.yml` 當形狀參考可以（它就是同一張圖的投影），但**只抄形狀**：
+     該檔的註解寫滿 agent-foundry 自己的工單編號，那些是本 repo 的沿革，不是目標專案的。
+   - **目標專案想要不同編制**：先改複製過去的 protocol 第 9 節組織圖（連帶第 8 節分層表），
+     再讓本檔跟著它填。**順序不能反**（`O1`：規範是權威來源，本檔是它的投影）。
+     而改第 9 節是規範層的結構調整 ⇒ 依第 4 節走使用者裁定，**agent 不得為了讓檔案長出來自行刪減角色**。
+   - **「角色暫缺」與「不宣告該角色」是兩回事**：平台上還沒有人擔任某個角色，本檔**照樣要宣告它**
+     （本檔是應然不是實然，見 `config-schema.md` 同節）。把暫缺的角色從本檔刪掉，換來的是 `org-sync` 紅字。
+   - **`skills[]` 寫的是目標專案的相對路徑，而且 `org-sync` 會逐條驗它存在**——所以這一欄
+     只能填第 3 點真的複製過去的檔案（`skills/roles/<id>/SKILL.md` ＋ `skills/foundry-protocol/SKILL.md`）。
+     CEO 依 `O3` 不掛第 1 層，它的清單只有自己的角色 skill；那是規範裡的例外，不是漏寫。
+   - **不得由 agent 憑空指派角色給不存在的人**。
    - ⚠️ 產生這份檔**不等於團隊建好了**：沒有動詞會依它到平台上建 agent（見
      `foundry-ai-platform` §6）。步驟 5 的報告要把「還要人工建哪幾個 agent」列成待辦。
 6. 驗證：`.foundry/config.yml` 依 config-schema.md 逐欄檢查合法（必填齊、枚舉值合法、`external_actions` 與 `main_push` 皆 `user`）；複製清單逐檔存在；有產 `org.yml` 時 `org-sync` 通過。

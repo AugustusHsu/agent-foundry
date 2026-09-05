@@ -1,6 +1,6 @@
 # `.foundry/` 設定檔 schema
 
-依 MYL-9 HLD §2.3 定案（repo 歸檔本：`docs/features/cross-platform/HLD.md`，下文所有「HLD §x」均指該檔）。本檔是專案層 Foundry 設定的唯一 schema 權威，涵蓋兩份檔案：**`.foundry/config.yml`**（平台、關卡、push、文檔投影）與 **`.foundry/org.yml`**（組織宣告，MYL-76）。兩份都固定放在專案根目錄的 `.foundry/` 下、進版控；`config.yml` 的範例見 `config.example.yml`。
+依 MYL-9 HLD §2.3 定案（repo 歸檔本：`docs/features/cross-platform/HLD.md`，下文所有「HLD §x」均指該檔）。本檔是專案層 Foundry 設定的唯一 schema 權威，涵蓋兩份檔案：**`.foundry/config.yml`**（平台、關卡、push、文檔投影）與 **`.foundry/org.yml`**（組織宣告，MYL-76）。兩份都固定放在專案根目錄的 `.foundry/` 下、進版控；`config.yml` 的範例見 `config.example.yml`（`org.yml` **刻意沒有**對應的範本檔，理由見末節）。
 
 下文到「版本沿革」為止談的都是 `config.yml`；`org.yml` 自成一節（末節），有自己的版本欄位與合法性規則——兩份檔案的版本號**互不連動**。
 
@@ -205,6 +205,23 @@ protocol 第 9 節的散文、`skills/roles/` 底下的角色 skill、以及在�
 中間隔著幾張單——那段期間宣告一個平台上還不存在的成員是**預期行為，不是 bug**。
 與平台實況的對帳歸 T7；`test_不比對平台實況` 是這條規定的回歸守衛。
 ⚠️ **不要「順手補」一個比對平台的檢查**——它在上述整段期間都會誤報，而誤報的檢查會被關掉。
+
+### 為什麼沒有 `org.example.yml`（MYL-78 裁定，不要再提案）
+
+`config.yml` 有一份 `config.example.yml`，`org.yml` **刻意沒有對應的範本檔**。這不是漏做：
+
+兩份檔案的值來源根本不同。`config.yml` 的值是**選出來的**——平台、關卡、push 授權，每一格都有
+多個合法選項，一份帶註解的範例因此是有用的起點。`org.yml` 的值是**推導出來的**：`org-sync` 把
+角色集合與 protocol 第 9 節組織圖做雙向相等比對，`reports_to` 對組織圖的父子關係，`model_tier`
+對第 8 節分層表——**沒有一格是自由的**。這種檔案的「範例」只有兩種寫法，而兩種都是負債：
+
+- 範例寫一份**不同的**編制 → 照抄的人拿到的是紅燈（實測：抽掉六個角色＝`org-sync` 六條紅字）。
+- 範例寫一份**相同的**編制 → 它就是 protocol 第 9 節的第二份投影，而 `org-sync` 只讀
+  `.foundry/org.yml`，**沒有任何檢查看得到範本檔**。第 9 節一改它就靜靜過期。
+
+所以起點不是另一個檔案，是**第 9 節那張圖本身**加上本節這張欄位表。`foundry-init` 產生本檔的
+步驟即依此寫成（該檔 §2 第 5 點）；要一份填好的實例當形狀參考，讀 agent-foundry 自己的
+`.foundry/org.yml`，但只抄形狀——那份的註解寫滿本 repo 的工單編號。
 
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
