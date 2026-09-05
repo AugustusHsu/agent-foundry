@@ -45,6 +45,7 @@
 | 讓 agent 看得到畫面／驗前端 | `skills/foundry-browser/`；先 `make browser` 判級，三把鑰匙見 §5 |
 | 寫 BRD／PRD／HLD／LLD／測試計畫 | `templates/` 取對應模板，寫完跑 `make lint-doc TYPE=… FILE=…` |
 | 知道換到別的平台這步怎麼做 | `skills/foundry-platform/` ＋當前平台的 adapter（只讀一份，見 §4）；跨平台差異一眼可查走該 SKILL.md §7 對照表 |
+| 換 AI 平台（Claude Code／Codex）或查某項能力在這裡成不成立 | `skills/foundry-ai-platform/`——軸 A 的能力對照表與降級規則。**軸 A（agent 在哪裡跑）與軸 B（工單在哪）是兩回事**，別跟上一列混 |
 
 ### 目錄結構
 
@@ -56,6 +57,7 @@ agent-foundry/
 ├─ skills/
 │  ├─ foundry-protocol/     # 第 1 層：全隊硬規則（必掛；唯一豁免＝CEO，見 O3）
 │  ├─ foundry-platform/     # 平台抽象層：9 個抽象動詞＋各平台 adapter（4 份）
+│  ├─ foundry-ai-platform/  # 軸 A：AI 平台能力面、四欄對照表、降級規則（無動詞、不分派）
 │  ├─ foundry-init/         # workflow：新專案首次導入
 │  ├─ foundry-adopt/        # workflow：既有專案漸進導入
 │  ├─ foundry-gates/        # workflow：調整關卡粒度
@@ -100,6 +102,7 @@ agent-foundry/
 | `skills/foundry-platform/adapters/gitlab.md` | 同樣兩種用途：`devtools_platform: gitlab` 的動詞對照，與 `publish_docs` 的兩個投影面（wiki／Pages）。**先讀開頭的「版本分岔」**——Free 與 Premium 有四個動詞走法不同，判錯了不會報錯 |
 | `skills/foundry-platform/SKILL.md` | 9 個動詞的介面定義。只讀你要用的那個動詞那一節；§5 的「全覆蓋」裁定只在新增平台或新增文檔目標面時才需要 |
 | `skills/foundry-platform/config-schema.md` | `.foundry/config.yml` 與 `.foundry/org.yml` 的欄位權威。依段落取用——`gates`／`push`／`model_routing`／`docs`／`org.yml` 各段互相獨立，別整份載 |
+| `skills/foundry-ai-platform/SKILL.md` | 軸 A 能力面。查「某能力在這個平台成不成立」讀 §3 對照表；查「做不到要降級成什麼」讀 §4 的對應 `AP-n` 那一條 |
 | `skills/foundry-platform/adapters/paperclip.md` | 未達門檻但一樣別整份載：只讀當前平台那一份，不要四份都載 |
 <!-- FOUNDRY:BIG-FILES:END -->
 

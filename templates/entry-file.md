@@ -23,6 +23,13 @@
 4. 跑 `python3 tools/foundry-lint/foundry_lint.py --selfcheck` 確認兩份正文一致，
    且 §4 的大檔清單沒有漏列（`big-files` 這一項）。
 
+> **維護規則的權威在 `skills/foundry-ai-platform/SKILL.md` §5**：哪一段共用、哪一段允許各 harness 分岔
+> （判準：只換說法、不換規則）、以及**新增第三個 harness 要動哪些檔**都寫在那裡。
+> 本模板只負責產檔，不重複那份規則。
+>
+> ⚠️ 要新增第三個入口檔之前先讀該節最後一點：`--selfcheck` 的 `entry-sync`
+> **寫死只比對 `CLAUDE.md` 與 `AGENTS.md`**，不一併改它的話，第三份的共用正文漂了不會有任何地方報錯。
+
 ---
 
 ## 共用正文（兩檔逐字相同）

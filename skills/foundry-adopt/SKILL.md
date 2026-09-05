@@ -19,7 +19,7 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
   | M1 Issues | `.foundry/config.yml`＋流程檔複製＋工單基礎（labels／milestones 或 board 目錄）＋既有工單選擇性納管 | — |
   | M2 Projects views | 看板：project＋board／table／roadmap 三 view | M1 |
   | M3 關卡制 | `gates` 段由使用者經 foundry-gates 選定生效 | M1 |
-  | M4 角色分工 | `role:*` label 慣例＋「角色 ↔ 執行者」對照表 | M1 |
+  | M4 角色分工 | `role:*` label 慣例＋「角色 ↔ 執行者」對照表，落檔為 `.foundry/org.yml` | M1 |
 
 - **漸進原則**：每個模組獨立啟用、獨立回退、獨立 commit；使用者可一次只勾一個模組、之後任何時候再跑本文增開（§5）。啟用步驟全部冪等——已啟用的模組重跑不報錯、不覆蓋既有資料。
 - 本 workflow 產生的檔案一律進 `<TARGET>` 版控；push 依該專案現行授權規則，本 workflow 不放寬。**絕不覆蓋 `<TARGET>` 既有檔案、絕不改寫既有工單的內文與歷史**——這是 adopt 與 init 最大的差異，下文每個會碰到既有資料的步驟都各自重申。
@@ -32,15 +32,27 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
    - M1：config 合法，且平台側工單基礎存在（github＝標準 label 集查得到；local-md＝`.foundry/board/issues/` 存在）。
    - M2：github＝ProjectV2 與三 view 查得到；local-md＝`views/` 三檔存在。
    - M3：`gates` 段有使用者選定紀錄（確認卡識別碼或批示位置，通常在工單留言）；只有 schema 預設佔位、查無選定紀錄 → 視為未啟用。
-   - M4：`.foundry/roles.md` 存在。
-2. **既有開發慣例**（各項找不到就記「無」，不猜）：
+   - M4：`.foundry/org.yml` 存在（**舊版寫的是 `.foundry/roles.md`**——MYL-76 起組織宣告改用
+     schema 化的 `org.yml`。盤到只有 `roles.md` 的專案＝**舊格式，視為 M4 已啟用但需遷移**，
+     在報告列為待辦，不要當成未啟用而重跑一次 M4）。
+2. **軸 A 現況與現有分工（MYL-78 增訂，唯讀）**：
+   - **`ai_platform` 宣告了嗎**：`.foundry/config.yml` 有沒有這一欄、值是什麼。**沒有就記「未宣告」**，
+     不要用「現在是誰在跑」去回填——agent 觀察到的是自己這一輪的殼，不一定是該專案長期要用的殼。
+   - **實際在哪個殼裡跑**：repo 根有 `CLAUDE.md`？`AGENTS.md`？兩者都有還是只有一個？
+     有沒有其他 harness 的設定檔（如 `.codex/`）？**這是觀測值，與上一項的宣告值分開記**，
+     兩者不一致本身就是要報告的發現。
+   - **現有分工**：目前有哪些人／agent 在這個專案上工作、各自負責什麼。有 `org.yml` 或
+     `roles.md` 就照它記；沒有就從近期 commit 作者與工單 assignee 觀察，**記為「觀察值」並註明樣本範圍**。
+   - **能力落差**：依上面的觀測，查 `skills/foundry-ai-platform/SKILL.md` §3 對照表，
+     逐項列出 ⚠️／❌ 的能力與對應降級規則（`AP-1`～`AP-6`）。
+3. **既有開發慣例**（各項找不到就記「無」，不猜）：
    - issue tracker：GitHub Issues？`.foundry/board/`？其他系統（Jira、Paperclip 等——記錄名稱與工單量級即可）？既有工單數、有無 label／milestone 慣例。
    - 分支慣例：近期分支命名模式、合併方式（merge／rebase／squash）、commit 訊息風格。
    - CI：`.github/workflows/` 或其他 CI 設定檔清單。
    - 檔案衝突預查：`<TARGET>` 是否已有 `skills/foundry-*`、`templates/`、`.foundry/` 且內容與 `<SRC>` 不同——有就逐檔列出，這些檔在 M1 一律不覆蓋（§3.1）。
-3. **模組建議**：對照上述現況，逐模組寫「已啟用／可啟用／暫不建議＋理由」。平台側慣例與 Foundry 標準衝突時（例如既有 label 命名撞名）列為風險，附處理選項。
-4. **報告去向**：有工單系統 → 貼對應工單留言；無 → 存 `<TARGET>/.foundry/adopt-report-<YYYY-MM-DD>.md`（目錄不存在先建，這是本步唯一允許的寫入）。報告開頭記：執行日期、執行者、`<SRC>` commit sha、`<TARGET>` 路徑與 HEAD sha。
-5. **平台不在 adapter 枚舉時**（現行為 `github`｜`gitlab`｜`local-md`｜`paperclip`；如 Jira、Linear）：盤點照跑、報告照出，但模組啟用不可用——報告註明「需先依 foundry-platform §5 新增該平台 adapter（protocol 第 9 節規範修訂流程）」，本次到此為止，不發模組選擇卡。
+4. **模組建議**：對照上述現況，逐模組寫「已啟用／可啟用／暫不建議＋理由」。平台側慣例與 Foundry 標準衝突時（例如既有 label 命名撞名）列為風險，附處理選項。
+5. **報告去向**：有工單系統 → 貼對應工單留言；無 → 存 `<TARGET>/.foundry/adopt-report-<YYYY-MM-DD>.md`（目錄不存在先建，這是本步唯一允許的寫入）。報告開頭記：執行日期、執行者、`<SRC>` commit sha、`<TARGET>` 路徑與 HEAD sha。
+6. **平台不在 adapter 枚舉時**（現行為 `github`｜`gitlab`｜`local-md`｜`paperclip`；如 Jira、Linear）：盤點照跑、報告照出，但模組啟用不可用——報告註明「需先依 foundry-platform §5 新增該平台 adapter（protocol 第 9 節規範修訂流程）」，本次到此為止，不發模組選擇卡。
 
 ## 2. 步驟 2：模組選擇（發卡）
 
@@ -50,7 +62,17 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
    - **branch push 權限**（`push.branch_push`）：`user` 或 `tech-lead`；未選視同 `user`。
    - **平台側資源建立同意**（github 模式）：明列將建立的資源——標準 label 集、納管標記 label `foundry:managed`、milestone 容器；勾了 M2 再加 ProjectV2＋三 view。此同意即 protocol 決策點 7 的授權證據，未同意不得動平台側。
 3. 勾了 M1 且既有工單系統與選定平台相同（例如既有 GitHub Issues），同卡問**既有工單納管範圍**：全部／依 milestone 或 label 圈選／逐單清單／暫不納管（見 §3.1 第 4 點）。
-4. 鐵律（與 gates §3 同條）：**卡未回覆前不得啟用任何模組**。等待期間對應工單轉 `in_review`（或無平台時明確標記等待中）。
+4. **軸 A 與分工的對齊（MYL-78 增訂）**——把 §1 第 2 點盤到的現況攤在卡上，問使用者要不要對齊。
+   **三題各自獨立可選，允許全不選**（既有專案本來就在跑，不對齊也不會壞）：
+   - **要不要補宣告 `ai_platform`**：卡上寫出盤到的觀測值（`CLAUDE.md`／`AGENTS.md`／`.codex/` 各有沒有）
+     當參考，**由使用者拍板寫哪個值**，agent 不得代填。選「暫不宣告」是合法答案。
+   - **宣告值與觀測值不一致時要往哪邊修**：改設定遷就現況，還是改現況遷就設定。**這題不給預設**——
+     兩個方向的後果不同（前者是承認現況、後者是要求搬遷），只有使用者知道哪個是本意。
+   - **要不要把現有分工寫成 `.foundry/org.yml`**（即勾 M4）：卡上附 §1 第 2 點盤到的分工觀察值當草稿。
+     ⚠️ 同時要寫明：**這份檔是宣告，不會把 agent 建出來**（`foundry-ai-platform` §6）。
+   - 卡上一併附 §1 第 2 點的**能力落差清單**（⚠️／❌ 的能力與 `AP-n` 降級規則）。
+     這不是問題、是知情資訊——讓使用者在決定要不要對齊時看得到代價。
+5. 鐵律（與 gates §3 同條）：**卡未回覆前不得啟用任何模組**。等待期間對應工單轉 `in_review`（或無平台時明確標記等待中）。
 
 ## 3. 步驟 3：逐模組啟用
 
@@ -85,15 +107,25 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
 
 1. 前置：M1 已啟用。
 2. 與使用者確認「角色 ↔ 執行者」對照（哪些角色由誰／哪個 agent 擔任、哪些角色暫缺）——可在 §2 卡一併問，或此時補發卡。
-3. 寫 `<TARGET>/.foundry/roles.md`：對照表＋生效日期＋出處（卡識別碼）。`role:*` label（標準集已含）自此依對照表掛用；不複製 `<SRC>/skills/roles/`（角色 skill 屬 agent-foundry 自身組織設定，MYL-14 範疇——目標專案要自建角色 skill 屬其自身決策）。
-- **查證**：`roles.md` 存在且對照表與卡上選定一致。
-- **回退**：git revert（刪 `roles.md`），role label 慣例即停用；已掛在工單上的 `role:*` label 不強制清除，報告註明即可。
+3. 寫 `<TARGET>/.foundry/org.yml`：依 `config-schema.md` 的 `.foundry/org.yml` 一節填
+   （`foundry_org`／`ai_platform` ＋各角色 `id`／`title`／`reports_to`／`skills[]`／`permissions[]`／`model_tier`），
+   對照表的生效日期與出處（卡識別碼）寫在檔首註解。`role:*` label（標準集已含）自此依對照表掛用；
+   不複製 `<SRC>/skills/roles/`（角色 skill 屬 agent-foundry 自身組織設定，MYL-14 範疇——目標專案要自建角色 skill 屬其自身決策）。
+   - **`ai_platform` 要與 `config.yml` 同值**（`org-sync` 會比對）。`config.yml` 未宣告該欄時，
+     先在 §2 卡上把它一起問掉——**不要為了讓檔案長出來而自己填一個值**。
+   - ⚠️ **舊格式遷移**：盤點盤到 `.foundry/roles.md`（MYL-76 前的格式）時，本步是「轉寫」不是「新建」——
+     照原對照表內容填進 `org.yml`，內容有疑義就回卡問，**不得自行補齊原檔沒有的欄位**；
+     轉寫完成後 `roles.md` 的處置（刪除或保留為歷史）交使用者裁定。
+   - ⚠️ **這份檔不會把 agent 建出來**：沒有動詞依它去平台上建人（`foundry-ai-platform` §6）。
+     還要人工建哪幾個 agent，列進報告待辦。
+- **查證**：`org.yml` 存在、對照表與卡上選定一致，且 `--selfcheck` 的 `org-sync` 通過。
+- **回退**：git revert（刪 `org.yml`），role label 慣例即停用；已掛在工單上的 `role:*` label 不強制清除，報告註明即可。
 
 ## 4. local-md → github 遷移（HLD §2.4）
 
 既有 local-md 專案要升級平台時走本節。這不是模組，是平台搬遷——涉及新建平台側資源，整段屬關卡 C 授權範圍。
 
-1. **前置**：`<TARGET>` 已是 local-md 模式（config `devtools_platform: local-md`＋`board/` 有資料）；github 前置檢查同 init §1 第 2 點（gh auth、scopes、repo 可解析）。
+1. **前置**：`<TARGET>` 已是 local-md 模式（config `devtools_platform: local-md`＋`board/` 有資料）；github 前置檢查同 init §1.2 第 2 點（gh auth、scopes、repo 可解析）。
 2. **發卡**：明列——將建立的 github 資源（同 §2 第 2 點清單＋ProjectV2 視 M2 是否已啟用）、搬遷範圍（全部工單／篩選；含幾單幾留言）、搬遷後 board 目錄的處置（預設：保留為唯讀歷史）。未同意不動工。
 3. **建骨架**：跑 github adapter `init_structure`（含 M2 已啟用時的 project＋view；人工步驟列待辦）。
 4. **逐單搬遷**（順序固定：先建全部單、再補關聯，確保 `link_issues` 的 target 都存在）：
@@ -116,7 +148,12 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
 結束前逐項核對，缺一項就不算跑完：
 
 - [ ] 盤點報告已產出（工單留言或 `.foundry/adopt-report-*.md`），含逐模組已啟用判定與 `<SRC>` commit sha。
+- [ ] 盤點報告含**軸 A 現況與現有分工**（§1 第 2 點）：`ai_platform` 宣告值、實際觀測值、
+      兩者是否一致、現有分工、能力落差清單。**「未宣告」「觀察值」都要明寫**，不得因為查不到就整節省略。
+- [ ] 對齊三題（§2 第 4 點）已在卡上問過；使用者全不選也算數，但報告要記「已問、使用者選擇不對齊」。
 - [ ] 有啟用模組時：模組選擇卡有使用者明確勾選證據；依賴連帶有在卡上寫明。
+- [ ] 啟用 M4 時：產出的是 `.foundry/org.yml`（非舊格式 `roles.md`），`org-sync` 通過，
+      且報告已列出待人工建立的 agent。盤到舊格式時，轉寫來源與 `roles.md` 的處置裁定已記錄。
 - [ ] 每個啟用的模組查證通過、獨立 commit；失敗模組已回退並記錄。
 - [ ] 未覆蓋任何 `<TARGET>` 既有檔案；未改寫任何既有工單 body／留言；衝突清單（如有）已列入報告。
 - [ ] `gates.external_actions` 與 `push.main_push`（如有寫檔）皆為 `user`。
