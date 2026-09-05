@@ -9,13 +9,24 @@ foundry: 1
 # 規則層 .md 與程式碼仍在本 git repo，兩者分工見 foundry-protocol「平台中立原則」。
 platform: paperclip
 
-# 刻意不寫 mirror_platform：工單鏡像尚未實作（MYL-39 N2 才做）。
-# 先寫進來，設定檔會宣稱「外面看得到」而實際沒有——讀者於是不去同步，比整段缺席更糟。
+# 可見面鏡像到 GitHub（MYL-39 計畫 v5 §3「T-2 雙軌鏡像」，使用者於確認卡 7598a79e 整包核可；
+# 第一次真的建出公開 issue 另經 G-C 卡 aa3121a9 核可）。真相與喚醒面仍是上面的 platform：
+# 指派 Paperclip 工單會叫醒 agent，GitHub issue 不會。鏡像是單向、唯讀的。
+# 本欄依 schema「不得早於鏡像實際可用就先寫」，在 MYL-58 走完建單／改狀態／結案三個時機
+# 的實測之後才寫入。怎麼鏡像見 skills/foundry-platform/adapters/github.md §「鏡像模式」。
+mirror_platform: github
 
 platform_options:
   paperclip:
     company_id: "${PAPERCLIP_COMPANY_ID}"            # My Lab；label 為公司層資源
     project_id: "e7865c0c-6a46-429c-9bd6-566bc849bfeb"  # Foundry 專案
+  github:
+    project_title: "Foundry"                         # user project #1（public）
+    project_owner: "@me"                             # 個人專案，擁有者即 gh 登入帳號
+    # 鏡像起算點：MYL-58 是第一張真的鏡像出去的單，之前的 57 張沒有回填。
+    # 回填是批次對外動作、要另外核可（不在 MYL-54 範圍），所以這裡不是「少看幾條紅燈」，
+    # 而是誠實標出鏡像涵蓋的邊界。⚠️ 調低它等於宣告舊單已回填——回填做完才改。
+    mirror_since: "MYL-58"
 
 # 關卡設定＝MYL-28 使用者於確認卡 0679629d 選定的 b-skip-small 方案
 # （選定紀錄原本只存在工單留言 d8d356f1；MYL-35 起落回規則層本檔）。

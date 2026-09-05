@@ -38,6 +38,7 @@
 | S4 | 開單時直接設 `status: in_progress` → 被別的 heartbeat 搶走 checkout，隨後自己發卡回 409 `Issue run ownership conflict` | 先建成 `todo`／`backlog`，**發完卡再轉狀態** |
 | S5 | `PATCH /api/issues/{id}` 的 `unblockDescriptor.owner` 填別的 agentId → 整個 PATCH 靜默不生效（`status`、`blockedByIssueIds` 一併沒寫入） | `owner` 只能填自己。要別的 agent 解鎖就用一級 blocker 掛該 agent 的工單 |
 | S6 | agent 把工單 PATCH 成 `in_review` → `invalid_issue_disposition` | 需先存在真實審查路徑（pending 的互動卡）。順序：**先發卡、再改狀態** |
+| S7 | 想把自己開的子單推進 `in_progress` → `in_progress issues require an assignee`；補上 `assigneeAgentId` 之後**再也 PATCH 不動那張單**，回 409 `Issue run ownership conflict` | **指派＝喚醒**，即使指派給「正在跑的自己」也一樣：Paperclip 會為那張子單另開一個併行 run，該 run 一 checkout 就成為單的擁有者，父 run 從此不能改它的狀態、也不能 `release`。而 `POST /api/heartbeat-runs/{id}/cancel` 是 **board-only（403）**，父 run 收不回來。⇒ 子單只要會被推進 `in_progress`，就**當成會生出一個併行 run 來設計**：先把它的描述與留言寫到足以讓那個 run 獨立完成，並明確寫出它**不該**碰什麼（尤其 git——共用 workspace 見 §5 `X1`）。不需要它跑起來就別指派，把單留在 `todo`。（2026-09-05 MYL-54 實測） |
 
 ## 3. 反悔錄：試過、放棄、不要改回去
 
