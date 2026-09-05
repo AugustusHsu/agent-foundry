@@ -12,7 +12,8 @@
 
 ## 1. 平台限制：撞了就是撞了，重試無用
 
-這些不是 bug，是權限邊界。遇到時依 `H6` 發卡請使用者執行，**不要換寫法重試、不要指數退避**。
+這些不是 bug，是**權限邊界或平台能力邊界**——後者常見的形狀是「API 根本沒有那個設定點，只有 UI 有」。
+遇到時依 `H6` 發卡請使用者執行，**不要換寫法重試、不要指數退避**。
 
 | # | 動作 | 結果 | 正解 |
 | --- | --- | --- | --- |
@@ -27,6 +28,10 @@
 | L8 | 工作區未信任時的 `.claude/settings.json` 的 `permissions.allow` | **整份被忽略**，harness 印 `Ignoring N permissions.allow entries ... this workspace has not been trusted` | 設計如此，不讓 clone 來的 repo 自己開權限。`~/.claude.json` 的 `projects[<路徑>].hasTrustDialogAccepted` 為 true 才生效；`.claude/settings.local.json` **不受此限**。Paperclip materialize 的 workspace 從沒被互動式開啟過，**預設一律未信任**。⇒ 版控那份要能用得靠使用者設信任旗標（`H6`，agent 不得自行改 `~/.claude.json`），要立刻能用就複製一份到 local。偵測：`make browser` 回報 `allowed_but_untrusted`。**本 repo 的 workspace 已於 2026-09-04（MYL-37 卡 `myl37:handover:v1` 選 `set_trust` 並授權代設）設為 true**——但**信任是綁「絕對路徑」的**，換 project／換機器／Paperclip 換一條 materialize 路徑，新路徑一律從未信任重來 |
 | L9 | 把任何 Paperclip 管理的 MCP 連線授權給某 agent | 該 agent 的**專案 `.mcp.json` 整份失效**，瀏覽器工具無聲消失 | claude_local adapter 在「該 agent 拿得到 ≥1 個平台 MCP server」時才加 `--mcp-config <run 檔> --strict-mcp-config`（`adapter-claude-local/dist/server/execute.js:663`），而 `--strict-mcp-config` 的語意是 CLI 明載的「**只用 --mcp-config 的 server，忽略其他所有 MCP 設定**」。⇒ 閘道不是「額外加上去」，是**換掉整個 MCP 來源**。作用範圍是 per-agent（`getEffectiveProfilesForAgent`），但 gallery 連線的 finish 步驟預設 `access: "all_agents"`，等於全員生效。**日後掛 GitHub／Slack／Linear 之類遠端 app 前，先想這件事** |
 | L10 | 想用工具閘道把 stdio 型 MCP（`npx chrome-devtools-mcp`／`@playwright/mcp`）綁給單一 agent | **送不進 agent session** | 只有 `transport === "mcp_remote"` 的連線會被組成 runtime MCP server 交給 adapter（`server/dist/services/heartbeat.js:2313` 的 filter），`local_stdio` 直接被濾掉。stdio server 只會在 Paperclip 的 runtime slot 跑起來、供**外部** MCP client 經 gateway URL 取用。另外 gallery 只有 7 個可連的 app（zapier／github／slack／notion／linear／google-sheets／context7，`shared/dist/app-definitions.js:2`），**沒有任何瀏覽器 app**。⇒ 見 `GAP-5`：閘道關不掉那個缺口 |
+| L11 | 用 `createProjectV2View` 建 Projects v2 的 view，期望它帶入專案的自訂欄位 | view 建得出來，但 `visibleFieldIds` **一律是 GitHub 出廠預設**（`Title, Assignees, Status, Linked pull requests, Sub-issues progress`）；自訂欄位即使有值也不會出現在畫面上 | 建完再呼叫一次 `updateProjectV2View` 補 `visibleFieldIds`，這是兩步不是一步。另外 **view 只能走 GraphQL**：`gh project` 的子命令只到 project／field／item／link 層級，沒有任何 view 子命令（2026-09-05 覆核）。（2026-09-04 MYL-43 實測） |
+| L12 | 把 `L11` 的補救套到 Roadmap view 上：對 ROADMAP_LAYOUT 呼叫 `updateProjectV2View` 補 `visibleFieldIds` | `UNPROCESSABLE: "Roadmap views do not support visible fields."` | Roadmap 沒有「欄位可見性」這個概念，別在這裡重試。Roadmap 畫不出東西的真正原因見 `L13`——**不是**欄位沒顯示。（2026-09-04 MYL-43 實測） |
+| L13 | 純用 API 建出 Roadmap view，然後去看畫面 | **時間軸必定空白**：格線與月份標尺正常、左側列得出項目，但時間軸區域不畫任何條狀區間或里程碑點 | **兩個獨立成因，各自都足以造成空白，只修一個畫面照樣是空的**——這是本條最容易被寫漏的部分。**成因 A（UI 專屬，API 無設定點）**：view 的 Start／Target date 指向「無」。全 schema 掃過：ProjectV2 相關 mutation 共 32 個，動 view 的只有 `updateProjectV2View`，其 `ProjectV2ViewConfigurationInput` **只有 `visibleFieldIds` 一個欄位**，讀取型別 `ProjectV2ViewConfiguration` 也只有 `visibleFields`；設定入口只在 UI 的 `Roadmap` → `Date fields`，依 `H6` 發卡請使用者按。**成因 B（可自動化）**：項目的日期欄位根本沒有值——`updateProjectV2ItemFieldValue` 寫得進去。MYL-43 撤回後 39 張手抄 draft card 換成真 issue，原本帶的目標日沒有人補回來，於是 GraphQL 查 `fieldValues` 只回 `Status`，一筆 `ProjectV2ItemFieldDateValue` 都沒有。⚠️ **診斷時不要相信 `Date fields` 按鈕上那句提示**「*Your project needs at least one date or iteration field to get started.*」——它與事實不符：GraphQL 查得該專案 `目標日` 的 `dataType` 就是 `DATE`（`PVTF_lAHOAVyI0c4BiTdozhhU4zo`），研判是登出訪客沒按過 `Got it!` 的新手引導殘留。⇒ 本條是本 repo 目前**「機械驗證會騙人」最乾淨的樣板**：欄位在、值在、view 在、layout 正確，所有 `gh api` 斷言全綠，畫面就是空的。**視覺驗證不可被 API 斷言取代**，要舉例時舉這一條。（成因 A 與 schema 掃描：2026-09-04 MYL-43；成因 B、提示文字與畫面現況：2026-09-05 MYL-48 登出實測，附截圖） |
+| L14 | 從「repo 是 public」推論「掛在它上面的 Projects v2 看板也是 public」 | **推論不成立**。Projects v2 是帳號層物件，可見性與 repo 各自獨立；MYL-48 兩次「以為開了窗口」都栽在這裡 | 判定可見性**只能用登出瀏覽器實跑**，不要看設定畫面、也不要從 repo 可見性推。登出態的自我證明手法：頁首出現 `Sign in`／`Sign up`（`ref_loc=header+logged+out`）即排除「其實還登著」的假陽性；看板為 private 時同一網址回 404，該 404 同時證明 private 與登出兩件事。同一個根源還有另一個表現：**v2 看板只屬於帳號、不屬於 repo**，建好不會自動掛上去，要另外 `gh project link`；要確認掛上了沒有，查 GraphQL 的 `repository.projectsV2` 而不是 REST 的 `has_projects`（MYL-57 實測）。（2026-09-05 MYL-48 實測） |
 
 ## 2. API 形狀陷阱：會回 4xx 但錯誤訊息不會告訴你原因
 
