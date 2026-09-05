@@ -11,7 +11,7 @@ help: ## 列出所有可用指令
 
 check: selfcheck test ## 跑完所有機械層閘門（＝pre-commit 會擋的內容）
 
-selfcheck: ## repo 規範自檢：雙入口同步、手冊 nav、錨點、規則 ID、規則標記、大檔清單、相對連結、版本號形狀、表格連續性、組織宣告、手冊戳記、鏡像對帳
+selfcheck: ## repo 規範自檢：雙入口同步、手冊 nav、錨點、規則 ID、規則標記、大檔清單、相對連結、版本號形狀、表格連續性、組織宣告、手冊戳記、init 複製清單、鏡像對帳
 	@python3 tools/foundry-lint/foundry_lint.py --selfcheck
 
 # 每個工具各自 discover：unittest 會把 start dir 加進 sys.path，
@@ -19,7 +19,9 @@ selfcheck: ## repo 規範自檢：雙入口同步、手冊 nav、錨點、規則
 #
 # ⚠️ 追加一行的同時要改 `skills/foundry-init/SKILL.md` §2 第 3 點的複製清單：
 # init 會把本檔整份複製到目標專案，這裡列到、清單沒列到的目錄，
-# 會讓那個專案第一次跑 `make check` 就掛。目前沒有自檢管這個對應關係（MYL-78）。
+# 會讓那個專案第一次跑 `make check` 就掛。忘了改的話 `--selfcheck` 的
+# init-copy-list 會擋下（MYL-86）——它掃的是**整份本檔**的 `tools/` 引用，
+# 不只這個 target，所以下面 providers／browser 那幾行同樣受管。
 test: ## 工具單元測試（foundry-lint ＋ model-routing ＋ browser-probe ＋ publish-docs）
 	@python3 -m unittest discover tools/foundry-lint
 	@python3 -m unittest discover tools/model-routing

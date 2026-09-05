@@ -1772,10 +1772,117 @@ def check_mirror_recon(root: Path) -> SelfcheckResult:
     return res
 
 
+# ── `init-copy-list`：Makefile 引用的 tools/ ↔ foundry-init 複製清單（MYL-86）──
+INIT_SKILL_REL = "skills/foundry-init/SKILL.md"
+MAKEFILE_REL = "Makefile"
+#: 複製清單的位置：`## 2.` 那一節裡以 `3. ` 起頭的編號項。
+#: 這裡刻意**不用** `BIG_BEGIN` 那種 HTML 標記：標記得插在編號項之間，會把
+#: markdown 的有序清單切成兩段（渲染時後半從 1 重新編號）。代價是節號或項號
+#: 漂掉時本檢查會紅——那是要的姿態，找不到清單就報錯，不能靜默放行。
+INIT_SECTION_RE = re.compile(r"^## 2\. ", re.M)
+INIT_ITEM_RE = re.compile(r"^3\. ", re.M)
+INIT_NEXT_ITEM_RE = re.compile(r"^\d+\. ", re.M)
+#: 清單的最後一條是反向的 `- 不複製：…`，那行以後列的是**不會**被複製的路徑。
+#: 不截斷的話，把某個目錄從複製項移到那一行仍舊算「清單有列」＝假綠，而目標
+#: 專案的 `make check` 就掛在那個目錄上（MYL-86 CR R2，有實測反證）。截斷的
+#: 失效方向是安全的：真有複製項排到那行之後，結果是紅（看得見），不是綠。
+INIT_EXCLUDE_RE = re.compile(r"^\s*-\s*不複製[：:]", re.M)
+#: 清單裡的寫法一律是 `` `tools/<X>/`（全目錄） ``。單獨的 `` `tools/` `` 不命中。
+INIT_LISTED_RE = re.compile(r"`tools/([A-Za-z0-9._-]+)/?`")
+#: Makefile 裡的 `tools/<X>` 引用；`unittest discover tools/foundry-lint` 與
+#: `python3 tools/model-routing/probe_providers.py` 兩種形狀都吃。
+MAKEFILE_TOOLS_RE = re.compile(r"\btools/([A-Za-z0-9._-]+)")
+
+
+def makefile_tools_dirs(text: str) -> list:
+    """`Makefile` 真的會去跑到的 `tools/<X>` 目錄名，去重後排序。
+
+    整行註解先丟掉：註解裡提到某個目錄不代表 Makefile 會用它，而本檢查的前提
+    是「這份 Makefile 被整份複製過去、跑起來會用到」。行內註解不特別處理——
+    本檔沒有，真出現了寧可多管一個目錄（誤報看得見），也不要少管（漏報看不見）。
+    """
+    body = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+    return sorted(set(MAKEFILE_TOOLS_RE.findall(body)))
+
+
+def init_copy_list_block(text: str) -> tuple:
+    """取出 foundry-init §2 第 3 點**要複製**的那段原文，回傳 `(區塊, 錯誤原因)`。
+
+    終點取兩個條件裡先出現的那一個：下一個編號項（`^\\d+\\. `），或那條反向的
+    `- 不複製：`。後者是 MYL-86 CR 的 R2——少了它，把某個目錄從複製項改寫到
+    「不複製」那行，本檢查照樣印綠，而那正是本檢查存在的理由那個情境。
+    """
+    sec = INIT_SECTION_RE.search(text)
+    if not sec:
+        return "", "找不到 `## 2.` 這一節"
+    tail = text[sec.end():]
+    nxt = re.search(r"^## ", tail, re.M)
+    section = tail[: nxt.start()] if nxt else tail
+    item = INIT_ITEM_RE.search(section)
+    if not item:
+        return "", "`## 2.` 這一節裡找不到以 `3. ` 起頭的編號項"
+    rest = section[item.end():]
+    ends = [m.start() for m in (INIT_NEXT_ITEM_RE.search(rest),
+                                INIT_EXCLUDE_RE.search(rest)) if m]
+    return (rest[: min(ends)] if ends else rest), ""
+
+
+def check_init_copy_list(root: Path) -> SelfcheckResult:
+    """`Makefile` 引用到的每個 `tools/<X>/` 都要在 foundry-init 的複製清單裡。
+
+    init 步驟 2.5 會把 `Makefile` **整份**複製到目標專案，而 `make check` 正是
+    入口檔叫每個新 session 跑的那一行。Makefile 用得到、複製清單沒列到的
+    `tools/` 目錄，會讓那個專案第一次跑 `make check` 就掛（`.pre-commit-config.yaml`
+    的 `foundry-tests` 走的也是 `make test`，同一個坑）。已經漂過兩次——
+    `tools/browser-probe/`（MYL-37）與 `tools/publish-docs/`（MYL-52），
+    兩次都是往 Makefile 加了一行、沒回頭改清單，直到 MYL-78 才被發現。
+
+    **範圍是整份 `Makefile`，不只 `test:`**（MYL-86 AC3）：`providers`／`browser`
+    指到的目錄同樣是「複製過去卻跑不起來」，判準一樣，而不必切出 target 邊界的
+    程式反而更短。反方向不管——清單列得比 Makefile 多是合理的（`templates/`
+    那些跟 Makefile 無關），本檢查只擋「Makefile 有、清單沒有」這一個方向。
+
+    ⚠️ **本檢查在 foundry-init 產出的目標專案必紅，處置歸 MYL-87 AC0。**
+    複製清單自己寫著「不複製：`skills/foundry-init/`」，所以照它初始化出來的專案
+    一定沒有對照端，走到下面那句「對照端沒了」。這是政策題不是缺陷——「缺對照端
+    該 ⏭ 還是該產骨架」與 MYL-87 那四項是同一個政策，在這裡先斬會分岔（MYL-86
+    CR R1，該單留言有實測輸出）。
+    """
+    res = SelfcheckResult(
+        "init-copy-list", "`Makefile` 引用到的 `tools/` 目錄都在 foundry-init 複製清單裡")
+    mk, skill = root / MAKEFILE_REL, root / INIT_SKILL_REL
+    if not mk.exists():
+        res.failures.append(f"{MAKEFILE_REL} 不存在——本檢查的來源端沒了")
+        return res
+    if not skill.exists():
+        res.failures.append(f"{INIT_SKILL_REL} 不存在——本檢查的對照端沒了")
+        return res
+
+    block, why = init_copy_list_block(read_text(skill))
+    if why:
+        res.failures.append(
+            f"{INIT_SKILL_REL}：{why}——複製清單的錨點漂了，本檢查無從比對。"
+            "清單換了位置就要一起改 `init_copy_list_block()` 的錨點"
+        )
+        return res
+
+    listed = set(INIT_LISTED_RE.findall(block))
+    needed = makefile_tools_dirs(read_text(mk))
+    for name in needed:
+        if name not in listed:
+            res.failures.append(
+                f"`Makefile` 用到 tools/{name}/，但 {INIT_SKILL_REL} §2 第 3 點的複製"
+                f"清單沒有列它——init 會把 Makefile 整份複製過去，目標專案第一次跑 "
+                f"`make check` 就掛在這個目錄上。把 `tools/{name}/`（全目錄）補進清單"
+            )
+    res.summary += f"（Makefile 引用 {len(needed)} 個、清單列 {len(listed)} 個）"
+    return res
+
+
 SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
               check_rule_marks, check_big_files, check_internal_links,
               check_version_shape, check_table_shape, check_org_sync,
-              check_handbook_stamp, check_mirror_recon)
+              check_handbook_stamp, check_init_copy_list, check_mirror_recon)
 
 
 def run_selfcheck(root: Path) -> list:

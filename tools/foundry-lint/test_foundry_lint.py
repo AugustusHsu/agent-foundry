@@ -601,7 +601,7 @@ class SelfcheckTest(unittest.TestCase):
                          {"entry-sync", "nav-sync", "anchors", "rule-ids",
                           "rule-marks", "big-files", "internal-links",
                           "version-shape", "table-shape", "org-sync",
-                          "handbook-stamp", "mirror-recon"})
+                          "handbook-stamp", "init-copy-list", "mirror-recon"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()
@@ -617,6 +617,119 @@ class SelfcheckTest(unittest.TestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("03-workflow.md" in f and "第一個非空行" in f
                             for f in res.failures), res.failures)
+
+    # ── init-copy-list（MYL-86）─────────────────────────────────────────
+    #
+    # 反例都改副本的 `Makefile`，因為漂移的實際方向就是那個：兩次都是往
+    # Makefile 加了一行、沒回頭改 foundry-init 的複製清單。
+
+    def _append_makefile(self, text):
+        p = self.root / "Makefile"
+        p.write_text(p.read_text(encoding="utf-8") + text, encoding="utf-8")
+
+    def test_test_target_多一個不在複製清單的目錄被擋下(self):
+        """本檢查存在的主因：`test:` 加了一行、清單沒跟。"""
+        self._append_makefile(
+            "\ntest-extra:\n\t@python3 -m unittest discover tools/brand-new\n")
+        res = self._named("init-copy-list")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("tools/brand-new/" in f and "複製清單沒有列它" in f
+                            for f in res.failures), res.failures)
+
+    def test_非_test_target_引用的目錄同樣被擋下(self):
+        """AC3 選了「掃整份 Makefile」，`providers`／`browser` 那類也算數。"""
+        self._append_makefile("\nprobe:\n\t@python3 tools/only-probe/run.py\n")
+        res = self._named("init-copy-list")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("tools/only-probe/" in f for f in res.failures),
+                        res.failures)
+
+    def test_只出現在註解裡的目錄不誤報(self):
+        """註解提到不等於會跑到；誤殺會逼下一個人把說明刪掉去迎合檢查。"""
+        self._append_makefile("\n# 早年這裡還有 tools/retired-thing/，已移除\n")
+        self.assertTrue(self._named("init-copy-list").passed)
+
+    def test_複製清單的錨點漂掉時報錯而不是放行(self):
+        """找不到清單就等於沒比對——這種時候印 ✅ 比印 ❌ 危險得多。"""
+        p = self.root / "skills" / "foundry-init" / "SKILL.md"
+        text = p.read_text(encoding="utf-8")
+        self.assertIn("\n3. 複製流程檔到", text,
+                      "反例的錨點字串已不在 SKILL.md 裡，測試要跟著改")
+        p.write_text(text.replace("\n3. 複製流程檔到", "\n三、複製流程檔到", 1),
+                     encoding="utf-8")
+        res = self._named("init-copy-list")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("錨點漂了" in f for f in res.failures), res.failures)
+
+    def test_目錄被移到不複製那一行就不算列過(self):
+        """CR R2 的反證：不截斷的話這個情境印綠，而目標專案的 make check 會掛。
+
+        Makefile 原封不動，只把 `tools/publish-docs/` 從複製項改寫到那條反向的
+        `- 不複製：` 上——複製清單的字面還在，但語意已經反過來了。
+        """
+        p = self.root / "skills" / "foundry-init" / "SKILL.md"
+        text = p.read_text(encoding="utf-8")
+        kept = [ln for ln in text.splitlines()
+                if "`tools/publish-docs/`（全目錄）" not in ln]
+        self.assertEqual(len(kept), len(text.splitlines()) - 1,
+                         "反例預期只砍掉一行；清單寫法變了，測試要跟著改")
+        moved = "\n".join(kept).replace(
+            "   - 不複製：`skills/foundry-init/`",
+            "   - 不複製：`skills/foundry-init/`、`tools/publish-docs/`", 1)
+        self.assertIn("不複製：`skills/foundry-init/`、`tools/publish-docs/`", moved,
+                      "反例的「不複製」那行已不是這個寫法，測試要跟著改")
+        p.write_text(moved + "\n", encoding="utf-8")
+        res = self._named("init-copy-list")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("tools/publish-docs/" in f and "複製清單沒有列它" in f
+                            for f in res.failures), res.failures)
+
+    def test_不複製那行以前的項目照樣算數(self):
+        """截斷點不能砍過頭，也不能被散文裡的「不複製」提前觸發。
+
+        現行清單最後一條複製項（`skills/roles/`）的說明文字裡就有一句
+        「照舊不複製。」——截斷條件是**行首**的 `- 不複製：`，所以那句不算數。
+
+        真被它提前截斷時的失效方向是**靜默綠，不是假紅**（CR R3 實測）：四個
+        `tools/` 項在 SKILL.md 都排在那句散文**之前**，一個都掉不出區塊，自檢
+        照樣印 ✅「清單列 4 個」。實際擋住它的是下面那條
+        `assertIn("照舊不複製", block)`——放寬正則時只有它會紅。
+        所以看到它紅而自檢是綠的，別把它當誤報刪掉：綠的那邊才是壞的。
+        """
+        self.assertTrue(self._named("init-copy-list").passed)
+        block, why = foundry_lint.init_copy_list_block(
+            (self.root / "skills" / "foundry-init" / "SKILL.md")
+            .read_text(encoding="utf-8"))
+        self.assertEqual(why, "")
+        self.assertIsNone(foundry_lint.INIT_EXCLUDE_RE.search(block))
+        self.assertIn("照舊不複製", block, "散文裡那句「不複製」不該把區塊切掉")
+        self.assertEqual(set(foundry_lint.INIT_LISTED_RE.findall(block)),
+                         set(foundry_lint.makefile_tools_dirs(
+                             (self.root / "Makefile").read_text(encoding="utf-8"))))
+
+    def test_清單列得比_Makefile_多不算失敗(self):
+        """反方向不管：清單有 `templates/` 那類與 Makefile 無關的項目。"""
+        p = self.root / "Makefile"
+        p.write_text(
+            p.read_text(encoding="utf-8").replace(
+                "\t@python3 -m unittest discover tools/publish-docs\n", ""),
+            encoding="utf-8")
+        self.assertTrue(self._named("init-copy-list").passed)
+
+
+class MakefileToolsDirsTest(unittest.TestCase):
+    """`makefile_tools_dirs()` 的兩種引用形狀（MYL-86）。"""
+
+    def test_discover_與腳本路徑兩種形狀都取得到(self):
+        text = ("test:\n\t@python3 -m unittest discover tools/foundry-lint\n"
+                "providers:\n\t@python3 tools/model-routing/probe_providers.py\n")
+        self.assertEqual(foundry_lint.makefile_tools_dirs(text),
+                         ["foundry-lint", "model-routing"])
+
+    def test_同一個目錄只算一次(self):
+        text = ("a:\n\t@python3 tools/x/one.py\n"
+                "b:\n\t@python3 -m unittest discover tools/x\n")
+        self.assertEqual(foundry_lint.makefile_tools_dirs(text), ["x"])
 
 
 class VersionShapeTest(unittest.TestCase):
