@@ -600,7 +600,7 @@ class SelfcheckTest(unittest.TestCase):
         self.assertEqual({c["name"] for c in data["checks"]},
                          {"entry-sync", "nav-sync", "anchors", "rule-ids",
                           "rule-marks", "big-files", "internal-links",
-                          "handbook-stamp", "mirror-recon"})
+                          "version-shape", "handbook-stamp", "mirror-recon"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()
@@ -616,6 +616,89 @@ class SelfcheckTest(unittest.TestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("03-workflow.md" in f and "第一個非空行" in f
                             for f in res.failures), res.failures)
+
+
+class VersionShapeTest(unittest.TestCase):
+    """版本號形狀（MYL-71，protocol `V5`）：兩種舊形狀各配一個擋得住的反例。
+
+    只做「字面位數不足」那一半是不夠的——本檢查開單的主因（`V3` 的內文與
+    `republish_decision()` 的錯誤訊息）用的都是**佔位符**形狀，漏掉第二種
+    等於漏掉最該擋的那兩處。所以兩種形狀分開驗，不合成一個測試。
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "repo"
+        shutil.copytree(
+            REPO_ROOT, self.root,
+            ignore=shutil.ignore_patterns(".git", "site", "__pycache__"),
+        )
+
+    def _run(self):
+        return foundry_lint.check_version_shape(self.root)
+
+    def _write(self, rel, text):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+    def test_真實_repo_通過(self):
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_字面位數不足被擋下(self):
+        self._write("skills/drift.md", "打 `handbook-v2` tag 發一版。\n")
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("skills/drift.md:1" in f and "1 位" in f
+                            for f in res.failures), res.failures)
+
+    def test_非標準佔位符被擋下(self):
+        """規則本體與錯誤訊息那一類：形狀是佔位符，位數檢查看不見它。"""
+        self._write("scripts/drift.sh", "# 要修就 bump 下一版（打 handbook-v<N+1>）\n")
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("scripts/drift.sh:1" in f and "佔位符" in f
+                            for f in res.failures), res.failures)
+
+    def test_合法四碼與標準佔位符不被誤殺(self):
+        self._write("tools/ok.py", '"""打 handbook-v0.0.0.1，形狀 handbook-v<a>.<b>.<c>.<d>。"""\n')
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_glob_與正則寫法不被誤殺(self):
+        """`tag_pattern` 的 glob 與 GitLab adapter 的 `\\d+` 版正則都是設定值，不是版本號。"""
+        self._write("skills/patterns.md",
+                    "glob 是 `handbook-v*.*.*.*`，粗篩是 `handbook-v*`，\n"
+                    "GitLab 側要翻成 `/^handbook-v\\d+\\.\\d+\\.\\d+\\.\\d+$/`。\n")
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_多一位與非數字尾巴不歸本檢查管(self):
+        """`V4` 違反段明列的兩個 `fnmatch` 缺口，是說明文字不是舊形狀。"""
+        self._write("skills/gaps.md",
+                    "`handbook-v0.0.0.1.2`（多一位）與 `handbook-v0.0.0.x`（非數字）都通得過。\n")
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_豁免清單擋住誤管(self):
+        """反例測試與綁 sha 的歷史證據改成四碼就對不上，白名單是這一格的機械化身。"""
+        for rel in ("tools/publish-docs/test_site_docs.py",
+                    "docs/publish-reviews/MYL-63.md",
+                    "docs/standards/known-drift.md",
+                    "docs/features/cross-platform/HLD.md",
+                    "docs/pilot/pilot-log.md",
+                    ".foundry/config.yml"):
+            self.assertTrue(foundry_lint.version_shape_allowed(rel), rel)
+        self.assertFalse(foundry_lint.version_shape_allowed("docs/handbook/03-workflow.md"))
+        self.assertFalse(
+            foundry_lint.version_shape_allowed("skills/foundry-protocol/SKILL.md"))
+
+    def test_豁免路徑裡的舊形狀不被擋下(self):
+        self._write("docs/publish-reviews/MYL-99.md", "當時發的是 `handbook-v1`。\n")
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
 
 
 class HandbookStampTest(unittest.TestCase):

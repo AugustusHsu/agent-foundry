@@ -385,7 +385,7 @@ Foundry-Projection-Digest: <投影內容的 sha256>
 
 **版本化**：`mike` 2.2.0 把每個版本各自放在 gh-pages 的 `<version>/` 目錄，
 `latest` 是別名、根目錄是導向 `latest` 的跳轉頁，`versions.json` 餵版本選擇器。
-版本名由 tag 算出（`handbook-v1` → `v1`，見 `site_docs.version_of()`）。
+版本名由 tag 算出（`handbook-v0.0.0.1` → `v0.0.0.1`，見 `site_docs.version_of()`）。
 
 **觸發與開關是兩層**（protocol `V2`）：workflow 的 `on: push: tags: ['handbook-v*']` 是**粗篩**，
 `.foundry/config.yml` 的 `docs.mirror_site` 才是權威——`enabled: false` 之後打 tag 不會發佈。

@@ -80,7 +80,8 @@ Skill 以 **`sourceType: local_path` 參照式安裝**:Paperclip 記的是這個
   精裝站是版本化的 GitHub Pages,**打 `handbook-v<a>.<b>.<c>.<d>` tag 才由 CI 發佈**
   (四碼版本號的進位規則見 protocol `V4`),站上每一版都留著,`latest` 指向最新那一版:
   <https://augustushsu.github.io/agent-foundry/>(站上現為 `v0.0.0.1`;`V4` 之前的舊形狀 `v1`
-  已於 MYL-68 刪除,git tag `handbook-v1` 保留,站台可由該 tag 重建)。
+  已於 MYL-68 從站上刪除,對應的舊形狀 git tag 也已於 MYL-71 一併刪除——
+  站上與 git 上都不再有那一版,`versions.json` 只剩 `v0.0.0.1`)。
   舊網址 <https://augustushsu.github.io/foundry-handbook/>
   是搬家前的公開鏡像,MYL-55 起**直接斷開、不做轉址**(使用者裁定,見 known-drift `R7`);
   該 repo 先封存、後由使用者裁定**刪除**(2026-09-05,推翻工單原本的「只封存」)。

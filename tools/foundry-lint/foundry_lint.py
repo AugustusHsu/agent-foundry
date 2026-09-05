@@ -129,6 +129,7 @@ def render_json(result: CheckResult) -> str:
 #   rule-ids        引用了不存在的規則 ID（protocol 第 11 節）
 #   big-files       入口檔的大檔清單漏列 → 接手者整份載入（MYL-42）
 #   internal-links  相對連結指向不存在的檔案 → 點了 404（MYL-41）
+#   version-shape   規範與錯誤訊息拿舊形狀版本號舉例 → 讀者照做就錯（MYL-71）
 #   handbook-stamp  protocol 改了而手冊沒跟 → 公開站開始騙人（MYL-44）
 #
 # （這裡刻意不寫「共 N 項」——那種數字沒有人會回來改，正是 MYL-42 要收掉的漂移。）
@@ -167,6 +168,44 @@ MD_PATH_RE = re.compile(r"`([^`\n]+\.md)`")
 #: 不需驗檔案存在性的連結目標：帶協定的 URL（`https:`、`mailto:`）、
 #: 協定相對網址（`//host/…`）、以及純錨點（`#anchor`，同頁跳轉）。
 EXTERNAL_TARGET_RE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.-]*:|//|#)")
+
+# ── 版本號形狀（MYL-71，protocol `V4`／`V5`）──────────────────────────────
+#: 只認手冊 tag 的**字面前綴**，不掃泛用的「v ＋數字」——後者會被工單編號、
+#: 互動卡 slug、第三方 pin（`actions/checkout` 那類）整個淹沒，那是 MYL-41
+#: 誤報「死連結」的同一個坑：掃得太寬的檢查，紅字會被習慣性忽略。
+VERSION_TAG_PREFIX = "handbook-v"
+#: 合法佔位符只有這一種寫法，其餘（單軸、帶算式的）都是 `V4` 之前的舊形狀。
+VERSION_CANONICAL_PLACEHOLDER = "<a>.<b>.<c>.<d>"
+#: 形狀一：字面數字，但位數不足四位。
+#: `(?![\w.-])` 是為了**只抓真的位數不足的那些**——四碼合法字面會在讀到第四個
+#: 分量前就被這個 lookahead 擋掉（回溯後每一種切法後面都還跟著 `.`），
+#: 多一位或帶非數字後綴（`…0.0.0.x`、測試 tag 那種帶 `-` 的名字）同理不命中。
+#: 這兩類不歸本檢查管：`V4` 違反段把它們明列為 `fnmatch` 的已知缺口，
+#: adapter 也拿它們當反例講兩個平台的嚴格度差異——掃了只會誤殺說明文字。
+VERSION_LITERAL_RE = re.compile(VERSION_TAG_PREFIX + r"(\d+(?:\.\d+){0,2})(?![\w.-])")
+#: 形狀二：角括號佔位符。少了這一半就漏掉本檢查最該擋的兩處——規則本體自己的
+#: 舊形狀舉例，與 `republish_decision()` 撞版本時吐給人看的錯誤訊息。
+VERSION_PLACEHOLDER_RE = re.compile(
+    VERSION_TAG_PREFIX + r"(<[^<>\n]*>(?:\.<[^<>\n]*>)*)"
+)
+#: 掃描範圍：規範、腳本、工具與手冊——「照著做會做錯」的那些。
+VERSION_SCAN_ROOTS = ("skills", "scripts", "tools", "docs/handbook")
+VERSION_SCAN_FILES = ("README.md", "CLAUDE.md", "AGENTS.md")
+VERSION_SCAN_SUFFIXES = (".md", ".sh", ".py", ".yml", ".yaml")
+#: 豁免清單。**顯式路徑，不用模式匹配**——這一格的風險方向是誤管而不是漏管
+#: （protocol `V5`）：把反例測試、綁 sha 的發佈審查記錄與反悔錄「修正」成四碼，
+#: 證據就對不上了，而且沒有人會發現，因為改完看起來更整齊。
+#: 清單裡有幾條目前落在 `VERSION_SCAN_ROOTS` 之外、掃不到，仍然列著：
+#: 會變的是掃描範圍，而範圍一放寬，第一個被改壞的就是它們。
+VERSION_SHAPE_ALLOW = (
+    "tools/publish-docs/test_site_docs.py",
+    "tools/foundry-lint/test_foundry_lint.py",
+    ".foundry/config.yml",
+    "docs/publish-reviews",
+    "docs/pilot",
+    "docs/standards/known-drift.md",
+    "docs/features",
+)
 
 # ── 手冊同步戳記（MYL-44）─────────────────────────────────────────────────
 #: 規則層本體。戳記追的就是這一份的修改歷史。
@@ -670,6 +709,64 @@ def check_big_files(root: Path) -> SelfcheckResult:
                 f"入口檔的大檔清單列了 {rel}，但這個路徑不存在——檔案已刪或改名，清單沒跟上"
             )
     res.summary += f"（門檻 {kb}KB，達標 {len(over_threshold)} 份）"
+    return res
+
+
+def version_shape_allowed(rel: str) -> bool:
+    """這個 repo 相對路徑是否落在豁免清單裡（目錄項涵蓋其下全部）。"""
+    return any(rel == item or rel.startswith(item + "/") for item in VERSION_SHAPE_ALLOW)
+
+
+def version_shape_targets(root: Path) -> list:
+    """掃描範圍內所有該檢查的檔案，回傳 repo 相對路徑（POSIX 形式），已排序。"""
+    found = set()
+    for name in VERSION_SCAN_FILES:
+        if (root / name).is_file():
+            found.add(name)
+    for top in VERSION_SCAN_ROOTS:
+        base = root / top
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if path.is_file() and path.suffix in VERSION_SCAN_SUFFIXES:
+                found.add(path.relative_to(root).as_posix())
+    return sorted(rel for rel in found if not version_shape_allowed(rel))
+
+
+def check_version_shape(root: Path) -> SelfcheckResult:
+    """提到手冊版本時一律用四碼形狀，佔位符只有一種合法寫法（protocol `V5`）。
+
+    MYL-71：`V4` 把版本號改成四碼之後，repo 裡仍有九處沿用舊形狀舉例——
+    其中兩處在**規則本體與錯誤訊息**上：`V3` 的內文拿舊形狀說明「不重打」，
+    而 `republish_decision()` 撞版本時叫人去打下一版的那句話也是舊形狀。
+    後者出現的時機正是有人要決定下一個版本號的當下，規範與錯誤訊息示範錯的
+    形狀，讀者照做就錯——這是本檢查存在的主因，不是為了整齊。
+
+    刻意只擋兩種形狀（字面位數不足、非標準佔位符），且只在
+    `VERSION_TAG_PREFIX` 這個字面前綴後面判。不管的兩類寫在
+    `VERSION_LITERAL_RE` 的註解裡，豁免清單的理由寫在 `VERSION_SHAPE_ALLOW`。
+    反例見 `test_foundry_lint.py` 的 `VersionShapeTest`——兩種形狀各一個。
+    """
+    res = SelfcheckResult("version-shape", "手冊版本號用四碼形狀")
+    targets = version_shape_targets(root)
+    for rel in targets:
+        for lineno, line in enumerate(read_text(root / rel).splitlines(), 1):
+            for m in VERSION_LITERAL_RE.finditer(line):
+                digits = m.group(1).count(".") + 1
+                res.failures.append(
+                    f"{rel}:{lineno} 用了 `{VERSION_TAG_PREFIX}{m.group(1)}`"
+                    f"（{digits} 位）——手冊版本號是四位十進位整數，"
+                    "形狀與遞增規則見 protocol `V4`，適用範圍見 `V5`"
+                )
+            for m in VERSION_PLACEHOLDER_RE.finditer(line):
+                if m.group(1) == VERSION_CANONICAL_PLACEHOLDER:
+                    continue
+                res.failures.append(
+                    f"{rel}:{lineno} 的佔位符寫成 `{VERSION_TAG_PREFIX}{m.group(1)}`"
+                    f"——合法寫法只有 `{VERSION_TAG_PREFIX}"
+                    f"{VERSION_CANONICAL_PLACEHOLDER}`（protocol `V4`／`V5`）"
+                )
+    res.summary += f"（掃 {len(targets)} 份檔案）"
     return res
 
 
@@ -1261,7 +1358,7 @@ def check_mirror_recon(root: Path) -> SelfcheckResult:
 
 SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
               check_rule_marks, check_big_files, check_internal_links,
-              check_handbook_stamp, check_mirror_recon)
+              check_version_shape, check_handbook_stamp, check_mirror_recon)
 
 
 def run_selfcheck(root: Path) -> list:

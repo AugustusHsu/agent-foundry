@@ -167,12 +167,14 @@ def mirror_site_decision(docs_cfg: dict, tag: str) -> tuple:
 
 
 def version_of(tag: str, pattern: str) -> str:
-    """由 tag 與 pattern 算出站台版本名：`handbook-v*` ＋ `handbook-v1` → `v1`。
+    """由 tag 與 pattern 算出站台版本名：`handbook-v*` ＋ `handbook-v0.0.0.1` → `v0.0.0.1`。
 
     規則：取 pattern 第一個萬用字元之前的**字面前綴**，再截到它最後一個 `-`（含）
     為止，剝掉那一段。`handbook-v*` 的字面前綴是 `handbook-v`，截到最後一個 `-`
-    是 `handbook-`，於是 `handbook-v1` → `v1`——版本選擇器上顯示的是 `v1` 而不是
-    光禿禿的 `1`。前綴裡沒有 `-` 就整段剝掉。改 `tag_pattern` 不必回來改這裡。
+    是 `handbook-`，於是 `handbook-v0.0.0.1` → `v0.0.0.1`——版本選擇器上顯示的是
+    `v0.0.0.1` 而不是光禿禿的 `0.0.0.1`。前綴裡沒有 `-` 就整段剝掉。
+    改 `tag_pattern` 不必回來改這裡（四碼版本號的形狀見 protocol `V4`，
+    本函式刻意是泛用的前綴剝除，不綁死位數）。
     前綴對不上（理論上 `fnmatch` 已經擋掉）時原樣回傳 tag。
     """
     cut = min((i for i in (pattern.find(c) for c in "*?[") if i >= 0), default=-1)
@@ -190,7 +192,7 @@ def version_of(tag: str, pattern: str) -> str:
 def published_versions(versions_json: str) -> list:
     """讀 `mike` 寫在 gh-pages 根目錄的 `versions.json`，回傳已發佈的版本清單。
 
-    形狀是 `[{"version": "v1", "title": "v1", "aliases": ["latest"]}, …]`。
+    形狀是 `[{"version": "v0.0.0.1", "title": "v0.0.0.1", "aliases": ["latest"]}, …]`。
     **只取 `version`，不取 `aliases`**——別名（`latest`）每次發佈都會被重新指向，
     那是設計如此；把別名算成「已發佈版本」會讓第二版起全部被自己擋下。
 
@@ -246,7 +248,9 @@ def republish_decision(version: str, published: list, rebuild: bool) -> tuple:
     return False, (
         f"版本 `{version}` 已經發佈在 gh-pages 上，而這次是 tag 推送。"
         "已發佈的手冊版本不重打（protocol `V3`）：tag 能對同一版再次觸發，"
-        "代表它被移動或刪除重打了。要修就 bump 下一版（打 handbook-v<N+1>），"
+        "代表它被移動或刪除重打了。要修就 bump 下一版：版本號是四碼 "
+        "handbook-v<a>.<b>.<c>.<d>，依 protocol `V4` 的進位歸零規則決定這次動哪一位"
+        "（動 a 則 b/c/d 歸零，動 b 則 c/d 歸零，動 c 則 d 歸零，動 d 只加 d）。"
         "不要覆蓋已經有人引用得到的那一版。"
     )
 
