@@ -93,7 +93,7 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
 
 既有 local-md 專案要升級平台時走本節。這不是模組，是平台搬遷——涉及新建平台側資源，整段屬關卡 C 授權範圍。
 
-1. **前置**：`<TARGET>` 已是 local-md 模式（config `platform: local-md`＋`board/` 有資料）；github 前置檢查同 init §1 第 2 點（gh auth、scopes、repo 可解析）。
+1. **前置**：`<TARGET>` 已是 local-md 模式（config `devtools_platform: local-md`＋`board/` 有資料）；github 前置檢查同 init §1 第 2 點（gh auth、scopes、repo 可解析）。
 2. **發卡**：明列——將建立的 github 資源（同 §2 第 2 點清單＋ProjectV2 視 M2 是否已啟用）、搬遷範圍（全部工單／篩選；含幾單幾留言）、搬遷後 board 目錄的處置（預設：保留為唯讀歷史）。未同意不動工。
 3. **建骨架**：跑 github adapter `init_structure`（含 M2 已啟用時的 project＋view；人工步驟列待辦）。
 4. **逐單搬遷**（順序固定：先建全部單、再補關聯，確保 `link_issues` 的 target 都存在）：
@@ -102,7 +102,7 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
    - 留言：逐則以 `comment` 追加，內文保留原日期與作者（如 `（原留言：2026-09-03 tech-lead）`開頭）。
    - 關聯：全部單建完後，依原 frontmatter 的 `parent`／`blocked_by` 逐一 `link_issues`。
 5. **對照表與冪等**：`FND-x → #n` 對照表寫入 `<TARGET>/.foundry/board/MIGRATED.md`（含遷移日期）並收進報告。重跑本節時先讀該檔，已搬過的單跳過——搬遷可分批、可中斷續跑。
-6. **切換**：config `platform` 改 `github`＋補 `platform_options.github`；`board/` 依卡上選定處置（預設原樣保留、自此唯讀，MIGRATED.md 即封存標記）。此後所有動詞走 github adapter。
+6. **切換**：config `devtools_platform` 改 `github`＋補 `platform_options.github`；`board/` 依卡上選定處置（預設原樣保留、自此唯讀，MIGRATED.md 即封存標記）。此後所有動詞走 github adapter。
 - **查證**：對照表單數＝圈選範圍單數；抽查 3 單（title／labels／milestone／status／留言數）與原檔一致；關聯抽查可查得；重跑一次無新增動作。
 - **回退**：config 改回 `local-md` 即恢復原執行層（board 從未被改寫，資料零損失）；已建的 github 資源處置（保留／刪除）屬平台側破壞性動作，交使用者裁定。
 

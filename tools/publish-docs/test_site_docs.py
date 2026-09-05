@@ -20,8 +20,8 @@ import site_docs
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 CONFIG_SAMPLE = """\
-foundry: 1
-platform: paperclip
+foundry: 2
+devtools_platform: paperclip
 
 platform_options:
   paperclip:

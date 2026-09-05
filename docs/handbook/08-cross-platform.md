@@ -29,7 +29,25 @@ Foundry 把「文檔」拆成三層，各有各的載體與真實來源（SSOT�
 
 換平台時該動哪裡，只有三個地方，其餘一律不動（MYL-35）：**通用規則**在 `foundry-protocol`（不動）、**平台專屬的欄位與限制**在該平台的 adapter（換一份）、**專案專屬的授權邊界**在 `.foundry/config.yml`（換一份）。判準很簡單：一句規則如果換個平台就字面不成立，它就不該寫在規範裡。
 
-專案用哪個平台，記在專案根目錄的 `.foundry/config.yml`（`platform` 欄位）；這份設定檔同時記著關卡設定（`gates` 段）與 push 權限（`push` 段），是每個專案自己的授權邊界，**agent 不得未經對應 workflow 或使用者指示直接改它**。agent-foundry 自己也有一份（`platform: paperclip`），你在 MYL-28 選定的關卡方案就記在裡面——**規範怎麼要求別的專案，這個 repo 自己就怎麼做**。
+專案用哪個平台，記在專案根目錄的 `.foundry/config.yml`（`devtools_platform` 欄位）；這份設定檔同時記著關卡設定（`gates` 段）與 push 權限（`push` 段），是每個專案自己的授權邊界，**agent 不得未經對應 workflow 或使用者指示直接改它**。agent-foundry 自己也有一份（`devtools_platform: paperclip`），你在 MYL-28 選定的關卡方案就記在裡面——**規範怎麼要求別的專案，這個 repo 自己就怎麼做**。
+
+### 「平台」其實是兩個問題（MYL-82）
+
+這個欄位原本就叫 `platform`，而「平台」這個詞在這裡一直同時指兩件事：
+
+- **工具面**——工單、狀態、看板放在哪個服務上（`github`／`gitlab`／`local-md`／`paperclip`）。
+- **AI 平台面**——agent 本身在哪裡執行、被誰喚醒（`paperclip`／`claude-code`／`codex`）。
+
+在 agent-foundry 這個 repo 上兩者剛好都是 Paperclip，所以混用一直沒出過事；但它們是兩條互相獨立的軸——
+工單可以在 GitHub、agent 卻跑在 Codex 上。一個欄位承載兩條軸，讀的人各自解讀成自己需要的那一個，
+遲早會在文件裡對不上。因此欄位正名為 **`devtools_platform`**（工具面），另加選填的 **`ai_platform`**（AI 平台面），
+設定檔的 schema 版本同時從 `foundry: 1` 升到 `2`。
+
+⚠️ 這是**不相容變更**：舊設定檔裡的 `platform` 會被新的讀取者當成未知欄位丟掉，而必填的 `devtools_platform`
+不存在，整份設定就此非法。要升級只需改欄位名——但要改，不會自動相容。
+
+⚠️ `ai_platform` 目前**只是宣告**：沒有任何動作依它改變行為，也還沒有三家平台的能力對照表。
+把「agent 在哪裡跑」從隱含變成寫得出來的一行，是這次唯一做到的事。
 
 規則本體：`skills/foundry-platform/`（介面 SKILL.md＋`adapters/github.md`＋`adapters/local-md.md`＋`config-schema.md`）。
 

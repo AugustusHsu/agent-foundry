@@ -1,6 +1,6 @@
 # adapter：paperclip
 
-`platform: paperclip` 時的動詞對照。介面語意見 `../SKILL.md`，本文只翻譯成具體指令。
+`devtools_platform: paperclip` 時的動詞對照。介面語意見 `../SKILL.md`，本文只翻譯成具體指令。
 
 Paperclip 是**執行層平台**（工單／狀態／看板），不是 git 平台——程式碼與規則層 .md 仍在各自的 git repo，本 adapter 只負責執行層。與 `github`／`local-md` 的差異全部吸收在本文，流程規範（foundry-protocol）不因平台而改寫。
 

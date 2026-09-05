@@ -1,17 +1,22 @@
 # .foundry/config.yml 範例（schema 見 skills/foundry-platform/config-schema.md）
 # foundry-init 首次產生；gates 段之後由 foundry-gates 經使用者確認後改寫。
 
-foundry: 1
+foundry: 2
 
-platform: github            # github | gitlab | local-md | paperclip
+devtools_platform: github   # 工具面：工單／狀態／看板放在哪
+                            # github | gitlab | local-md | paperclip
                             # ⚠️ gitlab 的 adapter 已全覆蓋動詞，但沒有在真的 GitLab 專案上跑過，
                             #    且 foundry-init／foundry-adopt 的平台問卡尚未納入它——
                             #    填 gitlab 等於自己走一次首跑驗證（adapters/gitlab.md 附錄 B）。
 
+# AI 平台面（選填，MYL-82）：agent 本身在哪裡執行與被喚醒。與上面的工具面正交。
+# 整段註解掉＝未宣告。目前沒有任何動詞依它分派，能力對照屬 MYL-78。
+# ai_platform: paperclip    # paperclip | claude-code | codex
+
 # 對外可見面的鏡像平台（選填，MYL-39 T-2）。整段註解掉＝不鏡像。
-# 語意：執行與喚醒仍在上面的 platform，工單「單向」鏡像到這裡供外部閱讀；
+# 語意：執行與喚醒仍在上面的 devtools_platform，工單「單向」鏡像到這裡供外部閱讀；
 # 鏡像端唯讀——在那邊改狀態不會回寫，下次同步會被覆蓋。
-# 值域同 platform，但必須是 adapter 寫了「鏡像模式」一節的平台（目前只有 github）。
+# 值域同 devtools_platform，但必須是 adapter 寫了「鏡像模式」一節的平台（目前只有 github）。
 # 鏡像端的 adapter 選項寫在下面 platform_options 的同名鍵，不另開結構。
 # mirror_platform: github
 

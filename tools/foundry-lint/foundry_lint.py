@@ -1141,7 +1141,7 @@ def reconcile_mirror(sources: list, mirrors: list, source_platform: str) -> list
         if m.source_platform != source_platform:
             failures.append(
                 f"`{s.ref}`：鏡像 issue #{m.number} 的標記寫的來源平台是 "
-                f"`{m.source_platform}`，設定檔的 `platform` 是 `{source_platform}`"
+                f"`{m.source_platform}`，設定檔的 `devtools_platform` 是 `{source_platform}`"
             )
 
         expected_status = SIX_STATE_TO_GH_STATUS.get(s.status)
@@ -1315,7 +1315,7 @@ def check_mirror_recon(root: Path) -> SelfcheckResult:
         res.skipped = f"{MIRROR_OFFLINE_ENV} 已設，本次不連線對帳"
         return res
 
-    source_platform = cfg.get("platform", "")
+    source_platform = cfg.get("devtools_platform", "")
     opts = cfg.get("platform_options", {})
     gh_opts = opts.get("github", {}) if isinstance(opts, dict) else {}
     pc_opts = opts.get("paperclip", {}) if isinstance(opts, dict) else {}

@@ -19,7 +19,7 @@ description: 模型供應商路由 workflow。三種情況載入本文：① 撞
 
 | 軸 | 管什麼 | 由誰定義 | 值 |
 | --- | --- | --- | --- |
-| **執行層平台** | 工單／狀態／看板放在哪 | `foundry-platform` ＋ `.foundry/config.yml` 的 `platform` | `github`／`gitlab`／`local-md`／`paperclip` |
+| **執行層平台** | 工單／狀態／看板放在哪 | `foundry-platform` ＋ `.foundry/config.yml` 的 `devtools_platform` | `github`／`gitlab`／`local-md`／`paperclip` |
 | **模型供應商** | 哪一家的模型在跑這個角色 | **本文** ＋ `.foundry/config.yml` 的 `model_routing` | `claude`／`codex`／`gemini`… |
 
 兩者都曾被口語叫成「平台」，但換供應商不會換掉工單系統，換工單系統也不會換掉供應商。
@@ -56,7 +56,7 @@ python3 tools/model-routing/probe_providers.py --format json
 
 - **路由設定**：`.foundry/config.yml` 的 `model_routing` 段（schema 見
   `skills/foundry-platform/config-schema.md`）。整段缺席＝路由未啟用＝全隊都用預設供應商。
-- **平台實況**：依 `.foundry/config.yml` 的 `platform` 查（見 §4）。
+- **平台實況**：依 `.foundry/config.yml` 的 `devtools_platform` 查（見 §4）。
 - **設定與實況不一致時以設定為準並發起同步**，不是改設定遷就現況（同 protocol 第 8、9 節的權威來源規則）。
 
 ### 2.3 產生指派方案：套政策，不即興

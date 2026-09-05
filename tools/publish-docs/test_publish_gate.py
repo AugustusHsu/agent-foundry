@@ -109,7 +109,7 @@ class RepoFixture:
         fixture 預設**不寫**這個檔——那正是「設定缺席時落回 schema 預設」那條
         路徑的測試環境。要測設定驅動的行為時才呼叫。
         """
-        lines = ["foundry: 1", "platform: github", "docs:"]
+        lines = ["foundry: 2", "devtools_platform: github", "docs:"]
         lines += [f"  {k}: {v}" for k, v in docs_fields.items()]
         cfg = self.root / ".foundry" / "config.yml"
         cfg.parent.mkdir(parents=True, exist_ok=True)

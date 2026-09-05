@@ -3,14 +3,19 @@
 # 建立依據：MYL-35（抹除「本 repo 流程」與「導入其他平台的流程」之間的差異）
 # 建立於 2026-09-03。agent 不得未經 foundry-gates／foundry-adopt 或使用者指示直接改本檔。
 
-foundry: 1
+foundry: 2
 
 # 本 repo 的執行層平台是 Paperclip（工單／狀態／看板）；
 # 規則層 .md 與程式碼仍在本 git repo，兩者分工見 foundry-protocol「平台中立原則」。
-platform: paperclip
+devtools_platform: paperclip
+
+# agent 在哪個 AI 平台上執行與被喚醒（MYL-82 正名，依 MYL-61 卡 00ded0b2 Q1）。
+# 與上面的工具面正交——本 repo 兩者恰好都是 paperclip，那是巧合不是同義。
+# 目前沒有任何動詞依本欄分派；三家的能力對照屬 MYL-78。
+ai_platform: paperclip
 
 # 可見面鏡像到 GitHub（MYL-39 計畫 v5 §3「T-2 雙軌鏡像」，使用者於確認卡 7598a79e 整包核可；
-# 第一次真的建出公開 issue 另經 G-C 卡 aa3121a9 核可）。真相與喚醒面仍是上面的 platform：
+# 第一次真的建出公開 issue 另經 G-C 卡 aa3121a9 核可）。真相與喚醒面仍是上面的 devtools_platform：
 # 指派 Paperclip 工單會叫醒 agent，GitHub issue 不會。鏡像是單向、唯讀的。
 # 本欄依 schema「不得早於鏡像實際可用就先寫」，在 MYL-58 走完建單／改狀態／結案三個時機
 # 的實測之後才寫入。怎麼鏡像見 skills/foundry-platform/adapters/github.md §「鏡像模式」。

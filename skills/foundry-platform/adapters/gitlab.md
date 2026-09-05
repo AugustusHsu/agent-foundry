@@ -1,8 +1,8 @@
 # adapter：gitlab
 
-`platform: gitlab` 時的動詞對照。介面語意見 `../SKILL.md`，本文只翻譯成具體指令。
+`devtools_platform: gitlab` 時的動詞對照。介面語意見 `../SKILL.md`，本文只翻譯成具體指令。
 本檔同時是文檔投影宿主（`publish_docs`，見下方同名一節），兩個身分互相獨立——
-`docs` 段選那一節，`platform` 選這一節，一個專案可以只用其中一邊（`../SKILL.md` §5）。
+`docs` 段選那一節，`devtools_platform` 選這一節，一個專案可以只用其中一邊（`../SKILL.md` §5）。
 
 ⚠️ **讀本文前先看附錄 B 的查證狀態。** 本 repo **沒有 GitLab 實例**，本文的指令分三個
 證據等級（來源專案實測／官方 API 文件／版本分岔推定），附錄 B 逐條標明是哪一級。
@@ -15,7 +15,7 @@
 ℹ️ **本 adapter 沒有「鏡像模式」一節**，所以 `mirror_platform: gitlab` 依
 `../config-schema.md` 的合法性規則**不合法**——那一節要另外定義三個時機、對應標記與對帳欄位，
 目前只有 `adapters/github.md` 有。這是刻意的缺，不是漏寫：沒有規格就自行推導一套出來，
-得到的會是兩邊都對不上的鏡像。`platform: gitlab`（執行層）與 `docs` 指向 gitlab（文檔面）
+得到的會是兩邊都對不上的鏡像。`devtools_platform: gitlab`（執行層）與 `docs` 指向 gitlab（文檔面）
 都不受這一條影響。
 
 ## 前置條件
@@ -36,7 +36,7 @@
   裝了 `glab` 的人可以用它取代下面的 `curl`，但**查證仍以本文的 API 回傳為準**。
 - **不要用 `git remote` 判斷平台。** 來源專案 SuperOD 的正本在自架 GitLab、本機 clone 的
   `origin` 卻指向 GitHub 鏡像——照 remote 判會判成 github。平台一律讀 `.foundry/config.yml`
-  的 `platform`（`../SKILL.md` §1 第 5 點）。
+  的 `devtools_platform`（`../SKILL.md` §1 第 5 點）。
 - **佔位符慣例**：`<IID>`＝issue 在專案內的編號（`#12` 的 `12`）、`<MID>`＝milestone 的數字 id、
   `<BID>`＝board 的數字 id。GitLab 的 issue 有兩個編號，本文一律用 `iid`，理由見附錄 A。
 
@@ -296,7 +296,7 @@ curl -s -H "$GL_AUTH" -G "$GL_API/issues" \
 
 介面定義見 `../SKILL.md` §3.9，判準只有一條：**機械投影不是第二份真相，人只改源頭。**
 本節在「宿主平台是 gitlab」時適用——宿主的判定同 `../config-schema.md` 的 `docs` 合法性規則：
-`mirror_platform` 有值取它、否則取 `platform`。
+`mirror_platform` 有值取它、否則取 `devtools_platform`。
 
 | 設定 | 載體 | 定位 | 觸發時機 |
 | --- | --- | --- | --- |
@@ -451,4 +451,4 @@ GitLab 的 issue 有兩個編號：`iid`（專案內編號，就是網頁上的 
 | ③ 版本分岔推定 | scoped label 互斥、`blocks` link_type、epic／Roadmap 的 Premium 歸屬 | 依 GitLab 方案功能表。⇒ 所以本文要求**先用「版本分岔」那一節探測一次並寫進工單**，不要臨場猜 |
 
 **第一次在真的 GitLab 專案上跑本文時要做的事**：逐動詞記錄實際回傳，把對不上的地方改回本文，
-並把錨點比對（見 `publish_docs` 的警告）補齊。在那之前，`platform: gitlab` 屬**未實跑驗證**的組態。
+並把錨點比對（見 `publish_docs` 的警告）補齊。在那之前，`devtools_platform: gitlab` 屬**未實跑驗證**的組態。
