@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: '要重建的手冊版本 tag（例：handbook-v1）'
+        description: '要重建的手冊版本 tag（例：handbook-v0.0.0.1；四碼版本號見 protocol V4）'
         required: true
 
 permissions:
