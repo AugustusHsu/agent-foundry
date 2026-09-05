@@ -151,6 +151,7 @@
 | GAP-3 | **`.foundry/config.yml` 的 `push` 段表達不了本 repo 現況。** MYL-23 P1「合併回 main 後 push origin 由執行者自行」寫不進 schema，權威來源是 protocol 第 7、9 節的分級表文字 | MYL-35 G7 選項 A，見 R4 |
 | GAP-4 | **`claude_local` adapter 內建說明字串的 `effort` 只寫到 `(low\|medium\|high)`，已過時。** 實際支援 `low/medium/high/xhigh/max`；adapter 對 `effort` 原樣傳給 CLI 不做驗證 | 實測 `claude-opus-5`＋`max` EXIT=0。protocol 第 8 節附註已載明 |
 | GAP-5 | **瀏覽器工具綁的是「情境」不是「人」。** `.mcp.json` 放在共用 repo 裡，該 repo 的**所有** agent 都拿得到瀏覽器工具，不只 Frontend Verifier。要真正做到 per-agent 綁定得靠平台 tool-profile（`L7`，board-only） | MYL-37 卡 `myl37:frontend-verifier:plan:f7cf0b84` 的 `gateway: gateway_now`——使用者選擇由自己在 UI 補上閘道，能力層不等它。**2026-09-04 更正：這條缺口用閘道關不掉**——stdio 型 MCP 送不進 agent session（`L10`），硬掛遠端連線反而會把 `.mcp.json` 整份廢掉（`L9`）。維持 `.mcp.json`、以「不把遠端 app 授權給 Frontend Verifier」為代償規則 |
+| GAP-6 | **`handbook-stamp` 只驗「有動到手冊任一檔」，不驗「動到對應章」。** `unsynced_protocol_commits()` 看的是 `diff-tree ... -- docs/handbook` 有沒有輸出，所以「改 protocol 第 3 節、手冊只動 `06` 章、`03` 章戳記仍停在舊 sha」四章照樣全綠（MYL-73 的 `0a0b461` 就是這個形狀）。**刻意不做**：protocol 的節與手冊的章不是一對一，硬做對應表等於新增第二份要人工維護的映射，而那正是本 repo 反覆記錄的漂移來源——這道閘門要擋的是「完全沒看手冊」，「哪一章要改」的判斷本來就在層 2 的 agent 身上 | MYL-76 AC10 判定（工單授權「先判斷值不值得做」，由 Developer 判；非使用者裁定）。判準與這條缺口一併寫在 `check_handbook_stamp()` 的 docstring，避免下一個人重新發現一次 |
 
 ## 5. 併發與競態：多個 run 共用同一個 workspace
 

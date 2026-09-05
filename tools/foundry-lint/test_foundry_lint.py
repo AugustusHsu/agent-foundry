@@ -600,7 +600,8 @@ class SelfcheckTest(unittest.TestCase):
         self.assertEqual({c["name"] for c in data["checks"]},
                          {"entry-sync", "nav-sync", "anchors", "rule-ids",
                           "rule-marks", "big-files", "internal-links",
-                          "version-shape", "handbook-stamp", "mirror-recon"})
+                          "version-shape", "table-shape", "org-sync",
+                          "handbook-stamp", "mirror-recon"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()
@@ -1312,6 +1313,205 @@ class FetchMirrorIssuesTest(unittest.TestCase):
         (_, truncated), why = self.run_fetch(issues, [])
         self.assertEqual(why, "")
         self.assertTrue(truncated)
+
+
+class RepoCopyTestCase(unittest.TestCase):
+    """把真實 repo 複製到臨時目錄，讓反例可以直接寫檔而不弄髒工作區。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "repo"
+        shutil.copytree(
+            REPO_ROOT, self.root,
+            ignore=shutil.ignore_patterns(".git", "site", "__pycache__"),
+        )
+
+    def write(self, rel, text):
+        path = self.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+
+class TableShapeTest(RepoCopyTestCase):
+    """表格被空行切斷（MYL-76 AC9）：反例是「續列」，不是「兩張表」。
+
+    分開驗這兩者是本檢查的重點——只擋「空行後面還有 `|` 開頭的行」會把
+    兩張相鄰的表也判成壞的，於是這項檢查第一天就會被當成雜訊關掉。
+    """
+
+    TABLE = "| 欄 | 說明 |\n| --- | --- |\n| a | 甲 |\n"
+
+    def _run(self):
+        return foundry_lint.check_table_shape(self.root)
+
+    def test_真實_repo_通過(self):
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_續列被空行切斷時擋下(self):
+        self.write("docs/standards/drift-sample.md", self.TABLE + "\n| b | 乙 |\n")
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(
+            any("docs/standards/drift-sample.md:5" in f for f in res.failures),
+            res.failures,
+        )
+
+    def test_相鄰的兩張表不誤殺(self):
+        self.write("docs/standards/drift-sample.md", self.TABLE + "\n" + self.TABLE)
+        self.assertTrue(self._run().passed)
+
+    def test_圍欄裡的示例不算(self):
+        self.write(
+            "skills/drift-sample.md",
+            "```markdown\n" + self.TABLE + "\n| b | 乙 |\n```\n",
+        )
+        self.assertTrue(self._run().passed)
+
+    def test_沒有分隔列的段落不算表(self):
+        """`|` 開頭但下一行不是分隔列——那是普通段落，不該被當成表頭。"""
+        self.write("skills/drift-sample.md", "| 這只是一行文字\n\n| 另一行\n")
+        self.assertTrue(self._run().passed)
+
+    def test_縮排在清單裡的表也擋得住(self):
+        self.write(
+            "docs/standards/drift-sample.md",
+            "- 說明：\n\n  | 欄 | 值 |\n  | --- | --- |\n  | a | 1 |\n\n  | b | 2 |\n",
+        )
+        self.assertFalse(self._run().passed)
+
+
+class ParseOrgTest(unittest.TestCase):
+    """`.foundry/org.yml` 的 parser：不支援的寫法要**拋錯**，不是靜靜忽略。"""
+
+    def test_真實檔案讀得出九名(self):
+        org = foundry_lint.parse_org(
+            (REPO_ROOT / foundry_lint.ORG_REL).read_text(encoding="utf-8"))
+        self.assertEqual(org["foundry_org"], "1")
+        self.assertEqual(len(org["roles"]), 9)
+        ceo = org["roles"][0]
+        self.assertEqual(ceo["id"], "ceo")
+        self.assertEqual(ceo["reports_to"], "user")
+        self.assertEqual(ceo["skills"], ["skills/roles/ceo/SKILL.md"])
+        self.assertIn("assign_tasks", ceo["permissions"])
+
+    def test_註解與行尾註解不進資料(self):
+        org = foundry_lint.parse_org(
+            "# 抬頭\nfoundry_org: 1  # 版本\nai_platform: paperclip\n")
+        self.assertEqual(org, {"foundry_org": "1", "ai_platform": "paperclip"})
+
+    def test_空序列寫成中括號(self):
+        org = foundry_lint.parse_org("roles:\n  - id: x\n    permissions: []\n")
+        self.assertEqual(org["roles"][0]["permissions"], [])
+
+    def test_不支援的寫法拋錯而不是忽略(self):
+        with self.assertRaises(LintError):
+            foundry_lint.parse_org("roles:\n  - id: x\n    skills: {a: 1}\n  - 裸序列項\n")
+
+    def test_欄位不在任何角色底下拋錯(self):
+        with self.assertRaises(LintError):
+            foundry_lint.parse_org("foundry_org: 1\n  title: 迷路的欄位\n")
+
+
+class OrgSyncTest(RepoCopyTestCase):
+    """組織宣告 ↔ protocol 第 9／8 節（MYL-76 AC3）：每個比對方向各配一個反例。"""
+
+    def _run(self):
+        return foundry_lint.check_org_sync(self.root)
+
+    def _org(self):
+        return (self.root / foundry_lint.ORG_REL).read_text(encoding="utf-8")
+
+    def test_真實_repo_通過(self):
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_檔案不存在時擋下(self):
+        (self.root / foundry_lint.ORG_REL).unlink()
+        res = self._run()
+        self.assertFalse(res.passed)
+
+    def test_版本不認得就停下不猜著解析(self):
+        self.write(foundry_lint.ORG_REL, self._org().replace("foundry_org: 1", "foundry_org: 2"))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("foundry_org" in f for f in res.failures), res.failures)
+
+    def test_漏宣告組織圖上的角色被擋下(self):
+        text = self._org()
+        head, _, _ = text.partition("  - id: qa-engineer")
+        self.write(foundry_lint.ORG_REL, head)
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("QA Engineer" in f and "沒有宣告" in f for f in res.failures),
+                        res.failures)
+
+    def test_匯報線與組織圖不符被擋下(self):
+        text = self._org().replace(
+            "    title: Developer\n    reports_to: tech-lead",
+            "    title: Developer\n    reports_to: ceo")
+        self.write(foundry_lint.ORG_REL, text)
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("`developer` 宣告匯報給" in f and "Tech Lead" in f
+                            for f in res.failures), res.failures)
+
+    def test_模型層與第8節不符被擋下(self):
+        text = self._org().replace(
+            "    title: Developer\n    reports_to: tech-lead\n    model_tier: medium",
+            "    title: Developer\n    reports_to: tech-lead\n    model_tier: low")
+        self.write(foundry_lint.ORG_REL, text)
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("第 8 節" in f and "developer" in f for f in res.failures),
+                        res.failures)
+
+    def test_模型層值域外被擋下(self):
+        self.write(foundry_lint.ORG_REL,
+                   self._org().replace("model_tier: high", "model_tier: highest", 1))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("model_tier" in f for f in res.failures), res.failures)
+
+    def test_掛的_skill_路徑失效被擋下(self):
+        (self.root / "skills/roles/pm/SKILL.md").unlink()
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("skills/roles/pm/SKILL.md" in f for f in res.failures),
+                        res.failures)
+
+    def test_權限值域外被擋下(self):
+        self.write(foundry_lint.ORG_REL,
+                   self._org().replace("      - create_skills", "      - do_anything", 1))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("do_anything" in f for f in res.failures), res.failures)
+
+    def test_兩份設定檔的_ai_platform_不一致被擋下(self):
+        self.write(foundry_lint.ORG_REL,
+                   self._org().replace("ai_platform: paperclip", "ai_platform: codex"))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("ai_platform" in f for f in res.failures), res.failures)
+
+    def test_組織圖讀不出來時報紅而不是靜靜通過(self):
+        """比對基準的形狀變了要擋下——靜靜通過等於這項檢查從此不存在。"""
+        protocol = (self.root / foundry_lint.PROTOCOL_REL).read_text(encoding="utf-8")
+        self.write(foundry_lint.PROTOCOL_REL,
+                   protocol.replace("### 現行結構", "### 組織現況"))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("組織圖" in f for f in res.failures), res.failures)
+
+    def test_不比對平台實況(self):
+        """AC7 的回歸守衛：宣告了平台上還不存在的 PM，本項仍然通過。
+
+        PM 的 agent 要到 MYL-79（T7）才建；期間本檔宣告一個不存在的成員是
+        預期行為。這個測試存在的目的是擋下「順手補一個比對平台的檢查」。
+        """
+        self.assertIn("id: pm", self._org())
+        self.assertTrue(self._run().passed)
 
 
 if __name__ == "__main__":

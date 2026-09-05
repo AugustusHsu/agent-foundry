@@ -1,0 +1,121 @@
+# agent-foundry 自身的組織宣告（Foundry 組織層可攜性級 2，MYL-76）
+# schema 權威：skills/foundry-platform/config-schema.md「`.foundry/org.yml`」一節
+# 規則權威：skills/foundry-protocol/SKILL.md 第 9 節（組織圖與匯報線）＋第 8 節（模型分層）
+# 建立於 2026-09-06。
+#
+# ⚠️ 本檔是**應然**，不是平台實況的鏡子。它宣告「這個專案該有哪些角色、誰向誰匯報、
+#    各自掛什麼、用哪一層模型」；平台上這些 agent 建好了沒有是另一回事。
+#    `--selfcheck` 的 `org-sync` 只比對本檔 ↔ protocol 第 9／8 節，**刻意不比對平台實況**。
+#    現成的例子：下面宣告了 PM，而平台上的 PM agent 要到 MYL-79（T7）才建——
+#    那段期間本檔宣告一個還不存在的成員，是預期行為，不是漏同步。與平台的對帳歸 T7。
+#
+# ⚠️ agent 不得自行改本檔（同 `.foundry/config.yml`）。改動走 protocol 第 9 節
+#    「結構調整先發卡提案、經使用者裁定」的同一條路徑；判準寫在 config-schema。
+
+foundry_org: 1
+
+# 這份組織宣告在哪個軸 A 平台上實現（欄位名由 MYL-82 正名定死）。
+# 與 `.foundry/config.yml` 的同名欄位指同一件事，兩檔都寫時值必須一致（`org-sync` 比對）。
+ai_platform: paperclip
+
+roles:
+  - id: ceo
+    title: CEO
+    reports_to: user
+    model_tier: high
+    # `O3`：CEO 是全隊唯一不掛第 1 層（foundry-protocol）的角色，代價由自己的 skill 承接。
+    skills:
+      - skills/roles/ceo/SKILL.md
+    # `assign_tasks`：派工的拍板者依第 9 節矩陣是 PM，但 PM 要到 MYL-79（T7）才建置，
+    # 在那之前 CEO 是實際的派工執行者。T7 之後要不要收回屬該單的判斷，不在本檔預先決定。
+    # `create_agents` 刻意不列：依 MYL-61 卡 `f80e66b3` Q5，建 agent 的權限要到 T7 才開，
+    # 且屆時是**臨時**授權——寫進本檔會把臨時值變成常設宣告。
+    permissions:
+      - assign_tasks
+      - create_skills
+
+  - id: product-analyst
+    title: Product Analyst
+    reports_to: ceo
+    model_tier: medium
+    skills:
+      - skills/foundry-protocol/SKILL.md
+      - skills/roles/product-analyst/SKILL.md
+    permissions:
+      - create_skills
+
+  - id: pm
+    title: PM
+    reports_to: ceo
+    model_tier: low
+    skills:
+      - skills/foundry-protocol/SKILL.md
+      - skills/roles/pm/SKILL.md
+    # 派工是本角色在第 9 節矩陣裡的拍板格，所以宣告 `assign_tasks`。
+    # ⚠️ `model_tier: low` 照 protocol 第 8 節表格填，而該節明記這一格是**建議值**——
+    #    依「絕不自作主張採用建議值」，未經使用者核可**不得據以設定平台**。
+    #    本檔是宣告層，寫在這裡不等於授權；落地時機與核可路徑歸 MYL-79（T7）。
+    permissions:
+      - assign_tasks
+      - create_skills
+
+  - id: scrum-master
+    title: Scrum Master
+    reports_to: ceo
+    model_tier: low
+    skills:
+      - skills/foundry-protocol/SKILL.md
+      - skills/roles/scrum-master/SKILL.md
+    # 排依賴鏈不需要指派權限（MYL-73 AC0 實測），所以這裡沒有 `assign_tasks`。
+    permissions:
+      - create_skills
+
+  - id: frontend-verifier
+    title: Frontend Verifier
+    reports_to: ceo
+    model_tier: medium
+    skills:
+      - skills/foundry-protocol/SKILL.md
+      - skills/roles/frontend-verifier/SKILL.md
+    permissions:
+      - create_skills
+
+  - id: tech-lead
+    title: Tech Lead
+    reports_to: ceo
+    model_tier: high
+    skills:
+      - skills/foundry-protocol/SKILL.md
+      - skills/roles/tech-lead/SKILL.md
+    permissions:
+      - create_skills
+
+  - id: developer
+    title: Developer
+    reports_to: tech-lead
+    model_tier: medium
+    skills:
+      - skills/foundry-protocol/SKILL.md
+      - skills/roles/developer/SKILL.md
+    permissions:
+      - create_skills
+
+  - id: code-reviewer
+    title: Code Reviewer
+    reports_to: tech-lead
+    model_tier: high
+    skills:
+      - skills/foundry-protocol/SKILL.md
+      - skills/roles/code-reviewer/SKILL.md
+    permissions:
+      - create_skills
+
+  - id: qa-engineer
+    title: QA Engineer
+    reports_to: tech-lead
+    model_tier: medium
+    skills:
+      - skills/foundry-protocol/SKILL.md
+      - skills/roles/qa-engineer/SKILL.md
+    permissions:
+      - create_skills
