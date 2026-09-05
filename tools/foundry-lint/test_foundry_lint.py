@@ -689,7 +689,12 @@ class SelfcheckTest(unittest.TestCase):
 
         現行清單最後一條複製項（`skills/roles/`）的說明文字裡就有一句
         「照舊不複製。」——截斷條件是**行首**的 `- 不複製：`，所以那句不算數。
-        真被它提前截斷的話，`tools/publish-docs/` 那條會掉出區塊 ⇒ 假紅。
+
+        真被它提前截斷時的失效方向是**靜默綠，不是假紅**（CR R3 實測）：四個
+        `tools/` 項在 SKILL.md 都排在那句散文**之前**，一個都掉不出區塊，自檢
+        照樣印 ✅「清單列 4 個」。實際擋住它的是下面那條
+        `assertIn("照舊不複製", block)`——放寬正則時只有它會紅。
+        所以看到它紅而自檢是綠的，別把它當誤報刪掉：綠的那邊才是壞的。
         """
         self.assertTrue(self._named("init-copy-list").passed)
         block, why = foundry_lint.init_copy_list_block(
