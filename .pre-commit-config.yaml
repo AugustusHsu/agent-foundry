@@ -30,7 +30,7 @@ repos:
         always_run: true
 
       - id: foundry-selfcheck
-        name: foundry-lint --selfcheck（雙入口／手冊 nav／錨點／規則 ID／規則標記／大檔清單／相對連結／手冊戳記／鏡像對帳）
+        name: foundry-lint --selfcheck（雙入口／手冊 nav／錨點／規則 ID／規則標記／大檔清單／相對連結／版本號形狀／手冊戳記／鏡像對帳）
         entry: python3 tools/foundry-lint/foundry_lint.py --selfcheck
         language: system
         pass_filenames: false

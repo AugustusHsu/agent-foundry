@@ -6,7 +6,8 @@
 #   1. **家搬回本 repo**：不再推公開鏡像 repo（foundry-handbook 由使用者封存保留，
 #      舊網址不轉址、直接斷——使用者裁定，見 known-drift `R7`），
 #      站台由本 repo 的 gh-pages 分支出。跨 repo PAT 因此不再需要。
-#   2. **版本化**：用 mike，站上同時留 v1／v2／…／latest 與版本選擇器。
+#   2. **版本化**：用 mike，站上每一版各自留著（`v0.0.0.1`、`v0.0.1.0`、…；四碼版本號
+#      見 protocol `V4`）＋ `latest` 別名與版本選擇器。
 #      讀者第一次答得出「我讀的是哪一版規則」。
 #   3. **不在本機建站**：正常路徑是 CI（打 handbook-v* tag 觸發）。
 #      舊腳本的 `python3 -m venv` ＋ `pip install mkdocs-material` 現裝沒了。

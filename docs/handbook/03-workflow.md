@@ -83,7 +83,7 @@
 
 自檢有任一前提不成立（例如變更還沒合併進 main），agent 不會硬發，結案留言會註明「主閱讀面未同步」與原因，結案本身不被卡住。
 
-還有**第五步，但它不是結案條件**：版本化的精裝站要不要跟著發一版，由你決定——打 `handbook-v<N>` tag 就會觸發 CI 建站。tag 發佈屬你專屬，agent 不會自己打（[第 4 章](04-decision-points.md)）。推 tag 前要先把 `handbook-version-tags` 這條 repo 規則切成 Disabled、推完切回 Active，原因與路徑見[第 4 章](04-decision-points.md)。
+還有**第五步，但它不是結案條件**：版本化的精裝站要不要跟著發一版，由你決定——打 `handbook-v<a>.<b>.<c>.<d>` tag 就會觸發 CI 建站（四碼版本號怎麼進位見[第 7 章](07-workflows.md)第 6 節）。tag 發佈屬你專屬，agent 不會自己打（[第 4 章](04-decision-points.md)）。推 tag 前要先把 `handbook-version-tags` 這條 repo 規則切成 Disabled、推完切回 Active，原因與路徑見[第 4 章](04-decision-points.md)。
 
 **要你出面的還有一種情況**：發佈範圍或投影規則本身要改（不只是同步內容），那是 P3，會發卡問你。
 

@@ -1,4 +1,4 @@
-<!-- 本檔為 MYL-9 設計文件的 repo 歸檔本，原文照錄，不重寫。 -->
+<!-- 本檔為 MYL-9 設計文件的 repo 歸檔本，原文照錄，不重寫（MYL-71 移除自有版本欄位除外，見下方歸檔說明）。 -->
 
 > **歸檔說明（MYL-35，2026-09-03）**
 >
@@ -6,7 +6,9 @@
 > - **歸檔原因**：`skills/foundry-protocol`、`skills/foundry-platform`、`foundry-init`／`foundry-adopt`／`foundry-gates`
 >   共十餘處引用「MYL-9 HLD §x」，但本文原先只存在於執行層（工單系統），不在規則層 repo——
 >   違反 foundry-protocol 第 3 節「HLD／LLD 存於 `docs/features/<模組>/`」，且轉移平台後所有引用會斷。
-> - **本檔與原文的關係**：**逐字歸檔，未作任何內容修改**。已核可的設計文件不因歸檔而重寫；
+> - **本檔與原文的關係**：MYL-35 歸檔時**逐字照錄**；此後唯一的改動是 MYL-71 依使用者裁定
+>   移除下方標題列的自有版本欄位（protocol `V5`：repo 內的永久文件不設自有版本欄位，
+>   文件的版本就是 git sha），**內容其餘部分未動**。已核可的設計文件不因歸檔而重寫；
 >   後續變更依 foundry-protocol 第 6 節由 Tech Lead 改本檔（自此本檔為該設計的唯一權威）。
 > - 本文早於 `templates/hld.md` 的章節骨架，章節標題與該模板不同，不納入 `foundry-lint --type hld` 檢查。
 
@@ -14,7 +16,7 @@
 
 # MYL-9 跨平台開發流程設計（HLD）
 
-> 版本：v1.1（2026-09-03）｜作者：CEO｜狀態：**已核可**（2026-09-03 確認卡 `a25f56cd` accepted）
+> 作者：CEO｜狀態：**已核可**（2026-09-03 確認卡 `a25f56cd` accepted）
 > 依據：2026-09-03 問卷卡（interaction `cee612c5`）6 項定案結論；foundry-protocol（skills/foundry-protocol/SKILL.md）；handbook 第 4 章決策點；MYL-14 決策權矩陣。
 
 ## 0. 已定案結論（本設計的前提，不再重議）
