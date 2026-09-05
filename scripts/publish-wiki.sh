@@ -22,25 +22,47 @@ set -euo pipefail
 
 SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="AugustusHsu/agent-foundry"
-# 測試接縫：`tools/publish-docs/test_publish_wiki.py` 用本機 bare repo 假扮 wiki，
-# 才有辦法在沒有真 wiki 的情況下證明防手改偵測真的擋得住（MYL-52 AC 3 的離線那一半）。
+# 測試接縫：`tools/publish-docs/test_publish_gate.py` 的 `WikiTamperTest` 用本機
+# bare repo 假扮 wiki，才有辦法在不碰網路的情況下證明防手改偵測真的擋得住。
 WIKI_URL="${FOUNDRY_WIKI_URL:-https://github.com/${REPO}.wiki.git}"
 WIKI_HTML="${FOUNDRY_WIKI_HTML:-https://github.com/${REPO}/wiki}"
-LINK_POLICY="absolute"
 DRY_RUN=0
 BOOTSTRAP=0
+
+# `docs` 段的欄位由 .foundry/config.yml 決定，腳本不另設預設值：設定檔宣告一套、
+# 腳本寫死另一套，就是這個 repo 反覆記錄的兩份真相。讀不到就停，不猜。
+read_docs_field() {
+  python3 - "$SRC_ROOT" "$1" "$2" <<'PYEOF'
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]) / "tools" / "foundry-lint"))
+from foundry_lint import read_config
+docs = read_config(pathlib.Path(sys.argv[1])).get("docs") or {}
+print(docs.get(sys.argv[2], sys.argv[3]))
+PYEOF
+}
+
+# 缺欄位時落回 schema 寫的預設（`link_policy` 預設 absolute、`source` 預設手冊目錄），
+# 而不是落回腳本自己的意見——兩者的差別在於前者查得到權威來源。
+LINK_POLICY="$(read_docs_field link_policy absolute)"
+DOCS_SOURCE="$(read_docs_field source docs/handbook/)"
+LINK_POLICY_FROM='.foundry/config.yml 的 docs.link_policy'
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --bootstrap) BOOTSTRAP=1 ;;
-    --link-policy) LINK_POLICY="${2:?--link-policy 要帶值}"; shift ;;
-    --link-policy=*) LINK_POLICY="${1#*=}" ;;
+    --link-policy) LINK_POLICY="${2:?--link-policy 要帶值}"; LINK_POLICY_FROM="指令列覆寫"; shift ;;
+    --link-policy=*) LINK_POLICY="${1#*=}"; LINK_POLICY_FROM="指令列覆寫" ;;
     -h|--help) sed -n '1,25p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "未知參數：$1" >&2; exit 2 ;;
   esac
   shift
 done
+
+case "$LINK_POLICY" in
+  absolute|plain) ;;
+  *) echo "❌ link_policy 只能是 absolute 或 plain，收到「$LINK_POLICY」（來源：$LINK_POLICY_FROM）" >&2; exit 2 ;;
+esac
 
 # ── 步驟 1：發佈審查證據閘門（MYL-24 ＋ MYL-44）────────────────────────────
 # shellcheck source=scripts/lib/publish-gate.sh
@@ -57,7 +79,7 @@ tamper_fail() {
    為什麼擋：wiki 是**機械投影**，不是第二份真相。偵測到 wiki 上有非本腳本產生的
    內容時直接停手，而不是覆蓋過去——覆蓋等於把別人寫的東西靜靜刪掉。
    處理方式（三選一，都要人決定，腳本不自作主張）：
-     1. 那筆編輯應該進手冊 → 把內容搬回 $SRC_ROOT/docs/handbook/，走正常工單與閘門，再重跑本腳本。
+     1. 那筆編輯應該進手冊 → 把內容搬回 $SRC_ROOT/$DOCS_SOURCE，走正常工單與閘門，再重跑本腳本。
      2. 那筆編輯不要了 → 在 wiki 上還原成上一次投影的狀態，或加 --bootstrap 明確表示放棄它。
      3. 這是第一次投影（wiki 還沒有任何投影 commit）→ 加 --bootstrap。
    wiki：$WIKI_HTML
@@ -115,10 +137,10 @@ print(digest_of_dir(pathlib.Path('$WIKI')))
 fi
 
 # ── 步驟 3：投影 ──────────────────────────────────────────────────────────
-echo "==> 投影 docs/handbook/ → wiki 頁面（link-policy=$LINK_POLICY）"
+echo "==> 投影 $DOCS_SOURCE → wiki 頁面（link-policy=$LINK_POLICY，來源：$LINK_POLICY_FROM）"
 find "$WIKI" -maxdepth 1 -name '*.md' -delete 2>/dev/null || true
 python3 "$SRC_ROOT/tools/publish-docs/project_docs.py" \
-  --src "$SRC_ROOT/docs/handbook" \
+  --src "$SRC_ROOT/${DOCS_SOURCE%/}" \
   --out "$WIKI" \
   --mkdocs "$SRC_ROOT/mkdocs.yml" \
   --handbook-commit "$HANDBOOK_SHA" \
@@ -135,7 +157,7 @@ print(digest_of_dir(pathlib.Path('$WIKI')))
 echo "==> 逐章比對（缺一章就是紅燈）"
 REPORT="$WORK/compare.md"
 if ! python3 "$SRC_ROOT/tools/publish-docs/compare_projection.py" \
-      --src "$SRC_ROOT/docs/handbook" --wiki "$WIKI" | tee "$REPORT"; then
+      --src "$SRC_ROOT/${DOCS_SOURCE%/}" --wiki "$WIKI" | tee "$REPORT"; then
   echo "❌ 逐章比對未全綠，停止同步。上表就是證據，貼進工單再處理。" >&2
   exit 1
 fi
@@ -156,7 +178,7 @@ else
   git -C "$WIKI" \
     -c user.name="${GIT_AUTHOR_NAME:-Foundry publish_docs}" \
     -c user.email="${GIT_AUTHOR_EMAIL:-foundry-publish-docs@users.noreply.github.com}" \
-    commit --quiet -m "📝 投影手冊到 wiki（自 agent-foundry docs/handbook/）
+    commit --quiet -m "📝 投影手冊到 wiki（自 agent-foundry $DOCS_SOURCE）
 
 本頁面集由 scripts/publish-wiki.sh 機械產生，請勿直接編輯。
 

@@ -372,6 +372,13 @@ Foundry-Projection-Digest: <投影內容的 sha256>
 屬關卡 C（`gates.external_actions: user`，不可調降），發卡請使用者執行。
 本節的兩支腳本只負責**已開通管道**的例行同步（P2）。
 
+⚠️ **開通 wiki 是兩步，不是一步**（`L15`，2026-09-05 MYL-52 實測）：
+`has_wiki: true` 只是開開關，wiki 的 git repo 要等**第一頁建立**才成形。
+在那之前 `<repo>.wiki.git` 的 clone 與 push 都回 `Repository not found`，
+而建第一頁**只有 UI 有入口**（REST 的 `repos/{o}/{r}/wiki` 是 404，GraphQL 沒有 wiki mutation）。
+所以卡要一次問完兩件事，或在第一步的卡裡就講明還會有第二步——
+只問「可不可以開 wiki」會讓使用者以為按完就結束了。
+
 ## 附錄 A：查 project 編號
 
 ```sh

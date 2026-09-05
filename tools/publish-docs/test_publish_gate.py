@@ -6,12 +6,14 @@ MYL-50 原本要測的是 `scripts/publish-handbook.sh` 裡那段 shell 閘門�
 `scripts/lib/publish-gate.sh` 之後，它可以單獨執行、不 clone 不 push，
 於是**測得動了**——這裡就是那份覆蓋。
 
-兩組：
+三組：
 - `PublishGateTest`：MYL-24 證據閘門 ＋ MYL-44 戳記旁路。每個測試各對應一條
   「這樣就該擋下／這樣就該放行」的規則，**每條規則都配一個擋得住的反例**。
 - `WikiTamperTest`：MYL-52 防手改偵測。用本機 bare repo 假扮 wiki，證明
   「人為改一頁 wiki 後再跑同步，腳本必須拒絕並報錯」。這是 AC 3 離線可證的那一半；
-  真 wiki 上的實測另計（wiki 尚未啟用＝關卡 C，見工單）。
+  真 wiki 上的實測另計（見工單）。
+- `DocsConfigTest`：`.foundry/config.yml` 的 `docs` 段是唯一權威。防的是
+  「設定檔宣告一套、腳本寫死另一套」——兩邊都看起來正確，跑出來的是腳本那套。
 
 環境需求：只要 `git` 與 `python3`。刻意不碰網路——碰網路的測試在 pre-commit 裡
 就是隨機失敗的來源。
@@ -100,6 +102,19 @@ class RepoFixture:
         else:
             raise AssertionError(f"{chapter} 沒有戳記行，fixture 前提不成立")
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def write_config(self, **docs_fields):
+        """寫一份只有 `docs` 段的 `.foundry/config.yml`。
+
+        fixture 預設**不寫**這個檔——那正是「設定缺席時落回 schema 預設」那條
+        路徑的測試環境。要測設定驅動的行為時才呼叫。
+        """
+        lines = ["foundry: 1", "platform: github", "docs:"]
+        lines += [f"  {k}: {v}" for k, v in docs_fields.items()]
+        cfg = self.root / ".foundry" / "config.yml"
+        cfg.parent.mkdir(parents=True, exist_ok=True)
+        cfg.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return self.commit("設定 docs 段")
 
     def run_gate(self):
         return subprocess.run(["bash", str(GATE), str(self.root)],
@@ -224,8 +239,11 @@ class PublishGateTest(unittest.TestCase):
             str(self.repo.root / ".git"))
 
 
-class WikiTamperTest(unittest.TestCase):
-    """防手改偵測：wiki 被手動編輯過就拒絕覆蓋，不是靜靜蓋掉。"""
+class WikiCase(unittest.TestCase):
+    """共用的 wiki 測試環境：一個能過閘門的 repo ＋ 一個假扮 wiki 的本機 bare repo。
+
+    本身不含測項（unittest 收集到 0 個），只給下面兩組繼承。
+    """
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -255,6 +273,10 @@ class WikiTamperTest(unittest.TestCase):
         git(dest, "config", "user.name", "Somebody")
         git(dest, "config", "user.email", "somebody@example.test")
         return dest
+
+
+class WikiTamperTest(WikiCase):
+    """防手改偵測：wiki 被手動編輯過就拒絕覆蓋，不是靜靜蓋掉。"""
 
     def test_empty_wiki_without_bootstrap_is_refused(self):
         """第一次投影要人明確表態，腳本不自己決定「這個 wiki 可以蓋」。"""
@@ -343,6 +365,59 @@ class WikiTamperTest(unittest.TestCase):
         self.assertIn("[dry-run]", r.stdout)
         self.assertEqual(git(self.wiki_remote, "log", "--oneline",
                              check=False).returncode, 128)
+
+
+class DocsConfigTest(WikiCase):
+    """`.foundry/config.yml` 的 `docs` 段是唯一權威，腳本不另存一份預設值。
+
+    這一組防的是本 repo 反覆記錄的那種漂移：設定檔宣告一套、腳本寫死另一套，
+    兩邊都「看起來正確」，而實際跑出來的是腳本那套。
+    """
+
+    def projected_home(self):
+        return (self.clone_wiki(f"read-{self.id().rsplit('.', 1)[-1]}")
+                / "Home.md").read_text(encoding="utf-8")
+
+    def test_config_plain_policy_is_honoured(self):
+        self.repo.write_config(link_policy="plain")
+        self.assertEqual(self.publish("--bootstrap").returncode, 0)
+        self.assertNotIn("github.com/AugustusHsu/agent-foundry/blob/main",
+                         self.projected_home())
+
+    def test_missing_field_falls_back_to_schema_default(self):
+        """設定缺席不是錯誤：schema 明訂 `link_policy` 預設 absolute。"""
+        r = self.publish("--bootstrap")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("link-policy=absolute", r.stdout)
+        self.assertIn("github.com/AugustusHsu/agent-foundry/blob/main",
+                      self.projected_home())
+
+    def test_command_line_overrides_config(self):
+        self.repo.write_config(link_policy="absolute")
+        r = self.publish("--bootstrap", "--link-policy", "plain")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("指令列覆寫", r.stdout)
+        self.assertNotIn("github.com/AugustusHsu/agent-foundry/blob/main",
+                         self.projected_home())
+
+    def test_illegal_value_stops_before_touching_anything(self):
+        """設定寫錯要當場停，不是默默落回預設——默默落回等於設定檔沒有作用。"""
+        self.repo.write_config(link_policy="preserve")
+        r = self.publish("--bootstrap")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("link_policy 只能是", r.stderr)
+        self.assertIn("config.yml", r.stderr)
+        self.assertEqual(git(self.wiki_remote, "log", "--oneline",
+                             check=False).returncode, 128)
+
+    def test_source_dir_comes_from_config(self):
+        """`docs.source` 指到別的目錄時，投影的就是那個目錄。"""
+        moved = self.repo.root / "docs" / "book"
+        shutil.copytree(self.repo.root / "docs" / "handbook", moved)
+        (moved / "index.md").write_text("# 搬過家的首頁\n\n## 一節\n", encoding="utf-8")
+        self.repo.write_config(source="docs/book/")
+        self.assertEqual(self.publish("--bootstrap").returncode, 0)
+        self.assertIn("搬過家的首頁", self.projected_home())
 
 
 if __name__ == "__main__":
