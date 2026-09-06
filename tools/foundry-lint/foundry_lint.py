@@ -2231,12 +2231,12 @@ def ref_sort_key(ref: str):
     return (m.group(1).upper(), int(m.group(2))) if m else None
 
 
-def in_mirror_scope(ref: str, since: str) -> bool:
-    """`ref` 是否落在鏡像範圍內（`since` 起、含 `since` 本身）。
+def ref_at_or_after(ref: str, since: str) -> bool:
+    """`ref` 是否在 `since` 之後（含 `since` 本身）；`since` 為空＝不設界線。
 
-    `since` 是 MYL-54 的界線：本單只鏡像**新單**，既有舊單的回填屬批次對外
-    動作、要另外核可。沒有這條界線，對帳一啟用就會把 50 幾張舊單全報成漏建，
-    於是整項檢查在第一天就被當成雜訊關掉。
+    「規則從某一張單開始適用」是這個 repo 反覆出現的形狀（`mirror_since`、
+    `ISSUE_RULES_SINCE`），判法都一樣，所以抽成一支：**比不出大小時一律納入**
+    ——寧可誤報（看得見、修得掉），不要漏報（靜默，跟通過長得一模一樣）。
     """
     if not since:
         return True
@@ -2244,6 +2244,16 @@ def in_mirror_scope(ref: str, since: str) -> bool:
     if a is None or b is None or a[0] != b[0]:
         return True     # 比不出大小時一律納入：寧可誤報，不要漏報
     return a[1] >= b[1]
+
+
+def in_mirror_scope(ref: str, since: str) -> bool:
+    """`ref` 是否落在鏡像範圍內（`since` 起、含 `since` 本身）。
+
+    `since` 是 MYL-54 的界線：本單只鏡像**新單**，既有舊單的回填屬批次對外
+    動作、要另外核可。沒有這條界線，對帳一啟用就會把 50 幾張舊單全報成漏建，
+    於是整項檢查在第一天就被當成雜訊關掉。
+    """
+    return ref_at_or_after(ref, since)
 
 
 def reconcile_mirror(sources: list, mirrors: list, source_platform: str) -> list:
@@ -2440,6 +2450,32 @@ def fetch_source_issues(base: str, token: str, company_id: str, project_id: str,
     return out, ""
 
 
+def paperclip_source_endpoint(cfg: dict):
+    """來源端（Paperclip）的連線四件套；缺任一件回 `(None, 跳過理由)`。
+
+    憑證走環境變數、company id 走 `.foundry/config.yml`（值可以是 `${VAR}`）。
+    **CI 上必然缺憑證**——公開 runner 沒有 Paperclip token，也不該有；所以缺件是
+    `skipped` 不是 `failure`（姿態的理由見 `SelfcheckResult` 的 docstring）。
+
+    三項連線來源端的檢查（`mirror-recon`／`issue-authors`／`pm-issue-fields`）共用
+    這一支，是為了讓「什麼情況算跳過」只有一份定義：三處各寫一次的話，哪天多支援
+    一種憑證來源就會有兩處被漏掉，而漏掉的那一處**是靜默跳過**、看起來跟通過一樣。
+    """
+    opts = cfg.get("platform_options", {})
+    pc_opts = opts.get("paperclip", {}) if isinstance(opts, dict) else {}
+    base = (os.environ.get("PAPERCLIP_API_URL") or "").rstrip("/")
+    base = base[:-4] if base.endswith("/api") else base
+    token = os.environ.get("PAPERCLIP_API_KEY") or ""
+    company_id = pc_opts.get("company_id", "")
+    if company_id.startswith("${") and company_id.endswith("}"):
+        company_id = os.environ.get(company_id[2:-1], "")
+    if not (base and token and company_id):
+        return None, ("讀不到來源端：缺 `PAPERCLIP_API_URL`／`PAPERCLIP_API_KEY`／"
+                      "company id（CI 上必然如此，見 `paperclip_source_endpoint()` "
+                      "的註解）")
+    return (base, token, company_id, pc_opts.get("project_id", "")), ""
+
+
 def check_mirror_recon(root: Path) -> SelfcheckResult:
     """來源端與鏡像端的單號／狀態／開關狀態要一致（MYL-54）。
 
@@ -2463,7 +2499,6 @@ def check_mirror_recon(root: Path) -> SelfcheckResult:
     source_platform = cfg.get("devtools_platform", "")
     opts = cfg.get("platform_options", {})
     gh_opts = opts.get("github", {}) if isinstance(opts, dict) else {}
-    pc_opts = opts.get("paperclip", {}) if isinstance(opts, dict) else {}
 
     fetched, why = fetch_mirror_issues(
         root, gh_opts.get("project_title", "Foundry"),
@@ -2478,19 +2513,14 @@ def check_mirror_recon(root: Path) -> SelfcheckResult:
             "——截斷過的對帳會把漏建報成全過，先把上限提高或改分頁再跑"
         )
 
-    base = (os.environ.get("PAPERCLIP_API_URL") or "").rstrip("/")
-    base = base[:-4] if base.endswith("/api") else base
-    token = os.environ.get("PAPERCLIP_API_KEY") or ""
-    company_id = pc_opts.get("company_id", "")
-    if company_id.startswith("${") and company_id.endswith("}"):
-        company_id = os.environ.get(company_id[2:-1], "")
-    if not (base and token and company_id):
-        res.skipped = ("讀不到來源端：缺 `PAPERCLIP_API_URL`／`PAPERCLIP_API_KEY`／"
-                       "company id（CI 上必然如此，見本節註解）")
+    endpoint, why = paperclip_source_endpoint(cfg)
+    if endpoint is None:
+        res.skipped = why
         return res
+    base, token, company_id, project_id = endpoint
 
     sources, why = fetch_source_issues(
-        base, token, company_id, pc_opts.get("project_id", ""),
+        base, token, company_id, project_id,
         gh_opts.get("mirror_since", ""), {m.ref for m in mirrors})
     if sources is None:
         res.skipped = f"讀不到來源端：{why}"
@@ -2498,6 +2528,314 @@ def check_mirror_recon(root: Path) -> SelfcheckResult:
 
     res.failures.extend(reconcile_mirror(sources, mirrors, source_platform))
     res.summary += f"（來源端 {len(sources)} 張、鏡像端 {len(mirrors)} 張）"
+    return res
+
+
+# ── 開單規則的兩項事後檢查（MYL-116，依 MYL-96 裁定 #5／#6／#17）─────────────
+#
+# **兩項都是事後檢查、不是閘門**，而這不是實作偷懶：實查 Paperclip 的 21 個
+# `permissionKey` **沒有任何 `issues:*`**（known-drift `L28`），平台上關不掉任何
+# agent 的開單權，規則層也就沒有「擋得住」的位置可站。訊息措辭因此一律寫成
+# 「已經發生了、去補救」，不得寫成「不允許」——把事後檢查說成閘門，讀的人會
+# 以為違規開不出來，於是不再去看這一項的輸出。
+#
+#: `I1` 白名單的成員，以 `.foundry/org.yml` 的 `roles[].id` 表示；對照到平台上是
+#: 各該角色的 `title`（＝平台 agent 的顯示名，見 `resolve_allowed_authors()`）。
+#: **寫死在這裡而不是去解析條文散文**，體例同 `STAMPED_CHAPTERS`（MYL-92）：散文
+#: 的措辭一改，解析就靜默失效；而這組值是使用者逐條裁定的（MYL-96 裁定 #17，卡
+#: `651aaee9`），要改它本來就得再裁一次，不是順手改字。
+#: 白名單第三個成員「使用者」不在這個常數裡——它不是 org.yml 上的角色，判法是
+#: 「開單者的使用者欄有值」，見 `audit_issue_authors()`。
+ISSUE_AUTHOR_ALLOWED_ROLE_IDS = ("ceo", "product-manager")
+
+#: `I2` 只拘束 Product Manager 開的單，這是它在 org.yml 上的 `roles[].id`。
+PM_ROLE_ID = "product-manager"
+
+#: 兩項共同的起算點，姿態同 `mirror_since`（見 `ref_at_or_after()`）：規則生效前
+#: 開的單不回溯。**這條界線不是「少看幾條紅燈」**——2026-09-06 實查 124 張單裡，
+#: 有 37 張的開單者是 Scrum Master／Tech Lead／Developer／QA／Code Reviewer，全部
+#: 早於本規則；而平台**沒有任何路徑改得動開單者**（known-drift `L28`），那 37 條
+#: 紅字永遠修不掉，只會逼人把整項關掉——`mirror_since` 的註解講的是同一件事。
+#: ⚠️ 值是「本規則落地後開的第一張單」。條文合併當下若最大單號已經越過它，這裡
+#: 要跟著往後推；推之前先逐張確認中間那幾張確實不在射程內，不要只為了轉綠而推。
+ISSUE_RULES_SINCE = "MYL-125"
+
+#: `I2` 的五欄：`(欄位, 報訊息時的稱呼)`。順序＝條文列舉的順序。
+PM_REQUIRED_FIELDS = (
+    ("assignee", "指派對象"),
+    ("parent", "上位單"),
+    ("blocked_by", "上游依賴（擋住本單的單）"),
+    ("blocks", "下游被擋（本單擋住的單）"),
+    ("has_ac", "驗收標準"),
+)
+
+#: 描述欄裡的「驗收標準」段（第 1 節四段骨架的第三段）。只認粗體標題那一行，
+#: 與 `templates/` 與第 1 節寫的骨架同形；散文裡提到「驗收標準」四個字不算。
+AC_SECTION_RE = re.compile(r"^\s*\*\*驗收標準\*\*\s*$", re.M)
+
+
+@dataclass(frozen=True)
+class AuthoredIssue:
+    """來源端一張單的「誰開的」。
+
+    **兩個欄位皆空＝平台自建**（例如生產力審查單），`I1` 明文收容——那不是任何
+    角色的動作，收不進白名單，也修不掉。
+    """
+
+    ref: str
+    author_agent: str = ""
+    author_user: str = ""
+
+
+@dataclass(frozen=True)
+class PmIssueFields:
+    """`I2` 要看的五格。兩個依賴欄存的是**條數**，零＝那一欄空著。"""
+
+    ref: str
+    assignee: str = ""
+    parent: str = ""
+    blocked_by: int = 0
+    blocks: int = 0
+    has_ac: bool = False
+
+
+def audit_issue_authors(issues: list, allowed: dict, names: dict, since: str) -> list:
+    """純函式：`I1` 白名單對帳，回傳 failure 訊息清單。
+
+    `allowed`／`names` 都是 `{agent id: 顯示名}`；前者是白名單、後者是全編制
+    （用來把違規訊息裡的 id 換成讀得懂的名字）。
+    """
+    failures = []
+    allowed_label = "／".join(["使用者"] + [allowed[k] for k in sorted(allowed)])
+    for it in issues:
+        if not ref_at_or_after(it.ref, since):
+            continue
+        if it.author_user:
+            continue                        # 白名單第一位：使用者
+        if not it.author_agent:
+            continue                        # 平台自建，`I1` 明文收容
+        if it.author_agent in allowed:
+            continue
+        who = names.get(it.author_agent) or f"`{it.author_agent}`"
+        failures.append(
+            f"{it.ref} 的開單者是「{who}」，不在 `I1` 的白名單（{allowed_label}）"
+            "——`I1` 是事後檢查不是閘門，這張單已經開出來了。處置是把它交回 "
+            "Product Manager 覆核、依 `D1`～`D4` 判要不要退回原單；"
+            "**不要刪單、也改不了作者**（平台沒有更新開單者的路徑，known-drift `L28`）"
+        )
+    return failures
+
+
+def audit_pm_issue_fields(issues: list) -> list:
+    """純函式：`I2` 五欄齊備對帳，回傳 failure 訊息清單。
+
+    傳進來的**已經只剩 Product Manager 開的單**（誰開的在上一支判完了）：本支
+    只回答「這五欄齊不齊」，兩件事分開才不會在射程與判準之間互相蓋掉。
+    """
+    failures = []
+    for it in issues:
+        missing = [label for attr, label in PM_REQUIRED_FIELDS if not getattr(it, attr)]
+        if not missing:
+            continue
+        failures.append(
+            f"{it.ref} 由 Product Manager 開出，但 `I2` 要的五欄缺了："
+            f"{'、'.join(missing)}——每缺一欄，接單者開工後就要多問一次，"
+            "那正是這條規則要收掉的來回（MYL-96 裁定 #6）。"
+            "把缺的欄補上；認為這張單本來就不該有那一欄，走第 1 節修訂條文，"
+            "不要在個案裡放寬"
+        )
+    return failures
+
+
+def resolve_allowed_authors(root: Path, agents: list) -> tuple:
+    """把 `ISSUE_AUTHOR_ALLOWED_ROLE_IDS` 解成
+    `({角色 id: (平台 agent id, 顯示名)}, {全編制 agent id: 顯示名}, 錯誤)`。
+
+    第一格以**角色 id** 為鍵而不是 agent id：兩項檢查裡有一項（`I2`）的射程是
+    「其中一個角色」，用角色當鍵才不必在呼叫端再從顯示名倒推回角色。
+
+    對照鍵是 **org.yml 的 `title` ↔ 平台 agent 的 `name`**。用宣告面當來源而不是
+    在這裡再寫死一次角色名，是為了讓正名自動跟上：MYL-115 把 `PM` 正名成
+    `Product Manager` 時，只要 org.yml 改了，本檢查就跟著改對象。
+    反過來，**平台上找不到對應 agent 時回錯誤而不是靜靜略過**——那正是「宣告面
+    改了、平台面沒跟」的漂移，靜靜略過會讓白名單少一格而沒有人發現。
+    """
+    org_path = root / ORG_REL
+    if not org_path.exists():
+        return {}, {}, f"{ORG_REL} 不存在，解不出白名單對應到平台上的哪幾名"
+    try:
+        org = parse_org(read_text(org_path))
+    except LintError as e:
+        return {}, {}, str(e)
+
+    titles = {r.get("id"): r.get("title") for r in org.get("roles", [])}
+    names = {a.get("id"): a.get("name") for a in agents if a.get("id")}
+    by_name = {a.get("name"): a.get("id") for a in agents if a.get("id")}
+    allowed = {}
+    for rid in ISSUE_AUTHOR_ALLOWED_ROLE_IDS:
+        title = titles.get(rid)
+        if not title:
+            return {}, {}, (f"{ORG_REL} 沒有宣告角色 `{rid}`，而 `I1` 的白名單以它為成員"
+                            "——組織宣告與白名單常數對不上，先確認哪一邊該改")
+        if title not in by_name:
+            return {}, {}, (f"平台編制裡找不到顯示名為「{title}」的 agent"
+                            f"（{ORG_REL} 宣告角色 `{rid}` 的 `title`）"
+                            "——正名沒同步到平台，或該角色還沒建置")
+        allowed[rid] = (by_name[title], title)
+    return allowed, names, ""
+
+
+def fetch_company_agents(base: str, token: str, company_id: str):
+    """撈平台編制。回傳 `(list, 錯誤)`；端點形狀見 known-drift `L6`。"""
+    data, why = api_get(base, f"/api/companies/{company_id}/agents", token)
+    if data is None:
+        return None, why
+    agents = data.get("agents") if isinstance(data, dict) else data
+    if not isinstance(agents, list):
+        return None, "編制端點沒有回陣列"
+    return agents, ""
+
+
+def fetch_authored_issues(base: str, token: str, company_id: str, project_id: str):
+    """撈來源端每張單的「誰開的」。分頁前提同 `fetch_source_issues()`（沒有分頁）。"""
+    data, why = api_get(base, f"/api/companies/{company_id}/issues", token)
+    if data is None:
+        return None, why
+    if not isinstance(data, list):
+        return None, "來源端 issues 端點沒有回陣列"
+    out = []
+    for it in data:
+        if project_id and it.get("projectId") != project_id:
+            continue
+        if it.get("hiddenAt"):
+            continue
+        ref = it.get("identifier") or ""
+        if not ref:
+            continue
+        out.append(AuthoredIssue(ref=ref,
+                                 author_agent=it.get("createdByAgentId") or "",
+                                 author_user=it.get("createdByUserId") or ""))
+    return out, ""
+
+
+def fetch_pm_issue_fields(base: str, token: str, issue_id: str, ref: str):
+    """撈單張單的 `I2` 五欄。回傳 `(PmIssueFields, 錯誤)`。
+
+    **必須逐張打單筆端點**，不能沿用清單端點的欄位：清單回的每一筆**沒有**依賴
+    關係（`blockedBy`／`blocks` 兩鍵缺席），描述欄還可能被截斷（`descriptionTruncated`）
+    ——拿清單那份去判，兩個依賴欄會恆為空、AC 會因為被截掉而誤報成漏寫。
+    代價是每張 PM 開的單多一次呼叫，而射程只有 PM 開的單，量級不成問題。
+    """
+    data, why = api_get(base, f"/api/issues/{issue_id}", token)
+    if data is None:
+        return None, why
+    it = data.get("issue", data) if isinstance(data, dict) else {}
+    if not isinstance(it, dict):
+        return None, f"{ref} 的單筆端點沒有回物件"
+    return PmIssueFields(
+        ref=ref,
+        assignee=it.get("assigneeAgentId") or it.get("assigneeUserId") or "",
+        parent=it.get("parentId") or "",
+        blocked_by=len(it.get("blockedBy") or []),
+        blocks=len(it.get("blocks") or []),
+        has_ac=bool(AC_SECTION_RE.search(it.get("description") or "")),
+    ), ""
+
+
+def issue_rules_precondition(root: Path):
+    """兩項共用的前置：平台、離線旗標、憑證。回傳 `(連線四件套, 跳過理由)`。"""
+    cfg = read_config(root)
+    if cfg.get("devtools_platform", "") != "paperclip":
+        return None, ("本項讀的是來源端「誰開的單」，目前只有 paperclip adapter 有"
+                      f"對應欄位（`devtools_platform: {cfg.get('devtools_platform') or '未設定'}`）")
+    if os.environ.get(MIRROR_OFFLINE_ENV):
+        return None, f"{MIRROR_OFFLINE_ENV} 已設，本次不連線"
+    endpoint, why = paperclip_source_endpoint(cfg)
+    if endpoint is None:
+        return None, why
+    return endpoint, ""
+
+
+def check_issue_authors(root: Path) -> SelfcheckResult:
+    """開單者要落在 `I1` 的白名單內：使用者、CEO、Product Manager（MYL-116）。
+
+    起算點是 `ISSUE_RULES_SINCE`，理由寫在該常數的註解。
+    """
+    res = SelfcheckResult("issue-authors", "開單者落在 `I1` 白名單內")
+    endpoint, why = issue_rules_precondition(root)
+    if endpoint is None:
+        res.skipped = why
+        return res
+    base, token, company_id, project_id = endpoint
+
+    agents, why = fetch_company_agents(base, token, company_id)
+    if agents is None:
+        res.skipped = f"讀不到平台編制：{why}"
+        return res
+    allowed, names, err = resolve_allowed_authors(root, agents)
+    if err:
+        res.failures.append(err)
+        return res
+
+    issues, why = fetch_authored_issues(base, token, company_id, project_id)
+    if issues is None:
+        res.skipped = f"讀不到來源端：{why}"
+        return res
+
+    res.failures.extend(audit_issue_authors(
+        issues, dict(allowed.values()), names, ISSUE_RULES_SINCE))
+    in_scope = [i for i in issues if ref_at_or_after(i.ref, ISSUE_RULES_SINCE)]
+    res.summary += (f"（{ISSUE_RULES_SINCE} 起 {len(in_scope)} 張，"
+                    f"全部 {len(issues)} 張）")
+    return res
+
+
+def check_pm_issue_fields(root: Path) -> SelfcheckResult:
+    """Product Manager 開的單要五欄齊備（`I2`，MYL-116）。
+
+    射程只有 PM 開的單，且同樣從 `ISSUE_RULES_SINCE` 起算。
+    """
+    res = SelfcheckResult("pm-issue-fields", "Product Manager 開的單五欄齊備")
+    endpoint, why = issue_rules_precondition(root)
+    if endpoint is None:
+        res.skipped = why
+        return res
+    base, token, company_id, project_id = endpoint
+
+    agents, why = fetch_company_agents(base, token, company_id)
+    if agents is None:
+        res.skipped = f"讀不到平台編制：{why}"
+        return res
+    allowed, _, err = resolve_allowed_authors(root, agents)
+    if err:
+        res.failures.append(err)
+        return res
+    pm_id = allowed[PM_ROLE_ID][0]
+
+    data, why = api_get(base, f"/api/companies/{company_id}/issues", token)
+    if data is None or not isinstance(data, list):
+        res.skipped = f"讀不到來源端：{why or 'issues 端點沒有回陣列'}"
+        return res
+
+    fields = []
+    for it in data:
+        if project_id and it.get("projectId") != project_id:
+            continue
+        if it.get("hiddenAt"):
+            continue
+        ref = it.get("identifier") or ""
+        if (it.get("createdByAgentId") or "") != pm_id:
+            continue
+        if not ref_at_or_after(ref, ISSUE_RULES_SINCE):
+            continue
+        one, why = fetch_pm_issue_fields(base, token, it.get("id") or "", ref)
+        if one is None:
+            res.skipped = f"讀不到 {ref} 的欄位：{why}"
+            return res
+        fields.append(one)
+
+    res.failures.extend(audit_pm_issue_fields(fields))
+    res.summary += f"（{ISSUE_RULES_SINCE} 起 PM 開了 {len(fields)} 張）"
     return res
 
 
@@ -2648,6 +2986,8 @@ SELFCHECK_LABELS = {
     "init-copy-list": "init 複製清單",
     "selfcheck-names": "自檢名稱清單",
     "mirror-recon": "鏡像對帳",
+    "issue-authors": "開單者白名單",
+    "pm-issue-fields": "開單必備欄位",
 }
 #: 四個抄寫點：`(檔案, 那一行是什麼, 抓出列舉內容的錨點)`。
 #: 錨點只吃**那一行**、不吃整份檔案——整份 `CLAUDE.md` 本來就到處提到「錨點」
@@ -2795,7 +3135,8 @@ SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_ru
               check_rule_marks, check_big_files, check_internal_links,
               check_version_shape, check_table_shape, check_config_schema,
               check_org_sync, check_handbook_stamp, check_init_copy_list,
-              check_selfcheck_names, check_mirror_recon)
+              check_selfcheck_names, check_mirror_recon,
+              check_issue_authors, check_pm_issue_fields)
 
 
 def run_selfcheck(root: Path) -> list:

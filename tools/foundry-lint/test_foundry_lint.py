@@ -2060,5 +2060,296 @@ class TableShapeEntryFileTest(RepoCopyTestCase):
         self.assertTrue(self._run().passed, self._run().failures)
 
 
+#: 兩項開單檢查共用的最小設定：平台是 paperclip、company id 給得出來。
+_ISSUE_RULES_CONFIG = ("devtools_platform: paperclip\n"
+                       "platform_options:\n"
+                       "  paperclip:\n    company_id: fake-company\n")
+
+#: 一份最小 org.yml：`I1` 白名單那兩個角色的 `title`，就是要拿去對平台顯示名的鍵。
+_ISSUE_RULES_ORG = ("foundry_org: 1\n"
+                    "roles:\n"
+                    "  - id: ceo\n    title: CEO\n"
+                    "  - id: product-manager\n    title: Product Manager\n"
+                    "  - id: tech-lead\n    title: Tech Lead\n")
+
+_AGENTS = [{"id": "ceo-id", "name": "CEO"},
+           {"id": "pm-id", "name": "Product Manager"},
+           {"id": "tl-id", "name": "Tech Lead"}]
+
+
+def _authored(ref, agent="", user=""):
+    return foundry_lint.AuthoredIssue(ref=ref, author_agent=agent, author_user=user)
+
+
+class IssueAuthorAuditTest(unittest.TestCase):
+    """`I1` 白名單的判準（MYL-116）。
+
+    白名單是**事後檢查不是閘門**（平台沒有 `issues:*` 權限，known-drift `L28`），
+    所以這一組驗的全是「報得出來／不誤報」，沒有任何一條在驗「擋得住」。
+    """
+
+    ALLOWED = {"ceo-id": "CEO", "pm-id": "Product Manager"}
+    NAMES = {"ceo-id": "CEO", "pm-id": "Product Manager", "tl-id": "Tech Lead"}
+    SINCE = "MYL-125"
+
+    def audit(self, issues, allowed=None):
+        return foundry_lint.audit_issue_authors(
+            issues, self.ALLOWED if allowed is None else allowed,
+            self.NAMES, self.SINCE)
+
+    def test_白名單三者都不報(self):
+        self.assertEqual(self.audit([
+            _authored("MYL-130", user="user-1"),        # 使用者
+            _authored("MYL-131", agent="ceo-id"),       # CEO
+            _authored("MYL-132", agent="pm-id"),        # Product Manager
+        ]), [])
+
+    def test_平台自建的單兩欄皆空不算違規(self):
+        """AC2：MYL-113／114 那一型（生產力審查單），`I1` 明文收容。"""
+        self.assertEqual(self.audit([_authored("MYL-130")]), [])
+
+    def test_收容的是空欄位而不是那張單本身(self):
+        """守住上一條不是空轉：同一個單號換成白名單外的 agent 就報得出來。
+
+        少了這一條，「收容」與「這張單剛好不在射程」兩種綠分不出來——而後者
+        是靜默的，收容判準寫錯也看不出來（MYL-100 的三列比對同一個道理）。
+        """
+        self.assertTrue(self.audit([_authored("MYL-130", agent="tl-id")]))
+
+    def test_白名單外的_agent_被報出來(self):
+        failures = self.audit([_authored("MYL-130", agent="tl-id")])
+        self.assertEqual(len(failures), 1)
+        self.assertIn("MYL-130", failures[0])
+        self.assertIn("Tech Lead", failures[0])
+        self.assertIn("使用者／CEO／Product Manager", failures[0])
+
+    def test_拿掉白名單這道守衛_同一個反例就靜默通過(self):
+        """AC1 反向突變證：把白名單放寬成「全編制都算數」＝這項檢查不存在的狀態。
+
+        用的是**同一份輸入、同一支判準函式**，只換白名單那一格：綠掉了就證明
+        上一則抓到的紅字確實出自白名單比對，而不是 `since`、名稱查表之類的旁枝。
+        """
+        counter_example = [_authored("MYL-130", agent="tl-id")]
+        self.assertTrue(self.audit(counter_example))                   # 有守衛：紅
+        self.assertEqual(self.audit(counter_example, allowed=self.NAMES), [])  # 拿掉：綠
+
+    def test_起算點之前的舊單不回溯(self):
+        """2026-09-06 實查有 37 張舊單的開單者在白名單外，且平台改不了作者。"""
+        self.assertEqual(self.audit([_authored("MYL-124", agent="tl-id")]), [])
+        self.assertTrue(self.audit([_authored("MYL-125", agent="tl-id")]))
+
+    def test_訊息不得把事後檢查說成擋得住(self):
+        failures = self.audit([_authored("MYL-130", agent="tl-id")])
+        self.assertIn("事後檢查不是閘門", failures[0])
+
+
+class PmIssueFieldsAuditTest(unittest.TestCase):
+    """`I2` 五欄齊備的判準（MYL-116，依 MYL-96 裁定 #6）。"""
+
+    FULL = dict(ref="MYL-130", assignee="dev-id", parent="MYL-96",
+                blocked_by=1, blocks=1, has_ac=True)
+
+    def one(self, **overrides):
+        return foundry_lint.PmIssueFields(**{**self.FULL, **overrides})
+
+    def test_五欄齊備不報(self):
+        self.assertEqual(foundry_lint.audit_pm_issue_fields([self.one()]), [])
+
+    def test_每一欄各缺一次都報得出來(self):
+        empty = {"assignee": "", "parent": "", "blocked_by": 0,
+                 "blocks": 0, "has_ac": False}
+        for attr, label in foundry_lint.PM_REQUIRED_FIELDS:
+            with self.subTest(attr=attr):
+                failures = foundry_lint.audit_pm_issue_fields(
+                    [self.one(**{attr: empty[attr]})])
+                self.assertEqual(len(failures), 1)
+                self.assertIn(label, failures[0])
+
+    def test_拿掉某一欄的必備判定_那一格的反例就靜默通過(self):
+        """AC1 反向突變證：把該欄從 `PM_REQUIRED_FIELDS` 拿掉＝那道守衛不存在。
+
+        逐欄各驗一次，而不是只驗其中一欄——五格是五道獨立的守衛，只證一格
+        等於默認其餘四格也成立，而那正是「反例空轉」最常躲的地方。
+        """
+        empty = {"assignee": "", "parent": "", "blocked_by": 0,
+                 "blocks": 0, "has_ac": False}
+        for attr, _ in foundry_lint.PM_REQUIRED_FIELDS:
+            counter_example = [self.one(**{attr: empty[attr]})]
+            without = tuple(p for p in foundry_lint.PM_REQUIRED_FIELDS
+                            if p[0] != attr)
+            with self.subTest(attr=attr):
+                self.assertTrue(foundry_lint.audit_pm_issue_fields(counter_example))
+                with mock.patch.object(foundry_lint, "PM_REQUIRED_FIELDS", without):
+                    self.assertEqual(
+                        foundry_lint.audit_pm_issue_fields(counter_example), [])
+
+    def test_缺多欄時一則訊息列全(self):
+        failures = foundry_lint.audit_pm_issue_fields(
+            [self.one(parent="", blocks=0)])
+        self.assertEqual(len(failures), 1)
+        self.assertIn("上位單", failures[0])
+        self.assertIn("下游被擋", failures[0])
+
+
+class ResolveAllowedAuthorsTest(RepoCopyTestCase):
+    """白名單常數 → 平台 agent 的解析（MYL-116）。"""
+
+    def write_org(self, text=_ISSUE_RULES_ORG):
+        self.write(foundry_lint.ORG_REL, text)
+
+    def test_以_org_yml_的_title_對平台顯示名(self):
+        self.write_org()
+        allowed, names, err = foundry_lint.resolve_allowed_authors(self.root, _AGENTS)
+        self.assertEqual(err, "")
+        self.assertEqual(allowed, {"ceo": ("ceo-id", "CEO"),
+                                   "product-manager": ("pm-id", "Product Manager")})
+        self.assertIn("tl-id", names)          # 全編制用來把 id 換成讀得懂的名字
+
+    def test_平台上找不到對應顯示名時報錯而不是靜靜略過(self):
+        """正名只改了一邊時，白名單會少一格——靜靜略過的話沒有人會發現。"""
+        self.write_org()
+        stale = [{"id": "pm-id", "name": "PM"}] + _AGENTS[:1]
+        _, _, err = foundry_lint.resolve_allowed_authors(self.root, stale)
+        self.assertIn("Product Manager", err)
+        self.assertIn("正名沒同步", err)
+
+    def test_org_yml_沒宣告白名單角色時報錯(self):
+        self.write_org("foundry_org: 1\nroles:\n  - id: ceo\n    title: CEO\n")
+        _, _, err = foundry_lint.resolve_allowed_authors(self.root, _AGENTS)
+        self.assertIn("product-manager", err)
+
+    def test_真實_org_yml_解得出白名單(self):
+        allowed, _, err = foundry_lint.resolve_allowed_authors(self.root, _AGENTS)
+        self.assertEqual(err, "")
+        self.assertEqual(sorted(allowed), ["ceo", "product-manager"])
+
+
+class IssueRulesCheckTest(unittest.TestCase):
+    """兩項檢查的姿態：非 paperclip／離線／缺憑證是跳過，接得起來時才真的對帳。"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        (self.root / ".foundry").mkdir()
+        self.write_config(_ISSUE_RULES_CONFIG)
+        (self.root / foundry_lint.ORG_REL).write_text(_ISSUE_RULES_ORG,
+                                                      encoding="utf-8")
+
+    def write_config(self, text):
+        (self.root / ".foundry" / "config.yml").write_text(text, encoding="utf-8")
+
+    def test_非_paperclip_平台是跳過(self):
+        self.write_config("devtools_platform: github\n")
+        for check in (foundry_lint.check_issue_authors,
+                      foundry_lint.check_pm_issue_fields):
+            with self.subTest(check=check.__name__):
+                self.assertTrue(check(self.root).skipped)
+
+    def test_離線旗標下是跳過不是通過(self):
+        with mock.patch.dict(os.environ, {foundry_lint.MIRROR_OFFLINE_ENV: "1"}):
+            res = foundry_lint.check_issue_authors(self.root)
+        self.assertTrue(res.passed)      # 跳過不擋 commit
+        self.assertTrue(res.skipped)     # 但絕不印成 ✅
+
+    def test_缺憑證是跳過(self):
+        with mock.patch.dict(os.environ, {foundry_lint.MIRROR_OFFLINE_ENV: "",
+                                          "PAPERCLIP_API_URL": "",
+                                          "PAPERCLIP_API_KEY": ""}):
+            res = foundry_lint.check_pm_issue_fields(self.root)
+        self.assertTrue(res.skipped)
+
+    def test_白名單外的開單者走完整條路會被抓到(self):
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(foundry_lint, "fetch_company_agents",
+                                  return_value=(_AGENTS, "")), \
+                mock.patch.object(
+                    foundry_lint, "fetch_authored_issues",
+                    return_value=([_authored("MYL-130", agent="tl-id"),
+                                   _authored("MYL-131", agent="ceo-id")], "")):
+            res = foundry_lint.check_issue_authors(self.root)
+        self.assertFalse(res.passed)
+        self.assertEqual(len(res.failures), 1)
+        self.assertIn("MYL-130", res.failures[0])
+        self.assertIn("2 張", res.summary)
+
+    def test_讀不到平台編制是跳過不是紅燈(self):
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(foundry_lint, "fetch_company_agents",
+                                  return_value=(None, "連不上")):
+            res = foundry_lint.check_issue_authors(self.root)
+        self.assertTrue(res.passed)
+        self.assertIn("連不上", res.skipped)
+
+    def test_pm_以外的人開的單不進_I2_射程(self):
+        """`I2` 只拘束 Product Manager 開的單——CEO 開的缺欄位不歸這一項管。"""
+        listed = [{"id": "u1", "identifier": "MYL-130", "createdByAgentId": "ceo-id"}]
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(foundry_lint, "fetch_company_agents",
+                                  return_value=(_AGENTS, "")), \
+                mock.patch.object(foundry_lint, "api_get",
+                                  return_value=(listed, "")):
+            res = foundry_lint.check_pm_issue_fields(self.root)
+        self.assertTrue(res.passed)
+        self.assertIn("PM 開了 0 張", res.summary)
+
+    def test_pm_開的單缺欄位會被抓到(self):
+        listed = [{"id": "u1", "identifier": "MYL-130", "createdByAgentId": "pm-id"}]
+        single = {"assigneeAgentId": "dev-id", "parentId": None,
+                  "blockedBy": [], "blocks": [{"id": "x"}],
+                  "description": "**Inputs**\n- a\n\n**驗收標準**\n1. b\n"}
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(foundry_lint, "fetch_company_agents",
+                                  return_value=(_AGENTS, "")), \
+                mock.patch.object(foundry_lint, "api_get",
+                                  side_effect=[(listed, ""), (single, "")]):
+            res = foundry_lint.check_pm_issue_fields(self.root)
+        self.assertFalse(res.passed)
+        self.assertIn("上位單", res.failures[0])
+        self.assertIn("上游依賴", res.failures[0])
+        self.assertNotIn("驗收標準", res.failures[0])
+
+
+class FetchPmIssueFieldsTest(unittest.TestCase):
+    """單筆端點的欄位擷取——清單端點那份不夠用，理由見函式 docstring。"""
+
+    def fetch(self, payload):
+        with mock.patch.object(foundry_lint, "api_get", return_value=(payload, "")):
+            return foundry_lint.fetch_pm_issue_fields("b", "t", "uuid", "MYL-130")
+
+    def test_五欄都讀得出來(self):
+        one, err = self.fetch({
+            "assigneeAgentId": "dev-id", "parentId": "p",
+            "blockedBy": [{"id": "1"}], "blocks": [{"id": "2"}, {"id": "3"}],
+            "description": "**驗收標準**\n1. x\n"})
+        self.assertEqual(err, "")
+        self.assertEqual((one.assignee, one.parent), ("dev-id", "p"))
+        self.assertEqual((one.blocked_by, one.blocks), (1, 2))
+        self.assertTrue(one.has_ac)
+
+    def test_指派給人類也算指派(self):
+        one, _ = self.fetch({"assigneeUserId": "u1"})
+        self.assertEqual(one.assignee, "u1")
+
+    def test_散文裡提到驗收標準不算那一段(self):
+        one, _ = self.fetch({"description": "AC 就是驗收標準，見上一張單"})
+        self.assertFalse(one.has_ac)
+
+    def test_缺鍵一律當成空的而不是炸開(self):
+        one, err = self.fetch({})
+        self.assertEqual(err, "")
+        self.assertEqual((one.assignee, one.parent, one.blocked_by,
+                          one.blocks, one.has_ac), ("", "", 0, 0, False))
+
+
+class RefScopeSharedTest(unittest.TestCase):
+    """`ref_at_or_after` 是 `mirror_since` 與 `ISSUE_RULES_SINCE` 共用的那支。"""
+
+    def test_兩個呼叫端同一套判法(self):
+        self.assertTrue(foundry_lint.ref_at_or_after("MYL-125", "MYL-125"))
+        self.assertFalse(foundry_lint.ref_at_or_after("MYL-124", "MYL-125"))
+        self.assertTrue(foundry_lint.in_mirror_scope("MYL-58", "MYL-58"))
+
+
 if __name__ == "__main__":
     unittest.main()
