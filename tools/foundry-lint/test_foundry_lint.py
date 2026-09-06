@@ -1762,6 +1762,115 @@ class ConfigSchemaTest(RepoCopyTestCase):
         self.assertTrue(any(f"`{name}`" in f and "必填欄寫成" in f for f in res.failures),
                         res.failures)
 
+    # ── 行完整性：整列有沒有被讀進來（審查 §3-3 的 M4）───────────────────
+    def _bold_name_cell(self, text, name):
+        """把欄位表裡 `name` 的**欄位名格**加粗——純排版編輯，Markdown 照樣渲染。
+
+        改完斷言「那一列真的從解析結果消失、其餘欄位一列不少」：`replace` 退化成
+        no-op、或打到別的地方時，反例會安靜地不成立。
+        """
+        row = f"| `{name}` |"
+        self.assertIn(row, text, f"`{name}` 不在欄位表第一格——反例沒造出來")
+        new = text.replace(row, f"| **`{name}`** |", 1)
+        after = foundry_lint.parse_schema_fields(new)
+        self.assertNotIn(name, after, f"`{name}` 那一列沒有消失——反例沒造出來")
+        self.assertEqual(set(foundry_lint.parse_schema_fields(text)) - {name}, set(after),
+                         "加粗打到別的列了——反例沒造出來")
+        return new
+
+    @staticmethod
+    def _drop_top_key(text, name):
+        """刪掉頂層鍵 `name` 連同它底下的縮排區塊（沒有就原樣回傳）。"""
+        out, dropping = [], False
+        for line in text.splitlines(keepends=True):
+            if re.match(rf"{re.escape(name)}:(\s|$)", line):
+                dropping = True
+                continue
+            if dropping:
+                if line.strip() and not line[:1].isspace():
+                    dropping = False
+                else:
+                    continue
+            out.append(line)
+        return "".join(out)
+
+    def _org_enum_optional_field(self):
+        """選填＋有值域＋`org.yml` 也寫了的那一欄——M4 的構造要件。
+
+        要選填，`config.yml` 才能合法地整段省略它；要 `org.yml` 也寫了，才有一道
+        本來擋得住的守衛可以被消失掉。
+        """
+        fields = self._fields()
+        enums = foundry_lint.parse_schema_enums(fields)
+        org = foundry_lint.parse_org(
+            (self.root / foundry_lint.ORG_REL).read_text(encoding="utf-8"))
+        names = [n for n in sorted(enums) if not fields[n][0] and n in org]
+        self.assertTrue(names, "沒有「選填＋有值域＋org.yml 也寫了」的欄位——M4 無從構造")
+        return names[0]
+
+    def test_欄位名格加粗會讓整列連同三道守衛一起消失(self):
+        """兩個**各自都合法**的編輯合起來讓 AC8 整項失效，而本項照樣全綠（審查 M4）。
+
+        `parse_schema_fields()`／`parse_schema_marks()` 都是 regex 不 match 就跳過該
+        列（沒有 else），而欄位名格的 regex 兩端錨定 ⇒ 加粗那一列就不見，它的必填／
+        型別／值域三道守衛跟著不見。本條先證「值域守衛本來擋得住這個值」，再證
+        「加粗之後換成行完整性那道網子接住」——**不是鄰居在叫**：`config.yml` 已經
+        依 schema 明文（整段缺席＝未宣告）合法地省掉那一欄，「有頂層欄位但表沒有它」
+        那條路走不到。
+        """
+        name = self._org_enum_optional_field()
+        cfg = self._config()
+        dropped = self._drop_top_key(cfg, name)
+        self.assertNotEqual(dropped, cfg, f"config.yml 沒有 `{name}`——反例沒造出來")
+        self.write(foundry_lint.CONFIG_REL, dropped)
+        org = (self.root / foundry_lint.ORG_REL).read_text(encoding="utf-8")
+        bogus = re.sub(rf"^{name}:.*$", f"{name}: 香蕉", org, flags=re.M)
+        self.assertNotEqual(bogus, org, f"org.yml 沒有 `{name}`——反例沒造出來")
+        self.write(foundry_lint.ORG_REL, bogus)
+        # 對照組：schema 沒動時，值域守衛擋得住這個值——證明下面那一半不是空轉。
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(f"`{name}`" in f and "值域是" in f for f in res.failures),
+                        res.failures)
+        # M4：只多加一個粗體，上面那道守衛整條消失，綠字只從「3 組值域」變「2 組」。
+        self.write(foundry_lint.CONFIG_SCHEMA_REL,
+                   self._bold_name_cell(self._schema(), name))
+        res = self._run()
+        self.assertFalse(res.passed, "欄位名格加粗 ⇒ 該列連同值域守衛一起消失而全綠（M4）")
+        self.assertTrue(any("只解得出" in f for f in res.failures), res.failures)
+
+    def test_欄位名格逐格加粗都擋下(self):
+        """逐格 sweep：行完整性是**每一列**都有對照物，不是補在某一欄上的單點。
+
+        補這道守衛之前，同一張 sweep 是 8 紅 1 綠——8 紅全是鄰居（「config.yml 有
+        頂層欄位而表沒有它」）順帶接住的，唯一沒有鄰居的那一欄靜靜通過（審查 §3-3）。
+        所以這裡**不動設定檔**：紅燈只能來自行完整性自己。
+        """
+        schema = self._schema()
+        names = sorted(foundry_lint.parse_schema_fields(schema))
+        self.assertTrue(names, "欄位表是空的——sweep 無從構造")
+        for name in names:
+            with self.subTest(field=name):
+                self.write(foundry_lint.CONFIG_SCHEMA_REL,
+                           self._bold_name_cell(schema, name))
+                res = self._run()
+                self.assertFalse(res.passed)
+                self.assertTrue(any("只解得出" in f for f in res.failures), res.failures)
+
+    def test_欄位表少一格時整列消失也擋下(self):
+        """同族的另一種：`len(cells) < 4` 也是靜靜跳過，一樣要有對照物。"""
+        schema = self._schema()
+        name = sorted(foundry_lint.parse_schema_fields(schema))[0]
+        text = self._edit_row(schema, name,
+                              lambda line: line.rstrip().rsplit("|", 2)[0] + " |",
+                              "欄位表那一列不是預期的格數")
+        self.assertNotIn(name, foundry_lint.parse_schema_fields(text),
+                         f"`{name}` 那一列沒有消失——反例沒造出來")
+        self.write(foundry_lint.CONFIG_SCHEMA_REL, text)
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("只解得出" in f for f in res.failures), res.failures)
+
     def test_舊欄位名映射的現名一定在表裡(self):
         """`RETIRED_CONFIG_FIELDS` 手維護，配一條廉價後盾（審查 §4-5）。"""
         retired = self._retired()

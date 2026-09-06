@@ -1395,7 +1395,27 @@ def check_config_schema(root: Path) -> SelfcheckResult:
     #     值域」的，加了註記就等於把下面那道值域守衛從該欄位身上拆掉。
     #   - 標「枚舉」卻讀不出值域 ⇒ 說明欄的分隔符被改寫了（`｜` → `/`、頓號…）。
     #     那會讓值域與 `org.yml` 的 `ai_platform` 整組消失，而本項照樣印 ✅。
-    # 三者都是「schema 的形狀漂了」，先修 schema 再談設定檔，所以報完就 return。
+    # 這幾道都是「schema 的形狀漂了」，先修 schema 再談設定檔，所以報完就 return。
+    #
+    # 行完整性擺在三道格守衛**之前**：它們守的是「格」的字面，守不住「整列根本沒被
+    # 讀進來」。`parse_schema_fields()`／`parse_schema_marks()` 都是 regex 不 match 就
+    # 跳過該列（沒有 else），而 `CONFIG_SCHEMA_FIELD_RE` 兩端錨定 ⇒ 欄位名格加任何裝飾
+    # （`**`x`**`、腳註）或少一格，那一列就連同它的必填／型別／值域三道守衛一起靜靜
+    # 消失。實測（MYL-111 審查 M4）：schema 把 `ai_platform` 那格加粗、`config.yml` 依
+    # schema 明文省略該段（合法），AC8 的 `org.yml` 值域驗證整項失效而 `--selfcheck`
+    # 退 0——綠字只從「3 組值域」變成「2 組值域」，沒有人會去 diff 一個 ✅ 的計數。
+    # 到這一層就收斂：表找不找得到 → 每一列都解得出 → 每一格都是認得的字面。
+    # ⚠️ 只 append 不 return：與下面三道守衛及舊欄位名後盾一起結算。搶先 return 會遮蔽
+    # 更具體的原因——欄位名被改掉的那一列同時觸發本條與 `RETIRED_CONFIG_FIELDS` 後盾，
+    # 而後盾那句才講得出「映射寫反還是又被正名一次」。
+    top_rows = first_table_rows(section_lines(schema_text, CONFIG_SCHEMA_TOP_HEADING))
+    if len(top_rows) != len(fields):
+        res.failures.append(
+            f"{CONFIG_SCHEMA_REL}「{CONFIG_SCHEMA_TOP_HEADING}」表有 {len(top_rows)} "
+            f"個資料列，只解得出 {len(fields)} 個欄位名——解不出的那一列會連同它的"
+            "必填／型別／值域三道守衛一起靜靜消失。欄位名格只認 `` `欄位名` ``"
+            "（整格，不帶粗體或註記），且每一列至少要有四格"
+        )
     for name, (typ, mark) in parse_schema_marks(schema_text).items():
         if mark not in CONFIG_SCHEMA_REQUIRED_MARKS:
             res.failures.append(
