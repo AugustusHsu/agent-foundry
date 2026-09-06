@@ -9,7 +9,7 @@ reviewed_at: {YYYY-MM-DD}
 # 發佈審查記錄：{工單編號} {工單標題}
 
 > 由手冊變更工單的執行者自己撰寫（MYL-23 分級表 P2：拍板者＝執行者本人，
-> 審查內容＝逐項自檢前提，Scrum Master 巡檢兜底）。存檔於
+> 審查內容＝逐項自檢前提，Product Manager 巡檢兜底）。存檔於
 > `docs/publish-reviews/<工單編號>.md`，commit 後投影腳本（`publish-wiki.sh`／
 > `publish-site.sh`，共用 `scripts/lib/publish-gate.sh`）才會放行。每個欄位下的引導文字填寫時整段刪除。
 >

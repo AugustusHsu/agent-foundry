@@ -58,7 +58,7 @@ description: 軸 A（AI 平台，`.foundry/config.yml` 的 `ai_platform`）的�
 | `CAP-3` | **執行指令** | `make check`、`foundry_lint --selfcheck`、以及軸 B 九個動詞的全部指令（`gh`／`curl`／檔案操作） |
 | `CAP-4` | **向使用者提問並取得裁定** | `H1`～`H6` 觸發式 HITL、三個關卡 `G-A`／`G-B`／`G-C`、`P3` push 授權。**全流程最關鍵的一項**——缺了它，所有需要人拍板的關卡都會變成 agent 自己說了算 |
 | `CAP-5` | **被指派＝被喚醒** | 第 3 節六態流轉與交接鏈：Developer → Code Reviewer → CEO 每一棒都靠「指派把下一個人叫起來」 |
-| `CAP-6` | **子代理／多角色並行** | 第 9 節組織：九個角色分工、`M4` 實作與審查異廠 |
+| `CAP-6` | **子代理／多角色並行** | 第 9 節組織：各在編角色分工、`M4` 實作與審查異廠 |
 | `CAP-7` | **背景任務** | CI、發佈腳本、`probe_providers.py`／`browser-probe` 等長跑盤點 |
 | `CAP-8` | **瀏覽器／視覺** | Frontend Verifier 的驗收、手冊發佈後的實站比對（判級與補齊規則在 `foundry-browser`，本文不重複） |
 | `CAP-9` | **版控操作** | 第 7 節 git 規範：一單一分支、gitmoji commit、`P1`～`P3` push 分級 |

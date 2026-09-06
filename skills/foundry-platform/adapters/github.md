@@ -18,7 +18,7 @@
    ```sh
    for l in "type:brd" "type:prd" "type:hld" "type:lld" "type:impl" "type:review" "type:test" "type:docs"; do
      gh label create "$l" --color 5319E7 --description "Foundry 工單類型" --force; done
-   for l in "role:product-analyst" "role:scrum-master" "role:tech-lead" "role:developer" "role:code-reviewer" "role:qa"; do
+   for l in "role:ceo" "role:product-manager" "role:product-analyst" "role:frontend-verifier" "role:tech-lead" "role:developer" "role:code-reviewer" "role:qa"; do
      gh label create "$l" --color 0E8A16 --description "Foundry 角色" --force; done
    for l in "size:small" "size:medium" "size:large"; do
      gh label create "$l" --color FBCA04 --description "Foundry 工單規模" --force; done

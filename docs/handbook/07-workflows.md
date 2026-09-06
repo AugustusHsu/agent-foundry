@@ -1,6 +1,6 @@
 # 7. 團隊有哪些固定 workflow？
 
-> 最後對照 protocol `e62e42c`（2026-09-05）
+> 最後對照 protocol `316f06e`（2026-09-06）
 
 > 本章把散在規範各節的「固定跑法」收攏成一份總覽：每條 workflow 一句話講清楚它是什麼、什麼情況會啟動、規則本體在哪一節。規則本體永遠以 [`skills/foundry-protocol/SKILL.md`](../../skills/foundry-protocol/SKILL.md) 為準；本章只做索引與簡介。
 
@@ -19,7 +19,7 @@
 
 ## 1. 主開發流程鏈
 
-**一句話**：從你的一句話需求到結案的完整交棒順序——需求（Product Analyst）→ 設計（Tech Lead）→ 工單（Scrum Master）→ 實作（Developer）→ 審查（Code Reviewer）→ 測試（QA）。
+**一句話**：從你的一句話需求到結案的完整交棒順序——需求（Product Analyst）→ 設計（Tech Lead）→ 工單（Product Manager）→ 實作（Developer）→ 審查（Code Reviewer）→ 測試（QA）。
 
 - **觸發條件**：你對 CEO 提出需求（怎麼講見[第 2 章](02-commands.md)）。之後每一棒由前一棒的合格交接物觸發，交接物不齊，下一棒有權退回不開工。
 - **權威章節**：[`foundry-protocol` 第 3 節（交接格式）](../../skills/foundry-protocol/SKILL.md)定義每一棒必附的交接物；第 2 節（狀態機）定義工單在各棒之間的狀態流轉。
@@ -30,7 +30,7 @@
 **一句話**：發現缺陷時不是直接開新單，而是先找「成因工單」——最初該把這件事做對的那張單——再依判定表決定退回原單、改 AC 後退回、或開新單。
 
 - **觸發條件**：測試失敗、行為不符預期、審查退件。
-- **權威章節**：[`foundry-protocol` 第 5 節（缺陷收容判準）](../../skills/foundry-protocol/SKILL.md)——含完整判定表、「AC 寫錯只有 Scrum Master 有權改」、與總判準「能退回就不開新單」。
+- **權威章節**：[`foundry-protocol` 第 5 節（缺陷收容判準）](../../skills/foundry-protocol/SKILL.md)——含完整判定表、「AC 寫錯只有 Product Manager 有權改」、與總判準「能退回就不開新單」。
 - **手冊對應**：[第 5 章](05-troubleshooting.md)有實際踩過的案例。
 
 ## 3. HITL 發卡
@@ -53,8 +53,8 @@
 | 層級 | 模型／思考程度 | 預設適用 |
 | --- | --- | --- |
 | 高 | 當下可用的最高層級／最高思考程度（現為 Opus 級／`max`） | Tech Lead 的設計（HLD／LLD／ADR）、Code Reviewer 的審查、CEO 的裁決與規範修訂 |
-| 中 | Opus 級／`high` | Developer 的實作、QA 的測試、Product Analyst 的需求、Frontend Verifier 的前端驗證、PM 的狀態彙整、異常判讀與派工 |
-| 低 | Sonnet 級／`medium` | Scrum Master 的機械性流轉：狀態機維護、依模板拆單、巡檢兜底 |
+| 中 | Opus 級／`high` | Developer 的實作、QA 的測試、Product Analyst 的需求、Frontend Verifier 的前端驗證、Product Manager 的開單、拆單、依賴鏈、派工、狀態彙整與異常判讀 |
+| 低 | Sonnet 級／`medium` | 目前沒有角色預設落在這一層（原為已退場角色的機械性流轉） |
 
 升級規則（逐條可判定）：
 
@@ -70,7 +70,7 @@
 
 **一句話**：規則本體（protocol、角色 skill）的任何修改都走「CEO 提案 → 你核可 → 改文件並 commit」的固定路徑，不允許在個案裡默默偏離規範。
 
-- **觸發條件**：現行規則不敷使用（判定表覆蓋不了、預設分層要修、組織結構要調、觸發加 PM 條件）；或平台設定與規範不一致需要同步。
+- **觸發條件**：現行規則不敷使用（判定表覆蓋不了、預設分層要修、組織結構要調、觸發加 stream owner 條件）；或平台設定與規範不一致需要同步。
 - **權威章節**：[`foundry-protocol` 第 9 節（決策權矩陣）](../../skills/foundry-protocol/SKILL.md)——「規範修訂」的拍板路徑是 CEO 提案、你核可後生效；第 8、9 節的「權威來源與同步」定義規範與平台設定不一致時以規範為準、發起同步。
 - **注意**：修訂核可、改動 commit 進 repo 之後**就生效了，你不必做任何事**——skill 是參照式安裝，每次喚醒 agent 都直接讀 repo 當下的檔案。（早期手冊寫「須由你重新匯入」，那是誤診，已更正；見[第 5 章](05-troubleshooting.md)案例 5。）
 

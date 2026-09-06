@@ -1,7 +1,8 @@
 # agent-foundry 自身的組織宣告（Foundry 組織層可攜性級 2，MYL-76）
 # schema 權威：skills/foundry-platform/config-schema.md「`.foundry/org.yml`」一節
 # 規則權威：skills/foundry-protocol/SKILL.md 第 9 節（組織圖與匯報線）＋第 8 節（模型分層）
-# 建立於 2026-09-06。
+# 建立於 2026-09-06；2026-09-06 由 MYL-115 依 MYL-96 改寫組織形狀（CEO → Product
+# Manager → 團隊）、PM 正名 Product Manager、Scrum Master 退場。
 #
 # ⚠️ 本檔是**應然**，不是平台實況的鏡子。它宣告「這個專案該有哪些角色、誰向誰匯報、
 #    各自掛什麼、用哪一層模型」；平台上這些 agent 建好了沒有是另一回事。
@@ -9,8 +10,12 @@
 #    角色可以先宣告在本檔、後才在平台上建出來（protocol `O1` 第 1 種情形；那段期間
 #    該角色在第 9 節決策權矩陣裡的格子依 `O4` 由匯報對象暫代），是預期行為不是漏同步。
 #    與平台的對帳歸承接建置的那張工單，不是 `org-sync` 的事。
-#    本檔宣告的 9 名已於 2026-09-06（MYL-79）全數在平台上建置並逐格對帳：**除下方 ⚠️
+#    本檔宣告的角色已於 2026-09-06（MYL-79）全數在平台上建置並逐格對帳：**除下方 ⚠️
 #    那一處刻意保留的例外**（Frontend Verifier 的 `canAssignTasks`）外，其餘逐格一致。
+#    ⚠️ **MYL-115 之後有一格是「平台有、本檔沒有」：Scrum Master。** 使用者於 MYL-96
+#    裁定該角色退場（`pause` ＋ `leave`），規範側先落地、平台側只有使用者按得動，
+#    排在後續工單。那是**預期狀態**，不是漏同步，更不適用 protocol `O1` 第 2 種情形的
+#    「補登記」——查得到的那條裁定正好是要它退場的。**不要把它加回本檔。**
 #    （⚠️ 這句的「只剩一項」與 `skills/foundry-platform/adapters/paperclip.md`
 #    「`provision_team` → 步驟 0：對帳」那張表底下那句「唯一剩下的那一項差異」
 #    **指的不是同一項**，兩者不矛盾——它們數的是兩張不同的對帳表：
@@ -29,11 +34,11 @@
 # ── `permissions[]` 的兩種來源（MYL-79 補，卡 `0bd69c99` Q4 核可）─────────────
 # 讀這一欄的時候要分開看，兩種來源的證據強度不同：
 #
-# 1. **有裁定來源的授權**——CEO 與 PM 兩格逐條註明依據（見各該格的行內註解）。
-# 2. **登記現況**——其餘 7 名。2026-09-06 以平台 API 逐一核對（`GET /api/agents/{id}`）：
-#    `access.grants[]` 7 名全空；`taskAssignSource` 其中 6 名為 `none`，**Frontend
+# 1. **有裁定來源的授權**——CEO 與 Product Manager 兩格逐條註明依據（見各該格的行內註解）。
+# 2. **登記現況**——其餘各名。2026-09-06 以平台 API 逐一核對（`GET /api/agents/{id}`）：
+#    `access.grants[]` 該 7 名全空；`taskAssignSource` 其中 6 名為 `none`，**Frontend
 #    Verifier 是 `simple_default`**（原因見下方 ⚠️）。`canCreateSkills` 在 `access.*`
-#    沒有對應欄位，只透出於 `permissions.canCreateSkills`，7 名皆為 `true`。
+#    沒有對應欄位，只透出於 `permissions.canCreateSkills`，該 7 名皆為 `true`。
 #    ⚠️ **會相反因而不可讀面板的是 `canAssignTasks` 這一項**，FV 就是實例：
 #    `access.canAssignTasks: true` 而 `permissions.canAssignTasks: false`。
 #    寫進本檔不是變更，是把既有事實登記下來；體例同 protocol 第 8 節對 Frontend
@@ -79,7 +84,7 @@ roles:
 
   - id: product-analyst
     title: Product Analyst
-    reports_to: ceo
+    reports_to: product-manager
     model_tier: medium
     skills:
       - skills/foundry-protocol/SKILL.md
@@ -87,14 +92,17 @@ roles:
     permissions:
       - create_skills
 
-  - id: pm
-    title: PM
+  - id: product-manager
+    title: Product Manager
     reports_to: ceo
     model_tier: medium
+    # 正名（`PM` → `Product Manager`）與職權擴充（彙整型 → 開單中樞）依 MYL-96 裁定
+    #   #2／#3，使用者於核可卡 `10db376e` 核可，由 MYL-115 落地。層級未重新裁定、
+    #   維持中層，理由見 protocol 第 8 節該條。
     skills:
       - skills/foundry-protocol/SKILL.md
-      - skills/roles/pm/SKILL.md
-    # 派工是本角色在第 9 節矩陣裡的拍板格，所以宣告 `assign_tasks`。平台上 PM 是
+      - skills/roles/product-manager/SKILL.md
+    # 派工與開單都是本角色在第 9 節矩陣裡的拍板格，所以宣告 `assign_tasks`。平台上 PM 是
     #   `explicit_grant`（grant `41fd8b90`，`grantedByUserId: null` ＝ MYL-79 建置時自帶，
     #   沒有人逐條授過）；CEO 那格則是角色內建（`ceo_role`）**加上**一條使用者實際授予的
     #   grant。⚠️ 兩格的證據強度剛好與直覺相反，別拿 PM 這條去推 CEO 那條沒有 grant。
@@ -105,20 +113,9 @@ roles:
       - assign_tasks
       - create_skills
 
-  - id: scrum-master
-    title: Scrum Master
-    reports_to: ceo
-    model_tier: low
-    skills:
-      - skills/foundry-protocol/SKILL.md
-      - skills/roles/scrum-master/SKILL.md
-    # 排依賴鏈不需要指派權限（MYL-73 AC0 實測），所以這裡沒有 `assign_tasks`。
-    permissions:
-      - create_skills
-
   - id: frontend-verifier
     title: Frontend Verifier
-    reports_to: ceo
+    reports_to: product-manager
     model_tier: medium
     skills:
       - skills/foundry-protocol/SKILL.md
@@ -128,7 +125,7 @@ roles:
 
   - id: tech-lead
     title: Tech Lead
-    reports_to: ceo
+    reports_to: product-manager
     model_tier: high
     skills:
       - skills/foundry-protocol/SKILL.md

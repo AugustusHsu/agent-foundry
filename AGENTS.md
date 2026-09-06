@@ -64,7 +64,7 @@ agent-foundry/
 │  ├─ foundry-gates/        # workflow：調整關卡粒度
 │  ├─ foundry-model-routing/ # workflow：模型供應商路由（哪個角色用哪一家）
 │  ├─ foundry-browser/      # workflow：瀏覽器與視覺能力（L0～L3 探測、補齊、降級）
-│  └─ roles/<角色>/         # 第 2 層：角色薄 skill（9 個角色）
+│  └─ roles/<角色>/         # 第 2 層：角色薄 skill（一個角色一份）
 ├─ templates/               # BRD / PRD / HLD / LLD / test-plan /
 │                           #   review-report / publish-review
 ├─ docs/
