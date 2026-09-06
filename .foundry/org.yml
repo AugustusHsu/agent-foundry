@@ -11,6 +11,17 @@
 #    與平台的對帳歸承接建置的那張工單，不是 `org-sync` 的事。
 #    本檔宣告的 9 名已於 2026-09-06（MYL-79）全數在平台上建置並逐格對帳：**除下方 ⚠️
 #    那一處刻意保留的例外**（Frontend Verifier 的 `canAssignTasks`）外，其餘逐格一致。
+#    （⚠️ 這句的「只剩一項」與 `skills/foundry-platform/adapters/paperclip.md`
+#    「`provision_team` → 步驟 0：對帳」那張表底下那句「唯一剩下的那一項差異」
+#    **指的不是同一項**，兩者不矛盾——它們數的是兩張不同的對帳表：
+#      · 本檔這句數的是**各角色宣告欄位 ↔ 平台設定**的逐格比對，剩下的一項是 Frontend
+#        Verifier 的 `canAssignTasks`，即下方那格 ⚠️。
+#      · 那張表數的是 `provision_team` **步驟 0 的成員對帳**（規格見
+#        `skills/foundry-platform/SKILL.md` §8.2），剩下的一項是該節的**第五種差異**——
+#        「平台上的顯示名與宣告的 `title` 不一致」，實例是 Developer 的平台顯示名為
+#        `Developer（全端）`；§8.2 對第五種差異的處置是**只列進報告、不自動改**。
+#    顯示名不是對帳鍵（鍵是平台的 `name` 欄位），所以它既不動搖本檔 `title` 欄的宣告，
+#    也不落在本檔這句所說的那些格子裡。）
 #
 # ⚠️ agent 不得自行改本檔（同 `.foundry/config.yml`）。改動走 protocol 第 9 節
 #    「結構調整先發卡提案、經使用者裁定」的同一條路徑；判準寫在 config-schema。
