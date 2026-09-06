@@ -2560,13 +2560,28 @@ PM_ROLE_ID = "product-manager"
 #: 要跟著往後推；推之前先逐張確認中間那幾張確實不在射程內，不要只為了轉綠而推。
 ISSUE_RULES_SINCE = "MYL-125"
 
-#: `I2` 的五欄：`(欄位, 報訊息時的稱呼)`。順序＝條文列舉的順序。
+#: `I2` 的必備欄位：`(欄位, 報訊息時的稱呼)`。順序＝條文列舉的順序。
+#: **原本是五欄，「下游被擋」拿掉了**（使用者於卡 `117b822a` q2 選 B）：那一欄
+#: 開單者**填不動**——`issue_relations` 只有 `blocks` 一種關係型別，`blockedBy`
+#: 與 `blocks` 是同一張表的兩個讀取方向，而全 API 只開放寫「下游那張單自己的
+#: `blockedByIssueIds`」（known-drift `L29`）。要一張單的下游欄非空，只有一條路：
+#: 後來有人開了單、把它填進自己的上游欄。⇒ 把它列進「開單當下要備齊」，是在
+#: 要求先把下游單開出來或預測未來。它改成條文裡的【自律】句（見第 1 節 `I2`）。
 PM_REQUIRED_FIELDS = (
     ("assignee", "指派對象"),
     ("parent", "上位單"),
     ("blocked_by", "上游依賴（擋住本單的單）"),
-    ("blocks", "下游被擋（本單擋住的單）"),
     ("has_ac", "驗收標準"),
+)
+
+#: `I2` 的反向欄位：值為真就是違規。刻意與 `PM_REQUIRED_FIELDS` 同形
+#: （都是 `(欄位, 稱呼)`），兩族守衛才跑得了同一套反向突變證。
+#: 目前只有一格：**上位單不得同時被填進上游依賴**。平台完全不擋這件事——
+#: `syncBlockedByIssueIds()` 只有三道守衛（不得自我阻擋、必須同公司、`blocks`
+#: 圖不得成環），父子關係不在其中（known-drift `L29`）——但它會做出一張**醒不來
+#: 的單**：blocker 只有停在 `done` 才算解除，而母單多半要等子單做完才結。
+PM_FORBIDDEN_FIELDS = (
+    ("parent_is_blocker", "上位單同時被填進上游依賴"),
 )
 
 #: 描述欄裡的「驗收標準」段（第 1 節四段骨架的第三段）。只認粗體標題那一行，
@@ -2589,14 +2604,18 @@ class AuthoredIssue:
 
 @dataclass(frozen=True)
 class PmIssueFields:
-    """`I2` 要看的五格。兩個依賴欄存的是**條數**，零＝那一欄空著。"""
+    """`I2` 要看的幾格。上游依賴欄存的是**條數**，零＝那一欄空著。
+
+    `parent_is_blocker` 不是「有沒有填」而是「填錯了沒有」，判在
+    `PM_FORBIDDEN_FIELDS` 那一族。
+    """
 
     ref: str
     assignee: str = ""
     parent: str = ""
     blocked_by: int = 0
-    blocks: int = 0
     has_ac: bool = False
+    parent_is_blocker: bool = False
 
 
 def audit_issue_authors(issues: list, allowed: dict, names: dict, since: str) -> list:
@@ -2627,21 +2646,37 @@ def audit_issue_authors(issues: list, allowed: dict, names: dict, since: str) ->
 
 
 def audit_pm_issue_fields(issues: list) -> list:
-    """純函式：`I2` 五欄齊備對帳，回傳 failure 訊息清單。
+    """純函式：`I2` 欄位對帳，回傳 failure 訊息清單。
 
     傳進來的**已經只剩 Product Manager 開的單**（誰開的在上一支判完了）：本支
-    只回答「這五欄齊不齊」，兩件事分開才不會在射程與判準之間互相蓋掉。
+    只回答「這幾欄對不對」，兩件事分開才不會在射程與判準之間互相蓋掉。
+
+    兩族守衛：`PM_REQUIRED_FIELDS` 是「沒填就報」，`PM_FORBIDDEN_FIELDS` 是
+    「填了就報」。同一張單兩族都犯規時**合成一則訊息**，理由同下面那句註解：
+    一張單一則，接單者不必在紅字裡把同一個 ref 拼回去。
     """
     failures = []
     for it in issues:
         missing = [label for attr, label in PM_REQUIRED_FIELDS if not getattr(it, attr)]
-        if not missing:
+        wrong = [label for attr, label in PM_FORBIDDEN_FIELDS if getattr(it, attr)]
+        if not missing and not wrong:
             continue
+        parts = []
+        if missing:
+            parts.append(
+                f"缺了：{'、'.join(missing)}——每缺一欄，接單者開工後就要多問一次，"
+                "那正是這條規則要收掉的來回（MYL-96 裁定 #6）"
+            )
+        if wrong:
+            parts.append(
+                f"填錯了：{'、'.join(wrong)}——母單要等子單做完才結，"
+                "而 blocker 只有停在 `done` 才算解除，兩邊互等就是一張醒不來的單。"
+                "母單已經用上位單欄表達了，不要再掛一條 blocker 邊"
+            )
         failures.append(
-            f"{it.ref} 由 Product Manager 開出，但 `I2` 要的五欄缺了："
-            f"{'、'.join(missing)}——每缺一欄，接單者開工後就要多問一次，"
-            "那正是這條規則要收掉的來回（MYL-96 裁定 #6）。"
-            "把缺的欄補上；認為這張單本來就不該有那一欄，走第 1 節修訂條文，"
+            f"{it.ref} 由 Product Manager 開出，但 `I2` 的欄位判準沒過："
+            + "；".join(parts)
+            + "。認為這張單本來就不該這樣填，走第 1 節修訂條文，"
             "不要在個案裡放寬"
         )
     return failures
@@ -2719,12 +2754,15 @@ def fetch_authored_issues(base: str, token: str, company_id: str, project_id: st
 
 
 def fetch_pm_issue_fields(base: str, token: str, issue_id: str, ref: str):
-    """撈單張單的 `I2` 五欄。回傳 `(PmIssueFields, 錯誤)`。
+    """撈單張單的 `I2` 欄位。回傳 `(PmIssueFields, 錯誤)`。
 
     **必須逐張打單筆端點**，不能沿用清單端點的欄位：清單回的每一筆**沒有**依賴
-    關係（`blockedBy`／`blocks` 兩鍵缺席），描述欄還可能被截斷（`descriptionTruncated`）
-    ——拿清單那份去判，兩個依賴欄會恆為空、AC 會因為被截掉而誤報成漏寫。
+    關係（`blockedBy` 這一鍵缺席），描述欄還可能被截斷（`descriptionTruncated`）
+    ——拿清單那份去判，上游欄會恆為空、AC 會因為被截掉而誤報成漏寫。
     代價是每張 PM 開的單多一次呼叫，而射程只有 PM 開的單，量級不成問題。
+
+    `parent_is_blocker` 比對的是 **`blockedBy[].id` 與 `parentId`**（都是 uuid），
+    不是看得懂的 `identifier`——後者只在少數回應裡出現，拿它比會靜默漏判。
     """
     data, why = api_get(base, f"/api/issues/{issue_id}", token)
     if data is None:
@@ -2732,13 +2770,16 @@ def fetch_pm_issue_fields(base: str, token: str, issue_id: str, ref: str):
     it = data.get("issue", data) if isinstance(data, dict) else {}
     if not isinstance(it, dict):
         return None, f"{ref} 的單筆端點沒有回物件"
+    parent = it.get("parentId") or ""
+    blocked_by = it.get("blockedBy") or []
+    blocker_ids = {b.get("id") for b in blocked_by if isinstance(b, dict)}
     return PmIssueFields(
         ref=ref,
         assignee=it.get("assigneeAgentId") or it.get("assigneeUserId") or "",
-        parent=it.get("parentId") or "",
-        blocked_by=len(it.get("blockedBy") or []),
-        blocks=len(it.get("blocks") or []),
+        parent=parent,
+        blocked_by=len(blocked_by),
         has_ac=bool(AC_SECTION_RE.search(it.get("description") or "")),
+        parent_is_blocker=bool(parent) and parent in blocker_ids,
     ), ""
 
 
@@ -2791,11 +2832,11 @@ def check_issue_authors(root: Path) -> SelfcheckResult:
 
 
 def check_pm_issue_fields(root: Path) -> SelfcheckResult:
-    """Product Manager 開的單要五欄齊備（`I2`，MYL-116）。
+    """Product Manager 開的單，必備欄位要齊、上位單不得同時當 blocker（`I2`，MYL-116）。
 
     射程只有 PM 開的單，且同樣從 `ISSUE_RULES_SINCE` 起算。
     """
-    res = SelfcheckResult("pm-issue-fields", "Product Manager 開的單五欄齊備")
+    res = SelfcheckResult("pm-issue-fields", "Product Manager 開的單欄位齊備且沒填錯")
     endpoint, why = issue_rules_precondition(root)
     if endpoint is None:
         res.skipped = why

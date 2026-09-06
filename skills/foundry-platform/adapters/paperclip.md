@@ -88,7 +88,8 @@ curl -s -X POST "${AUTH[@]}" -d "$(jq -n \
 - `milestone`／`assignee` 有給時，開單後分別用 `set_milestone` 與 `PATCH … {"assigneeAgentId":"<agent UUID>"}` 設定。
 - 子單另有捷徑：`POST /api/issues/<父單ID>/children` 開單即帶 `parentId`，省一次 `link_issues`。
 - **開單者**（protocol `I1` 的比對對象）落在 `createdByAgentId`／`createdByUserId` 兩欄：agent 開的填前者、使用者開的填後者，**平台自己開的單兩欄皆為 `null`**。開單者**開出來就定了**，改不動（見下方「平台限制」）。
-- **`I2` 的五欄在本平台的承載欄位**：指派對象＝`assigneeAgentId`（或 `assigneeUserId`）、上位單＝`parentId`、上游依賴＝`blockedBy`、下游被擋＝`blocks`、驗收標準＝`description` 裡的四段骨架第三段。⚠️ **`blockedBy`／`blocks` 只有單筆端點 `GET /api/issues/<ID>` 回得出來**，`list_issues` 那份沒有這兩鍵，且 `description` 可能被截斷（`descriptionTruncated`）——拿清單那份判 `I2` 會把兩個依賴欄一律看成空的。
+- **`I2` 的四欄在本平台的承載欄位**：指派對象＝`assigneeAgentId`（或 `assigneeUserId`）、上位單＝`parentId`、上游依賴＝`blockedBy`、驗收標準＝`description` 裡的四段骨架第三段。反向那一格判的是 **`parentId` 有沒有出現在 `blockedBy[].id` 裡**（比 uuid，不要拿 `identifier` 比）。⚠️ **`blockedBy`／`blocks` 只有單筆端點 `GET /api/issues/<ID>` 回得出來**，`list_issues` 那份沒有這兩鍵，且 `description` 可能被截斷（`descriptionTruncated`）——拿清單那份判 `I2` 會把上游欄一律看成空的。
+- **`blocks`（下游被擋）在本平台沒有寫入路徑**，所以它不在 `I2` 的必備欄位裡：依賴只有一種關係型別、一條邊，`blockedBy` 與 `blocks` 是同一張表的兩個讀取方向，可寫的只有下游那張單自己的 `blockedByIssueIds`（見下方「平台限制」`L29`）。
 - **查證**：回傳的 `identifier` 即新 issue_ref；`list_issues` 查得到。
 
 ### update_status

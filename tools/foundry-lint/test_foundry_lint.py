@@ -2144,51 +2144,78 @@ class IssueAuthorAuditTest(unittest.TestCase):
 
 
 class PmIssueFieldsAuditTest(unittest.TestCase):
-    """`I2` 五欄齊備的判準（MYL-116，依 MYL-96 裁定 #6）。"""
+    """`I2` 欄位判準（MYL-116，依 MYL-96 裁定 #6 ＋ 卡 `117b822a`）。
+
+    兩族守衛：`PM_REQUIRED_FIELDS` 沒填就報、`PM_FORBIDDEN_FIELDS` 填了就報。
+    """
 
     FULL = dict(ref="MYL-130", assignee="dev-id", parent="MYL-96",
-                blocked_by=1, blocks=1, has_ac=True)
+                blocked_by=1, has_ac=True, parent_is_blocker=False)
+    #: 每一欄「違規」時的值：必備欄是空值、反向欄是 True。
+    BAD = {"assignee": "", "parent": "", "blocked_by": 0, "has_ac": False,
+           "parent_is_blocker": True}
 
     def one(self, **overrides):
         return foundry_lint.PmIssueFields(**{**self.FULL, **overrides})
 
-    def test_五欄齊備不報(self):
+    def guards(self):
+        return (("PM_REQUIRED_FIELDS", foundry_lint.PM_REQUIRED_FIELDS),
+                ("PM_FORBIDDEN_FIELDS", foundry_lint.PM_FORBIDDEN_FIELDS))
+
+    def test_欄位都對不報(self):
         self.assertEqual(foundry_lint.audit_pm_issue_fields([self.one()]), [])
 
-    def test_每一欄各缺一次都報得出來(self):
-        empty = {"assignee": "", "parent": "", "blocked_by": 0,
-                 "blocks": 0, "has_ac": False}
-        for attr, label in foundry_lint.PM_REQUIRED_FIELDS:
-            with self.subTest(attr=attr):
-                failures = foundry_lint.audit_pm_issue_fields(
-                    [self.one(**{attr: empty[attr]})])
-                self.assertEqual(len(failures), 1)
-                self.assertIn(label, failures[0])
+    def test_下游被擋不再是必備欄位(self):
+        """卡 `117b822a` q2＝B：`blocks` 全 API 沒有寫入路徑，開單者填不動。
 
-    def test_拿掉某一欄的必備判定_那一格的反例就靜默通過(self):
-        """AC1 反向突變證：把該欄從 `PM_REQUIRED_FIELDS` 拿掉＝那道守衛不存在。
-
-        逐欄各驗一次，而不是只驗其中一欄——五格是五道獨立的守衛，只證一格
-        等於默認其餘四格也成立，而那正是「反例空轉」最常躲的地方。
+        直接斷言那一格**不在**必備清單裡，而不是只斷言「少了一欄」——後者在
+        任何一欄被誤刪時也會綠。
         """
-        empty = {"assignee": "", "parent": "", "blocked_by": 0,
-                 "blocks": 0, "has_ac": False}
-        for attr, _ in foundry_lint.PM_REQUIRED_FIELDS:
-            counter_example = [self.one(**{attr: empty[attr]})]
-            without = tuple(p for p in foundry_lint.PM_REQUIRED_FIELDS
-                            if p[0] != attr)
-            with self.subTest(attr=attr):
-                self.assertTrue(foundry_lint.audit_pm_issue_fields(counter_example))
-                with mock.patch.object(foundry_lint, "PM_REQUIRED_FIELDS", without):
-                    self.assertEqual(
-                        foundry_lint.audit_pm_issue_fields(counter_example), [])
+        self.assertNotIn("blocks", [a for a, _ in foundry_lint.PM_REQUIRED_FIELDS])
+        self.assertFalse(hasattr(foundry_lint.PmIssueFields("MYL-130"), "blocks"))
+
+    def test_每一欄各犯規一次都報得出來(self):
+        for _, guard in self.guards():
+            for attr, label in guard:
+                with self.subTest(attr=attr):
+                    failures = foundry_lint.audit_pm_issue_fields(
+                        [self.one(**{attr: self.BAD[attr]})])
+                    self.assertEqual(len(failures), 1)
+                    self.assertIn(label, failures[0])
+
+    def test_拿掉某一欄的判定_那一格的反例就靜默通過(self):
+        """AC1 反向突變證：把該欄從它那一族的清單拿掉＝那道守衛不存在。
+
+        逐欄各驗一次，而不是只驗其中一欄——每一格是一道獨立的守衛，只證一格
+        等於默認其餘幾格也成立，而那正是「反例空轉」最常躲的地方。
+        反向欄（`parent_is_blocker`）一併走同一套：那道守衛拿掉之後，一張把母單
+        填成自己 blocker 的單就會靜靜通過。
+        """
+        for name, guard in self.guards():
+            for attr, _ in guard:
+                counter_example = [self.one(**{attr: self.BAD[attr]})]
+                without = tuple(p for p in guard if p[0] != attr)
+                with self.subTest(guard=name, attr=attr):
+                    self.assertTrue(
+                        foundry_lint.audit_pm_issue_fields(counter_example))
+                    with mock.patch.object(foundry_lint, name, without):
+                        self.assertEqual(
+                            foundry_lint.audit_pm_issue_fields(counter_example), [])
 
     def test_缺多欄時一則訊息列全(self):
         failures = foundry_lint.audit_pm_issue_fields(
-            [self.one(parent="", blocks=0)])
+            [self.one(parent="", has_ac=False)])
         self.assertEqual(len(failures), 1)
         self.assertIn("上位單", failures[0])
-        self.assertIn("下游被擋", failures[0])
+        self.assertIn("驗收標準", failures[0])
+
+    def test_兩族同時犯規也只出一則訊息(self):
+        """一張單一則——同一個 ref 拆成兩則，讀紅字的人得自己拼回去。"""
+        failures = foundry_lint.audit_pm_issue_fields(
+            [self.one(assignee="", parent_is_blocker=True)])
+        self.assertEqual(len(failures), 1)
+        self.assertIn("指派對象", failures[0])
+        self.assertIn("上位單同時被填進上游依賴", failures[0])
 
 
 class ResolveAllowedAuthorsTest(RepoCopyTestCase):
@@ -2309,6 +2336,22 @@ class IssueRulesCheckTest(unittest.TestCase):
         self.assertIn("上游依賴", res.failures[0])
         self.assertNotIn("驗收標準", res.failures[0])
 
+    def test_把母單填成自己的_blocker_走完整條路會被抓到(self):
+        """反向那一格的端到端：四欄都齊，只有 `blockedBy` 裡混進了母單。"""
+        listed = [{"id": "u1", "identifier": "MYL-130", "createdByAgentId": "pm-id"}]
+        single = {"assigneeAgentId": "dev-id", "parentId": "parent-uuid",
+                  "blockedBy": [{"id": "parent-uuid", "identifier": "MYL-96"}],
+                  "description": "**驗收標準**\n1. b\n"}
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(foundry_lint, "fetch_company_agents",
+                                  return_value=(_AGENTS, "")), \
+                mock.patch.object(foundry_lint, "api_get",
+                                  side_effect=[(listed, ""), (single, "")]):
+            res = foundry_lint.check_pm_issue_fields(self.root)
+        self.assertFalse(res.passed)
+        self.assertIn("上位單同時被填進上游依賴", res.failures[0])
+        self.assertNotIn("缺了", res.failures[0])
+
 
 class FetchPmIssueFieldsTest(unittest.TestCase):
     """單筆端點的欄位擷取——清單端點那份不夠用，理由見函式 docstring。"""
@@ -2317,15 +2360,26 @@ class FetchPmIssueFieldsTest(unittest.TestCase):
         with mock.patch.object(foundry_lint, "api_get", return_value=(payload, "")):
             return foundry_lint.fetch_pm_issue_fields("b", "t", "uuid", "MYL-130")
 
-    def test_五欄都讀得出來(self):
+    def test_每一欄都讀得出來(self):
         one, err = self.fetch({
             "assigneeAgentId": "dev-id", "parentId": "p",
             "blockedBy": [{"id": "1"}], "blocks": [{"id": "2"}, {"id": "3"}],
             "description": "**驗收標準**\n1. x\n"})
         self.assertEqual(err, "")
         self.assertEqual((one.assignee, one.parent), ("dev-id", "p"))
-        self.assertEqual((one.blocked_by, one.blocks), (1, 2))
+        self.assertEqual(one.blocked_by, 1)
         self.assertTrue(one.has_ac)
+        self.assertFalse(one.parent_is_blocker)
+
+    def test_母單在_blockedBy_裡就判得出來(self):
+        one, _ = self.fetch({"parentId": "p", "blockedBy": [{"id": "x"},
+                                                            {"id": "p"}]})
+        self.assertTrue(one.parent_is_blocker)
+
+    def test_沒有母單時不會因為_blockedBy_有空_id_而誤判(self):
+        """`parent` 是空字串時，`"" in {None}` 之類的比對不該把它算成命中。"""
+        one, _ = self.fetch({"parentId": None, "blockedBy": [{}, {"id": ""}]})
+        self.assertFalse(one.parent_is_blocker)
 
     def test_指派給人類也算指派(self):
         one, _ = self.fetch({"assigneeUserId": "u1"})
@@ -2339,7 +2393,8 @@ class FetchPmIssueFieldsTest(unittest.TestCase):
         one, err = self.fetch({})
         self.assertEqual(err, "")
         self.assertEqual((one.assignee, one.parent, one.blocked_by,
-                          one.blocks, one.has_ac), ("", "", 0, 0, False))
+                          one.has_ac, one.parent_is_blocker),
+                         ("", "", 0, False, False))
 
 
 class RefScopeSharedTest(unittest.TestCase):
