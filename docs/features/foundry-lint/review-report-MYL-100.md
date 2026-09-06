@@ -86,7 +86,7 @@
 2. 但覆驗過程**撞出了 `S5` 真正的缺口**，這才是值得記的：`S5` 只寫了「`unblockDescriptor` 要 `blocked` 才收」這一個方向，沒寫另一個方向的 422——`{"status":"blocked"}` 不帶理由會被擋，而錯誤訊息列舉了**三種**合法理由（未解 blocker／pending interaction 或 approval／`unblockDescriptor`），其中「pending interaction 或 approval」`S5` 完全沒提。兩個 422 合起來是雞生蛋，正解是**同一包 PATCH 一起送**，這條操作知識目前不在文件裡。
 3. 兩個 422 我本輪都自己打出來過（回應碼、訊息逐字、403/422 之後回頭 `GET` 確認整包不生效），不是只採信交付回報。
 
-⇒ **開一張單補 `S5`**（見 MYL-108），不搭 MYL-103（已於 `157c9de` 結案）。屬純文件改動，依 protocol 免走 CR、`known-drift.md` 免走發佈四步。
+⇒ **開一張單補 `S5`**：**MYL-110**（鏡像 `github#43`）。不搭 MYL-103（已於 `157c9de` 結案），也不是 MYL-108（該編號在本輪審查進行中被另一個 run 用掉了——這正是併行環境下「先建單拿到真編號、再寫進永久文件」的理由）。屬純文件改動，依 protocol 免走 CR、`known-drift.md` 免走發佈四步。
 
 ## 7. `mirror-recon`：本輪仍覆驗不到
 
