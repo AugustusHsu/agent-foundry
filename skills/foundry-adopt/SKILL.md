@@ -71,7 +71,10 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
    - **要不要把現有分工寫成 `.foundry/org.yml`**（即勾 M4）：卡上附 §1 第 2 點盤到的分工觀察值，
      **但要標明它是「現況」不是「將寫入的內容」**——寫入的角色集合由 protocol 第 9 節決定（M4 第 3 點），
      卡上把兩者的落差列出來，那才是使用者在這一題實際要決定的事。
-     ⚠️ 同時要寫明：**這份檔是宣告，不會把 agent 建出來**（`foundry-ai-platform` §6）。
+     ⚠️ 同時要寫明**勾了會得到什麼**：得到的是一份宣告；把它變成平台上真的存在的那支團隊是
+     另一個動作（`provision_team`，`foundry-platform` §8），**不含在 M4 裡**，而且只有
+     `ai_platform: paperclip` 跑得動——所以這一題與本點「要不要補宣告 `ai_platform`」那一題
+     連動，卡上要一起講（`foundry-ai-platform` §6）。
    - 卡上一併附 §1 第 2 點的**能力落差清單**（⚠️／❌ 的能力與 `AP-n` 降級規則）。
      這不是問題、是知情資訊——讓使用者在決定要不要對齊時看得到代價。
 5. 鐵律（與 gates §3 同條）：**卡未回覆前不得啟用任何模組**。等待期間對應工單轉 `in_review`（或無平台時明確標記等待中）。
@@ -125,8 +128,11 @@ description: 既有開發中專案漸進導入 Foundry 的 workflow（MYL-9 HLD 
    - ⚠️ **舊格式遷移**：盤點盤到 `.foundry/roles.md`（MYL-76 前的格式）時，本步是「轉寫」不是「新建」——
      照原對照表內容填進 `org.yml`，內容有疑義就回卡問，**不得自行補齊原檔沒有的欄位**；
      轉寫完成後 `roles.md` 的處置（刪除或保留為歷史）交使用者裁定。
-   - ⚠️ **這份檔不會把 agent 建出來**：沒有動詞依它去平台上建人（`foundry-ai-platform` §6）。
-     還要人工建哪幾個 agent，列進報告待辦。
+   - ⚠️ **本步到寫完這份檔為止**：把宣告變成平台上真的存在的成員要靠 `provision_team`
+     （`foundry-platform` §8），它不屬於 M4，也不在本模組的查證與回退範圍內。
+     `ai_platform: paperclip` ⇒ 報告的待辦寫「還要跑一次 `provision_team`」，並註明它自有前置閘門
+     （含 `H3` 花錢核可）；`claude-code`／`codex`／未宣告 ⇒ 沒有 agent 註冊表可建，待辦寫的是
+     「哪個**人**扮演哪個角色」，降級走 `AP-4`（`foundry-ai-platform` §6）。
 - **查證**：`org.yml` 存在、對照表與卡上選定一致，且 `--selfcheck` 的 `org-sync` 通過。
 - **回退**：git revert（刪 `org.yml`），role label 慣例即停用；已掛在工單上的 `role:*` label 不強制清除，報告註明即可。
 

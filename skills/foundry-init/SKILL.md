@@ -40,9 +40,16 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
 `skills/foundry-ai-platform/SKILL.md`——**Q2 答完就去查該檔 §3 對照表**，凡是 ⚠️／❌ 的能力，
 在步驟 5 的報告裡逐項列出降級方式（`AP-1`～`AP-6`），不得靜默帶過。
 
-⚠️ **Q4 答「要建團隊」時要誠實講清楚**：`.foundry/org.yml` 目前是**宣告**，
-沒有任何動詞會依它到平台上把 agent 建出來（`foundry-ai-platform` §6）。
-可攜的是那份宣告，不是那支團隊——建人本身仍是平台側的人工動作。
+⚠️ **Q4 答「要建團隊」時要誠實講清楚，而且講法取決於 Q2**：`.foundry/org.yml` 產出來的是一份**宣告**，
+把它變成平台上真的存在的那支團隊要靠 `provision_team`（`foundry-platform` §8），而這個動詞
+**只在有 agent 註冊表的平台跑得動——軸 A 三個值裡只有 `paperclip` 有**。所以：
+
+- Q2 答 `paperclip` ⇒ 講明「之後套用得了，但**本流程不會順手幫你跑**」：該動詞自有前置閘門，
+  其中「建成員會持續燒模型額度」屬 `H3`，第一次在這個專案上跑要另外經使用者核可。
+- Q2 答 `claude-code`／`codex`／不宣告 ⇒ 講明「這份檔產完就到此為止」：它從那一刻起只是一份
+  約束**人**的文件，降級走 `AP-4`（`foundry-ai-platform` §6）。
+
+兩種情況下**可攜的都是那份宣告，不是那支團隊**。
 
 ### 1.2 發卡與前置檢查
 
@@ -132,8 +139,11 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
      只能填第 3 點真的複製過去的檔案（`skills/roles/<id>/SKILL.md` ＋ `skills/foundry-protocol/SKILL.md`）。
      CEO 依 `O3` 不掛第 1 層，它的清單只有自己的角色 skill；那是規範裡的例外，不是漏寫。
    - **不得由 agent 憑空指派角色給不存在的人**。
-   - ⚠️ 產生這份檔**不等於團隊建好了**：沒有動詞會依它到平台上建 agent（見
-     `foundry-ai-platform` §6）。步驟 5 的報告要把「還要人工建哪幾個 agent」列成待辦。
+   - ⚠️ 產生這份檔**不等於團隊建好了**，而「還差什麼」依 `ai_platform` 分兩種寫法：
+     `paperclip` ⇒ 差的是**跑一次 `provision_team`**（`foundry-platform` §8），步驟 5 的報告
+     把它列成待辦並註明它自有前置閘門（含 `H3` 花錢核可），**本步驟不順手跑掉它**；
+     `claude-code`／`codex`／未宣告 ⇒ 沒有 agent 註冊表可建，報告列的是「哪個**人**扮演哪個角色」，
+     降級走 `AP-4`（`foundry-ai-platform` §6）。
 6. 驗證：`.foundry/config.yml` 依 config-schema.md 逐欄檢查合法（必填齊、枚舉值合法、`external_actions` 與 `main_push` 皆 `user`）；複製清單逐檔存在；有產 `org.yml` 時 `org-sync` 通過。
 
 ## 2.5. 步驟 2.5：產生雙入口檔＋機械層閘門（MYL-36 增訂）
