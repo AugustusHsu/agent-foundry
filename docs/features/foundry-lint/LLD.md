@@ -143,6 +143,8 @@ PRD 第 5 節逐條對應（處理位置指第 4 節步驟）：
 
 測試檔：`tools/foundry-lint/test_foundry_lint.py`，**stdlib `unittest`**（不引入 pytest，維持零依賴；執行：`python3 -m unittest discover tools/foundry-lint`）。
 
+> **MYL-91 事實補註**（本節其餘內容維持 MYL-19 交付原樣）：測試檔自 MYL-91 起是**兩份**。上面那份是可攜的一半，`foundry-init` 會複製到目標專案；另一份 `tools/foundry-lint/test_rule_repo.py` 裝的是以 agent-foundry 自身為 fixture 的測試（檔首標 `# FOUNDRY:RULE-REPO-ONLY`），複製清單不帶它。`discover` 兩份都收，執行方式不變。
+
 - **單元測試（直接 import 函式）**：
   - `extract_headings`：抓二級、忽略一／三級；`##` 後多空白；行尾空白；圍欄區塊內 `## ` 行不計；`~~~` 圍欄；重複標題保序。
   - 比對邏輯：缺多項全列出且維持模板順序（FR-1 驗收 3）；額外章節不影響；空文字缺全部。

@@ -86,6 +86,8 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
      要求逐項寫出降級規則。走到 `CAP-8` 就會指過來，缺了這份的目標專案答不出來。
    - `templates/`（全目錄）
    - `tools/foundry-lint/`（全目錄）——機械層閘門的本體，步驟 2.5 的 CI 與 hook 都靠它。
+     ⚠️ 目錄裡有帶 `# FOUNDRY:RULE-REPO-ONLY` 標記的測試檔，那幾個**不複製**，
+     判準與作法見本清單最後那條反向規則（MYL-91）。
    - `tools/model-routing/`（全目錄）——`foundry-model-routing` 步驟 1 的盤點腳本；沒有它，
      那份 workflow 的第一步只能靠猜。
    - `tools/browser-probe/`（全目錄）——`AP-5` 明寫「判級不得憑設定檔外觀，要跑 `make browser`」，
@@ -112,6 +114,22 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
      自身設定，MYL-14 範疇」。那個理由在 MYL-76 之後不成立了——protocol 第 9 節被逐字複製過去，
      而 `org-sync` 把 `org.yml` 的角色集合綁死在那張圖上，目標專案的編制**不是**它自己的決策。
      角色集合既然跟著規範走，實作那組角色的 skill 就必須一起走。
+   - 不複製：上面那幾個 `tools/` 目錄裡，**檔首標了 `# FOUNDRY:RULE-REPO-ONLY` 的測試檔**
+     （MYL-91）。取得方式是機械的，不要另抄一份清單：
+
+     ```bash
+     grep -rl 'FOUNDRY:RULE-REPO-ONLY' tools/     # 複製完把印出來的那幾個檔刪掉
+     ```
+
+     ⚠️ **理由**：那些檔案裝的是「以 agent-foundry 自身為 fixture」的測試——變異
+     `docs/handbook/`、讀 `docs/features/foundry-lint/PRD.md`、斷言 `.foundry/config.yml`
+     的值是規則本體那一份。目標專案依規格沒有這些東西，帶過去的結果是第一次跑
+     `make check` 就 `FAILED (failures=22, errors=26)`（MYL-91 實測）。
+     **反過來，同目錄其餘的測試檔一定要帶**：它們是可攜的那一半，在目標專案全綠；
+     整包不帶的話 `unittest discover` 找不到測試回 exit 5，`make test` 照樣掛（也實測過）。
+     這條界線由 `tools/foundry-lint/test_rule_repo.py` 的
+     `PortableSuiteInTargetProjectTest` 機械把關——寫錯邊會在**規則本體自己**就報紅，
+     而不是等到出現在別人的專案裡。
 4. 逐檔規則：目標檔不存在 → 複製；已存在且內容相同 → 跳過；已存在且不同 → 停止並回報（見 §0）。
 5. **`.foundry/org.yml`（僅步驟 1 Q4 答「要建團隊」時，MYL-78 增訂）**：依 `config-schema.md`
    的 `.foundry/org.yml` 一節產生，欄位含 `foundry_org`／`ai_platform` ＋各角色的

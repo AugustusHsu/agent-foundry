@@ -17,8 +17,6 @@ from pathlib import Path
 
 import site_docs
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
 CONFIG_SAMPLE = """\
 foundry: 2
 devtools_platform: paperclip
@@ -77,12 +75,6 @@ class ParseConfigTest(unittest.TestCase):
 
     def test_頂層鍵不存在回空_dict(self):
         self.assertEqual(site_docs.parse_nested_scalars(CONFIG_SAMPLE, "nope"), {})
-
-    def test_本_repo_真實設定讀得出精裝站那段(self):
-        text = (REPO_ROOT / ".foundry" / "config.yml").read_text(encoding="utf-8")
-        docs = site_docs.parse_nested_scalars(text, "docs")
-        self.assertIn("mirror_site", docs)
-        self.assertIn("tag_pattern", docs["mirror_site"])
 
 
 class DecisionTest(unittest.TestCase):
@@ -164,12 +156,6 @@ class 四碼版本號Test(unittest.TestCase):
         docs = site_docs.parse_nested_scalars(CONFIG_SAMPLE, "docs")
         docs["mirror_site"]["tag_pattern"] = self.GLOB
         return docs
-
-    def test_本_repo_真實設定用的就是四碼_glob(self):
-        """設定檔漂回 `handbook-v*` 的話，下面那些反例會全部失效而沒人發現。"""
-        text = (REPO_ROOT / ".foundry" / "config.yml").read_text(encoding="utf-8")
-        docs = site_docs.parse_nested_scalars(text, "docs")
-        self.assertEqual(docs["mirror_site"]["tag_pattern"], self.GLOB)
 
     def test_位數不足的舊形狀一律不發佈(self):
         for tag in ("handbook-v1", "handbook-v1.1", "handbook-v1.1.1"):
