@@ -1238,11 +1238,12 @@ class CountCellsTest(unittest.TestCase):
 class ParseOrgTest(unittest.TestCase):
     """`.foundry/org.yml` 的 parser：不支援的寫法要**拋錯**，不是靜靜忽略。"""
 
-    def test_真實檔案讀得出九名(self):
+    def test_真實檔案讀得出八名(self):
+        # MYL-115 依 MYL-96 把 Scrum Master 從宣告拿掉（退場），9 名 → 8 名。
         org = foundry_lint.parse_org(
             (REPO_ROOT / foundry_lint.ORG_REL).read_text(encoding="utf-8"))
         self.assertEqual(org["foundry_org"], "1")
-        self.assertEqual(len(org["roles"]), 9)
+        self.assertEqual(len(org["roles"]), 8)
         ceo = org["roles"][0]
         self.assertEqual(ceo["id"], "ceo")
         self.assertEqual(ceo["reports_to"], "user")
@@ -1411,11 +1412,12 @@ class OrgSyncTest(RepoCopyTestCase):
         self.assertTrue(any("model_tier" in f for f in res.failures), res.failures)
 
     def test_掛的_skill_路徑失效被擋下(self):
-        (self.root / "skills/roles/pm/SKILL.md").unlink()
+        (self.root / "skills/roles/product-manager/SKILL.md").unlink()
         res = self._run()
         self.assertFalse(res.passed)
-        self.assertTrue(any("skills/roles/pm/SKILL.md" in f for f in res.failures),
-                        res.failures)
+        self.assertTrue(
+            any("skills/roles/product-manager/SKILL.md" in f for f in res.failures),
+            res.failures)
 
     def test_兩份設定檔的_ai_platform_不一致被擋下(self):
         """反例自己把兩份檔的值都寫定——**不得依賴規則本體現在宣告的是哪一家**。
@@ -1448,12 +1450,15 @@ class OrgSyncTest(RepoCopyTestCase):
         self.assertTrue(any("組織圖" in f for f in res.failures), res.failures)
 
     def test_不比對平台實況(self):
-        """AC7 的回歸守衛：宣告了平台上還不存在的 PM，本項仍然通過。
+        """AC7 的回歸守衛：宣告面與平台面對不上時，本項仍然通過。
 
-        PM 的 agent 要到 MYL-79（T7）才建；期間本檔宣告一個不存在的成員是
-        預期行為。這個測試存在的目的是擋下「順手補一個比對平台的檢查」。
+        原版錨在「宣告了平台上還不存在的 PM」（MYL-79 建置後那個落差已消失）。
+        MYL-115 換成**反方向**的活錨：`.foundry/org.yml` 已依 MYL-96 把
+        Scrum Master 拿掉，而平台上它還在（退場的 `pause` ＋ `leave` 只有使用者
+        按得動，排在後續工單）。兩個方向都不該讓本項變紅——這個測試存在的目的
+        是擋下「順手補一個比對平台的檢查」。
         """
-        self.assertIn("id: pm", self._org())
+        self.assertNotIn("id: scrum-master", self._org())
         self.assertTrue(self._run().passed)
 
     # ── 缺 `title` 不得多報一句不存在的「重複」（MYL-85 AC7）──────────────

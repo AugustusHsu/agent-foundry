@@ -38,12 +38,12 @@
 - **往下走的條件**：
   1. LLD 完成度達標——Developer 讀完不需再做任何設計決策；
   2. 重大選型有 ADR（選項＋取捨＋結論三段齊）；
-  3. 設計定稿經你核可，Scrum Master 才能據以拆單。
+  3. 設計定稿經你核可，Product Manager 才能據以拆單。
 - **Pilot 實際**：MYL-17。HLD／LLD 含 ADR-1～3 技術選型（commit `76f3089`）→ 核可卡 `confirmation:MYL-17:handoff-sm:76f3089`（2026-09-03 核可）→ MYL-18 拆單解除阻塞。
 
-## 第 3 段：拆單（Scrum Master）
+## 第 3 段：拆單（Product Manager）
 
-- **誰**：Scrum Master。
+- **誰**：Product Manager。
 - **產出**：合格工單鏈——每張單過四段骨架判準、單一交付物、可獨立驗收、附設計文件路徑；硬依賴用 `blockedByIssueIds` 掛好。
 - **往下走的條件**：工單四段齊全、Inputs 逐項可存取、依賴鏈沒有環也沒有隱藏前置；Tech Lead 核對拆單能對應回設計文件章節。
 - **Pilot 實際**：MYL-18 拆出 **MYL-19（實作）→ MYL-20（審查）→ MYL-21（測試）** 三張一鏈。

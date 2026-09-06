@@ -58,7 +58,7 @@ Paperclip 的看板、三種檢視（board／table／roadmap 對應清單、表�
        "$PAPERCLIP_API_BASE/api/companies/<CID>/labels" >/dev/null
    }
    for l in type:brd type:prd type:hld type:lld type:impl type:review type:test type:docs; do add_label "$l" "#5319E7"; done
-   for l in role:product-analyst role:scrum-master role:tech-lead role:developer role:code-reviewer role:qa; do add_label "$l" "#0E8A16"; done
+   for l in role:ceo role:product-manager role:product-analyst role:frontend-verifier role:tech-lead role:developer role:code-reviewer role:qa; do add_label "$l" "#0E8A16"; done
    for l in size:small size:medium size:large; do add_label "$l" "#FBCA04"; done
    ```
 
@@ -228,7 +228,7 @@ Product Analyst 與 Scrum Master **都是 `pm`**。`role` 只影響平台 UI 分
 | --- | --- | --- | --- |
 | `CEO` | `CEO` | `CEO`（**MYL-79 AC5 之前為 `null`**） | ✅ 對得上。**`null` 的那個時點正是不能拿平台 `title` 當鍵的證據**——CEO 是樹根（`reports_to: user`），而 §8.2 要求由上而下建置，用 `title` 當鍵的話第一個動作就是在樹根建出第二個 CEO。⚠️ 現在補上了**不代表論點失效**：`title` 是 `nullable: true` 的選填欄位（附錄 B），任何新專案的樹根都會從 `null` 起步 |
 | `Developer` | `Developer` | **`Developer（全端）`** | ✅ 對得上。顯示名與宣告不一致屬 §8.2 的**第五種差異**：只報告，不自動改。**這是現在唯一剩下的那一項差異** |
-| `PM` | `PM` | `PM` | ✅ 現已對得上（MYL-79 依步驟 1 建置）。**建置前**這一格是「缺的」那一堆，且是**預期的**——規範先於平台，處置見 protocol `O1` 第 1 種情形與 `O4` |
+| `PM` | `PM` | `PM` | ✅ 現已對得上（MYL-79 依步驟 1 建置）。⚠️ **這三格記的是 2026-09-06 MYL-79 當下的實測值；同日 MYL-115 已依 MYL-96 把它正名為 `Product Manager`**，本表不回頭改寫實測紀錄。**建置前**這一格是「缺的」那一堆，且是**預期的**——規範先於平台，處置見 protocol `O1` 第 1 種情形與 `O4` |
 
 其餘 6 個角色三欄一致，無差異。上表是**全公司逐名核對的完整結果**，不是舉例；`title` 欄記的
 是 **2026-09-06 MYL-79 收工後**的狀態，括號內為該單改動前的觀測值。
@@ -284,7 +284,7 @@ curl -s -X PATCH "${AUTH[@]}" \
 
 - `org.yml` 的 `model_tier` → foundry-protocol 第 8 節「三層預設」→ 具體 `model`／`effort`。**權威是第 8 節，不是本檔**（本檔不複製那張對照表，複製了就會過期）。
 - ⚠️ **`adapterConfig` 的 PATCH 是合併語意**（要整批換得另外送 `replaceAdapterConfig: true`）。所以這一步不會洗掉步驟 3 寫進去的 `paperclipSkillSync`，反之亦然——但也因此**送錯的鍵不會被清掉**，只會多一個沒人用的欄位。
-- ⚠️ 第 8 節裡標為**建議值**的格（現為 PM 那一列），依「絕不自作主張採用建議值」，**未經使用者核可不得據以設定平台**。宣告在 `org.yml` 裡不等於核可。
+- ⚠️ 第 8 節裡標為**建議值**的格，依「絕不自作主張採用建議值」，**未經使用者核可不得據以設定平台**。宣告在 `org.yml` 裡不等於核可。**目前一格都沒有**：曾經唯一的那一格（PM 的模型層）已由使用者於 MYL-79 卡 `0bd69c99` Q1 裁定改判為中層。
 
 ### 查證與它的兩個邊界
 

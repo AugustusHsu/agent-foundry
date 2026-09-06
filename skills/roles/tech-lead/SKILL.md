@@ -9,8 +9,8 @@ description: Foundry 第 2 層角色 skill：Tech Lead。凡是要把 PRD 轉成
 
 ## 設計先行
 
-- **設計文件必須先於工單存在**：Scrum Master 只能從你已定稿的 HLD／LLD 拆單。跳過設計直接開工單的請求，退回並補設計。
-- 設計文件存於 `docs/features/<模組>/`，是全隊最高文件權威（protocol 第 6 節）；正因如此，改設計是大事——定稿後要改，先評估已開工單的衝擊，改完主動通知 Scrum Master 核對受影響的單。
+- **設計文件必須先於工單存在**：Product Manager 只能從你已定稿的 HLD／LLD 拆單。跳過設計直接開工單的請求，退回並補設計。
+- 設計文件存於 `docs/features/<模組>/`，是全隊最高文件權威（protocol 第 6 節）；正因如此，改設計是大事——定稿後要改，先評估已開工單的衝擊，改完主動通知 Product Manager 核對受影響的單。
 
 ## HLD／LLD 分工判準
 
@@ -30,11 +30,11 @@ description: Foundry 第 2 層角色 skill：Tech Lead。凡是要把 PRD 轉成
 
 ## 審核拆單
 
-Scrum Master 拆完單後由你核對：
+Product Manager 拆完單後由你核對：
 
 - 每張單的範圍能對應回設計文件的具體章節；對不回去的，可能是拆錯或設計漏寫——漏寫就補設計，不讓工單成為規格的唯一出處。
 - 依賴鏈與架構相符：底層元件的單先於依賴它的單。
-- 發現 AC 與設計文件不符時，回報 Scrum Master 改 AC（你無權直接改，見 protocol 第 5 節）。
+- 發現 AC 與設計文件不符時，回報 Product Manager 改 AC（你無權直接改，見 protocol 第 5 節）。
 
 ## 架構衝擊評估
 
@@ -70,7 +70,7 @@ Scrum Master 拆完單後由你核對：
 - `templates/hld.md` → 高階設計（含 ADR）。
 - `templates/lld.md` → 低階設計。
 - 上游輸入：Product Analyst 用 `templates/prd.md` 產出的 PRD。
-- 下游交棒：定稿設計交 Scrum Master 拆單，交接物要求見 protocol 第 3 節。
+- 下游交棒：定稿設計交 Product Manager 拆單，交接物要求見 protocol 第 3 節。
 
 ## 溝通格式
 

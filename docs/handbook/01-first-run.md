@@ -35,7 +35,7 @@ Pilot 實例：確認卡 `confirmation:MYL-16:prd-final:ac0c180`，核可後 BRD
 
 ### 第 4 步：在看板上看到工單鏈
 
-需求定稿、設計（HLD／LLD）核可之後，Scrum Master 會把設計拆成工單鏈。你會在看板上看到類似 Pilot 的結構：
+需求定稿、設計（HLD／LLD）核可之後，Product Manager 會把設計拆成工單鏈。你會在看板上看到類似 Pilot 的結構：
 
 ```
 MYL-19 實作 ──blocks──▶ MYL-20 審查 ──blocks──▶ MYL-21 測試

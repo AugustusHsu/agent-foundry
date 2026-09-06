@@ -108,7 +108,7 @@ python3 tools/model-routing/probe_providers.py --format json
 | 規格明確的實作 | Developer | 可批量、非同步；**與審查方異廠**（`M4`） |
 | 審查 | Code Reviewer | 與實作方異廠（`M4`），這是本 workflow 的主要動機 |
 | 補測試／跑測試 | QA Engineer | 產出可機械驗證，異廠風險低 |
-| 機械性流轉 | Scrum Master | 規格明確，對供應商最不敏感 |
+| 機械性流轉 | Product Manager | 規格明確，對供應商最不敏感 |
 
 ### 3.2 硬約束
 
