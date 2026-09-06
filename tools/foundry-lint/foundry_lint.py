@@ -1140,8 +1140,17 @@ CONFIG_SCHEMA_CURRENT_RE = re.compile(r"目前固定 `(\d+)`")
 CONFIG_SCHEMA_FIELD_RE = re.compile(r"^`([a-z][a-z0-9_]*)`$")
 #: 「版本沿革」表第一欄的版本號（`` `2` ``）。
 CONFIG_SCHEMA_VERSION_CELL_RE = re.compile(r"^`(\d+)`$")
-#: 必填欄的字面（非必填寫 `─`）。
+#: 必填欄的字面（非必填寫 `─`）。整格比對，所以**表裡只准出現這兩種寫法**：加任何
+#: 註記（`✅（見下）`）就會讓該欄位靜靜掉出必填集合，而必填集合同時是
+#: `foundry_config_fences()` 判準第 3 層的證據集，它縮小 ⇒ 舊欄位名掃描的覆蓋跟著
+#: 無聲變窄。認不得的第三種寫法由 `check_config_schema()` 的形狀守衛報紅。
 CONFIG_SCHEMA_REQUIRED_MARK = "✅"
+CONFIG_SCHEMA_OPTIONAL_MARK = "─"
+CONFIG_SCHEMA_REQUIRED_MARKS = (CONFIG_SCHEMA_REQUIRED_MARK, CONFIG_SCHEMA_OPTIONAL_MARK)
+#: 型別欄標這個字面的欄位，一定要讀得出值域——拿它當 `CONFIG_SCHEMA_ENUM_RE` 的對照
+#: 物（同樣由形狀守衛報紅）。少了對照，把分隔符從 `｜` 改成別的寫法會讓值域整組
+#: 靜默消失，而其餘檢查照常運作、紅綠完全無異狀。
+CONFIG_SCHEMA_ENUM_TYPE = "枚舉"
 #: 說明欄**開頭**那一串 `a｜b｜c` ＝ 枚舉值域。只認開頭、不掃整格：說明文字裡本來
 #: 就到處是反引號（其他欄位名、檔案路徑、規則 ID、工單編號），掃整格會把它們全收
 #: 成「合法值」，那樣的值域擋不住任何東西。
@@ -1199,6 +1208,23 @@ def parse_schema_fields(text: str) -> dict:
         if m:
             fields[m.group(1)] = (cells[2] == CONFIG_SCHEMA_REQUIRED_MARK, cells[3])
     return fields
+
+
+def parse_schema_marks(text: str) -> dict:
+    """同一張表 → `{欄位名: (型別欄原文, 必填欄原文)}`。只給形狀守衛用。
+
+    另開一個函式而不是把 `parse_schema_fields()` 的二元組擴成三元組：那個回傳值
+    有數處在做 `(req, desc)` 解包，改 arity 會一起壞，而這兩格只有守衛需要原文。
+    """
+    marks: dict = {}
+    for row in first_table_rows(section_lines(text, CONFIG_SCHEMA_TOP_HEADING)):
+        cells = table_cells(row)
+        if len(cells) < 4:
+            continue
+        m = CONFIG_SCHEMA_FIELD_RE.match(cells[0])
+        if m:
+            marks[m.group(1)] = (cells[1], cells[2])
+    return marks
 
 
 def parse_schema_enums(fields: dict) -> dict:
@@ -1322,6 +1348,11 @@ def check_config_schema(root: Path) -> SelfcheckResult:
     `.foundry/config.yml` 與 `config.example.yml` 兩份都驗，理由見
     `CONFIG_EXAMPLE_REL` 的註解。
 
+    上面四件事全靠「讀得懂 config-schema.md 那張表」，所以另有一道**形狀守衛**：
+    不只擋「整表讀不出來」，也擋「只讀錯一格」（必填欄出現第三種字面、型別標
+    「枚舉」卻讀不出值域）。少了它，改 schema 時最可能發生的那兩種編輯會讓本項的
+    一部分靜默失效而仍然全綠——那正是本項存在要防的事（MYL-111 審查 §3）。
+
     **本項不跳過目標專案**：兩份設定檔與 config-schema.md 都在 `foundry-init` 的
     複製範圍內，對照端在目標專案照樣存在——而目標專案正是最需要這道把關的地方
     （導入時抄到舊欄位名，讀取端只會說「缺必填欄位」）。
@@ -1345,6 +1376,50 @@ def check_config_schema(root: Path) -> SelfcheckResult:
         )
         return res
     enums = parse_schema_enums(fields)
+
+    # 形狀守衛：上面那道 `not fields or not required` 擋得住「整表讀不出來」，擋不住
+    # **只讀錯一格**——而本項存在的理由就是「設定欄位錯了不會有任何聲音」，讀 schema
+    # 的方式自己有這個失效點就自打嘴巴（MYL-111 審查 §3）。表裡的兩格各配一個對照物：
+    #   - 必填欄：字面限定 `✅`／`─`。出現第三種寫法時，該欄位會靜靜掉出必填集合，
+    #     接著「缺必填欄位」那一半與舊欄位名掃描的覆蓋一起無聲變窄。
+    #   - 型別欄：標「枚舉」卻讀不出值域 ⇒ 說明欄的分隔符被改寫了（`｜` → `/`、頓號…）。
+    #     那會讓值域與 `org.yml` 的 `ai_platform` 整組消失，而本項照樣印 ✅。
+    # 兩者都是「schema 的形狀漂了」，先修 schema 再談設定檔，所以報完就 return。
+    for name, (typ, mark) in parse_schema_marks(schema_text).items():
+        if mark not in CONFIG_SCHEMA_REQUIRED_MARKS:
+            res.failures.append(
+                f"{CONFIG_SCHEMA_REL}「{CONFIG_SCHEMA_TOP_HEADING}」表 `{name}` 的"
+                f"必填欄寫成 {mark!r}——本檢查是拿整格字面判必填的，只認 "
+                f"{'／'.join(CONFIG_SCHEMA_REQUIRED_MARKS)}。加了註記的那一格會讓"
+                "該欄位靜靜掉出必填集合，缺欄位與舊欄位名兩半的覆蓋跟著變窄"
+            )
+        if typ == CONFIG_SCHEMA_ENUM_TYPE and name not in enums:
+            res.failures.append(
+                f"{CONFIG_SCHEMA_REL}「{CONFIG_SCHEMA_TOP_HEADING}」表 `{name}` 的"
+                f"型別是「{CONFIG_SCHEMA_ENUM_TYPE}」，說明欄卻讀不出值域——值域要"
+                "寫成開頭那一串 `` `a`｜`b`｜`c` ``（全形分隔符）或「值域同 `x`」。"
+                "換成別的寫法不會有任何聲音：值域整組消失，本項仍然全綠"
+            )
+    # `RETIRED_CONFIG_FIELDS` 是手維護的（取捨見它的註解），配一條廉價後盾：現名一定
+    # 在表裡、舊名一定不在。映射寫反、或現名日後又被正名一次而沒回頭改這份清單時，
+    # 當場報紅而不是讓「舊欄位名」那一半指著一個不存在的名字。
+    for old, new in sorted(RETIRED_CONFIG_FIELDS.items()):
+        if new not in fields:
+            res.failures.append(
+                f"`RETIRED_CONFIG_FIELDS` 說 `{old}` 的現名是 `{new}`，但 "
+                f"{CONFIG_SCHEMA_REL} 的「{CONFIG_SCHEMA_TOP_HEADING}」表沒有 "
+                f"`{new}`——不是映射寫反，就是它自己又被正名一次而沒回頭改這份清單"
+            )
+        if old in fields:
+            res.failures.append(
+                f"`RETIRED_CONFIG_FIELDS` 把 `{old}` 當已正名掉的舊名，"
+                f"{CONFIG_SCHEMA_REL} 卻還把它列成現行欄位——兩邊講的不是同一件事"
+            )
+    # 形狀守衛與這條後盾一起結算：兩者都是「schema 那張表已經對不上程式的讀法」，
+    # 而改一格常常同時觸發兩邊（把現名改掉 ⇒ 借用它值域的欄位也解不到）。先把
+    # schema 修好再談設定檔，所以此處報完就 return。
+    if res.failures:
+        return res
 
     declared, latest = parse_schema_versions(schema_text)
     if not declared or not latest:
@@ -1436,8 +1511,10 @@ def check_config_schema(root: Path) -> SelfcheckResult:
                     f"`{RETIRED_CONFIG_FIELDS[key]}`——照這段抄出來的設定檔會缺必填"
                     "欄位而整檔非法，而讀取端只會說「缺欄位」，不會說「你抄到的是舊名」"
                 )
-    res.summary += (f"（schema v{declared}、{len(required)} 個必填欄位，"
-                    f"掃 {scanned} 份文件）")
+    # 值域數也印出來：值域靜默消失（分隔符改寫）除了形狀守衛擋一道，摘要行上也會
+    # 當場現形——成本一個數字（MYL-111 審查 §4-4）。
+    res.summary += (f"（schema v{declared}、{len(required)} 個必填欄位、"
+                    f"{len(enums)} 組值域，掃 {scanned} 份文件）")
     return res
 
 

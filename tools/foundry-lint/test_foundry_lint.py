@@ -1601,6 +1601,102 @@ class ConfigSchemaTest(RepoCopyTestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("自己就不一致" in f for f in res.failures), res.failures)
 
+    # ── 形狀守衛：不只擋「整表讀不出來」，也要擋「只讀錯一格」（MYL-111 §3）──
+    def _enum_field(self):
+        """型別標「枚舉」而且真的讀得出值域的欄位——本組反例的兩端都從它算。"""
+        enums = foundry_lint.parse_schema_enums(self._fields())
+        marks = foundry_lint.parse_schema_marks(self._schema())
+        names = [n for n in sorted(enums)
+                 if marks.get(n, ("", ""))[0] == foundry_lint.CONFIG_SCHEMA_ENUM_TYPE]
+        self.assertTrue(names, "schema 一個「枚舉」型別的欄位都讀不出來——反例無從構造")
+        return names[0]
+
+    def test_值域的分隔符被改寫時擋下(self):
+        """`｜` 換成別的寫法 ⇒ `parse_schema_enums()` 讀空，值域整組靜默消失。
+
+        實測過（審查 §3-1）：改完之後 `devtools_platform: 香蕉` 與 `org.yml` 的
+        `ai_platform: banana` **兩個一起放行**，本項仍 `passed=True`。型別欄已經
+        寫著「枚舉」，拿它當對照物就叫得出來。
+        """
+        name = self._enum_field()
+        enums = foundry_lint.parse_schema_enums(self._fields())
+        fullwidth = "｜".join(f"`{v}`" for v in enums[name])
+        halfwidth = " / ".join(f"`{v}`" for v in enums[name])
+        schema = self._schema()
+        self.assertIn(fullwidth, schema, f"`{name}` 的值域不是預期的寫法——反例沒造出來")
+        self.write(foundry_lint.CONFIG_SCHEMA_REL,
+                   schema.replace(fullwidth, halfwidth, 1))
+        # 反例要證明的是「改了寫法就沒人擋」，所以連值域外的值一起塞進去：
+        # 舊實作在這個組合下是全綠的。
+        self.write(foundry_lint.CONFIG_REL,
+                   re.sub(rf"^{name}:.*$", f"{name}: 香蕉", self._config(), flags=re.M))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(f"`{name}`" in f and "讀不出值域" in f for f in res.failures),
+                        res.failures)
+
+    def test_值域借用解不到時也擋下(self):
+        """「值域同 `x`」是第二種來源，寫錯一樣是靜默漏掉。
+
+        只釘直接宣告那一種的話，把借用寫成「值域同 `打錯的名字`」照樣全綠。
+        """
+        marks = foundry_lint.parse_schema_marks(self._schema())
+        enums = foundry_lint.parse_schema_enums(self._fields())
+        alias = [n for n, (_, desc) in self._fields().items()
+                 if n in enums
+                 and marks.get(n, ("", ""))[0] == foundry_lint.CONFIG_SCHEMA_ENUM_TYPE
+                 and foundry_lint.CONFIG_SCHEMA_ENUM_ALIAS_RE.search(desc)
+                 and not foundry_lint.CONFIG_SCHEMA_ENUM_RE.match(desc)]
+        self.assertTrue(alias, "schema 沒有借用型的值域——反例無從構造")
+        name = alias[0]
+        borrowed = foundry_lint.CONFIG_SCHEMA_ENUM_ALIAS_RE.search(
+            self._fields()[name][1]).group(1)
+        self.write(foundry_lint.CONFIG_SCHEMA_REL,
+                   self._schema().replace(f"值域同 `{borrowed}`",
+                                          f"值域同 `{borrowed}_打錯字`", 1))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(f"`{name}`" in f and "讀不出值域" in f for f in res.failures),
+                        res.failures)
+
+    def test_必填欄加註記時擋下(self):
+        """必填欄是拿**整格字面**比對的，`✅（見下）` 會讓該欄位靜靜掉出必填集合。
+
+        實測過（審查 §3-2）：改完之後把 `.foundry/config.yml` 的那一欄整行刪掉，
+        本項仍 `passed=True`；而必填集合同時是 `foundry_config_fences()` 判準第 3
+        層的證據集，它縮小 ⇒ 舊欄位名掃描的覆蓋跟著無聲變窄。
+        """
+        name = self._required()[0]
+        row = f"| `{name}` |"
+        schema = self._schema()
+        self.assertIn(row, schema, f"`{name}` 不在欄位表第一格——反例沒造出來")
+        head, sep, tail = schema.partition(row)
+        line, nl, rest = tail.partition("\n")
+        marked = line.replace(f" {foundry_lint.CONFIG_SCHEMA_REQUIRED_MARK} |",
+                              f" {foundry_lint.CONFIG_SCHEMA_REQUIRED_MARK}（見下） |", 1)
+        self.assertNotEqual(marked, line, "必填格不是預期的寫法——反例沒造出來")
+        self.write(foundry_lint.CONFIG_SCHEMA_REL, head + sep + marked + nl + rest)
+        # 同時把設定檔那一欄拿掉：舊實作在這個組合下是全綠的。
+        self.write(foundry_lint.CONFIG_REL,
+                   re.sub(rf"^{name}:.*$", "", self._config(), flags=re.M))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(f"`{name}`" in f and "必填欄寫成" in f for f in res.failures),
+                        res.failures)
+
+    def test_舊欄位名映射的現名一定在表裡(self):
+        """`RETIRED_CONFIG_FIELDS` 手維護，配一條廉價後盾（審查 §4-5）。"""
+        retired = self._retired()
+        current = foundry_lint.RETIRED_CONFIG_FIELDS[retired]
+        row = f"| `{current}` |"
+        self.assertIn(row, self._schema(), f"`{current}` 不在欄位表——後盾無從構造")
+        self.write(foundry_lint.CONFIG_SCHEMA_REL,
+                   self._schema().replace(row, f"| `{current}_改過名` |", 1))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("RETIRED_CONFIG_FIELDS" in f and f"`{current}`" in f
+                            for f in res.failures), res.failures)
+
     def test_欄位表讀不出來時報紅而不是靜靜通過(self):
         self.write(foundry_lint.CONFIG_SCHEMA_REL,
                    self._schema().replace(
