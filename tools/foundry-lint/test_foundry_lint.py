@@ -1110,6 +1110,33 @@ class OrgSyncTest(RepoCopyTestCase):
     def _org(self):
         return (self.root / foundry_lint.ORG_REL).read_text(encoding="utf-8")
 
+    def _set_ai(self, text, value, anchor):
+        """把 `text` 的頂層 `ai_platform:` 設成 `value`；原本沒有就插在 `anchor` 行後面。
+
+        其餘內容原封不動——反例只想動這一欄。`anchor` 是各檔一定存在的版本欄
+        （`foundry:` / `foundry_org:`），插在它後面才不會掉進某個縮排區塊裡。
+        """
+        out, seen = [], False
+        for line in text.splitlines(True):
+            if line.startswith("ai_platform:"):
+                out.append("ai_platform: %s\n" % value)
+                seen = True
+            else:
+                out.append(line)
+        if seen:
+            return "".join(out)
+        hits = [i for i, ln in enumerate(out) if ln.startswith(anchor)]
+        self.assertTrue(hits, "找不到錨點 `%s`——這兩份檔的形狀變了" % anchor)
+        out.insert(hits[0] + 1, "ai_platform: %s\n" % value)
+        return "".join(out)
+
+    def _config_with_ai(self, value):
+        text = (self.root / foundry_lint.CONFIG_REL).read_text(encoding="utf-8")
+        return self._set_ai(text, value, "foundry:")
+
+    def _org_with_ai(self, value):
+        return self._set_ai(self._org(), value, "foundry_org:")
+
     def test_真實_repo_通過(self):
         res = self._run()
         self.assertTrue(res.passed, res.failures)
@@ -1176,11 +1203,25 @@ class OrgSyncTest(RepoCopyTestCase):
         self.assertTrue(any("do_anything" in f for f in res.failures), res.failures)
 
     def test_兩份設定檔的_ai_platform_不一致被擋下(self):
-        self.write(foundry_lint.ORG_REL,
-                   self._org().replace("ai_platform: paperclip", "ai_platform: codex"))
+        """反例自己把兩份檔的值都寫定——**不得依賴規則本體現在宣告的是哪一家**。
+
+        原版寫死 `paperclip → codex`（agent-foundry 自己的值）。目標專案合法宣告
+        `codex` 時 `.replace()` 是 no-op、`org-sync` 於是通過，這條就假紅；
+        config.yml 整欄不寫（Q2 答「不宣告」，也是合法）時比對根本不觸發，一樣假紅。
+        兩種都是本檔身為**可攜那一半**不該有的依賴（MYL-91 第 1 輪審查瑕疵 1，實測過）。
+        """
+        self.write(foundry_lint.CONFIG_REL, self._config_with_ai("paperclip"))
+        self.write(foundry_lint.ORG_REL, self._org_with_ai("codex"))
         res = self._run()
         self.assertFalse(res.passed)
         self.assertTrue(any("ai_platform" in f for f in res.failures), res.failures)
+
+    def test_兩份設定檔的_ai_platform_一致就通過(self):
+        """上一條的對照組：確認它紅是因為「不一致」，不是因為反例把檔案寫壞了。"""
+        self.write(foundry_lint.CONFIG_REL, self._config_with_ai("codex"))
+        self.write(foundry_lint.ORG_REL, self._org_with_ai("codex"))
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
 
     def test_組織圖讀不出來時報紅而不是靜靜通過(self):
         """比對基準的形狀變了要擋下——靜靜通過等於這項檢查從此不存在。"""

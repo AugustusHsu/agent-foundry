@@ -136,7 +136,13 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
      整包不帶的話 `unittest discover` 找不到測試回 exit 5，`make test` 照樣掛（也實測過）。
      這條界線由 `tools/foundry-lint/test_rule_repo.py` 的
      `PortableSuiteInTargetProjectTest` 機械把關——寫錯邊會在**規則本體自己**就報紅，
-     而不是等到出現在別人的專案裡。
+     而不是等到出現在別人的專案裡。它的作法是把 repo 副本削成目標專案的形狀
+     （刪掉本清單沒列的路徑），再把 `.foundry/` 兩份檔換成目標專案自己的宣告——
+     後者不能省：**寫錯邊有兩種形狀**，讀規則本體才有的檔案是一種，斷言規則本體
+     設定檔的**值**是另一種，只削路徑抓不到第二種。
+     ⚠️ 那個構造**仍是近似**，權威是本清單；最終證據是照本清單手動組 fixture 跑整條
+     `make check`。近似要往「比真實目標專案更貧瘠」偏——偏鬆的代價實測過，
+     MYL-91 第 1 輪審查就是從這個網眼撈出一格寫死的值。
 4. 逐檔規則：目標檔不存在 → 複製；已存在且內容相同 → 跳過；已存在且不同 → 停止並回報（見 §0）。
 5. **`.foundry/org.yml`（僅步驟 1 Q4 答「要建團隊」時，MYL-78 增訂）**：依 `config-schema.md`
    的 `.foundry/org.yml` 一節產生，欄位含 `foundry_org`／`ai_platform` ＋各角色的

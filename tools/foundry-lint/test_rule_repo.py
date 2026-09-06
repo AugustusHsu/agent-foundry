@@ -16,9 +16,18 @@ MYL-87 就刻意做成兩層。本檔這批屬於後者、而且做不出第二�
 單層跳過的失效方向是「規則本體少了 `skills/foundry-init/` ⇒ 48 條一起靜默變 ⏭」，
 正是判準①要擋的。分檔則讓它們在規則本體**無條件執行**，沒有旗標可以關掉。
 
-放進本檔的判準：**依賴 repo 裡預先存在的 `docs/`**。自己造反例寫檔不算
-（`RepoCopyTestCase` 那批留在可攜檔）。界線由本檔的
-`PortableSuiteInTargetProjectTest` 機械把關。
+放進本檔的判準：**依賴規則本體預先存在的內容**——兩種形狀都算，
+①`docs/` 等不在複製清單上的素材；②`.foundry/` 兩份設定檔的**實際值**。
+自己造反例寫檔不算（`RepoCopyTestCase` 那批留在可攜檔）。
+
+⚠️ ②是 MYL-91 第 1 輪審查補進來的：原本只寫 ①，於是「可攜檔裡寫死
+`ai_platform: paperclip`」這一格從網眼漏掉，宣告 `codex` 的目標專案照樣紅。
+形狀相近但**不**屬於本檔的例子：反例自己把兩份檔的值都寫定（不管現值是什麼），
+那是可攜的——`OrgSyncTest` 的 `ai_platform` 那兩條就是。
+
+界線由本檔的 `PortableSuiteInTargetProjectTest` 機械把關，兩件事一起做：
+把 root 削成目標專案的形狀（`ABSENT_IN_TARGET`），以及把 `.foundry/` 換成
+目標專案自己的宣告（`_retarget_foundry_dir`）——少了後者，②整類都逃得掉。
 """
 # FOUNDRY:RULE-REPO-ONLY —— 本檔以 agent-foundry 自身為 fixture，foundry-init 不複製它
 
@@ -769,14 +778,40 @@ class PortableSuiteInTargetProjectTest(unittest.TestCase):
     #: （本測試、`build-fixture`／init 的複製動作、複製清單的敘述）自動跟上。
     RULE_REPO_ONLY_MARK = "FOUNDRY:RULE-REPO-ONLY"
 
-    #: 目標專案不會有的頂層路徑，依 `skills/foundry-init/SKILL.md` §2 第 3 點——
+    #: 目標專案不會有的頂層路徑，依 `skills/foundry-init/SKILL.md` §2 第 3 點與 §2.5——
     #: 清單沒列到的就不會被複製過去。`docs/` 是關鍵的那一個（規則本體專屬那批測試
-    #: 要的素材全在裡面）；其餘幾條一併刪掉是為了讓形狀更接近真的目標專案。
-    #: ⚠️ 這份是**近似**，權威仍是複製清單本身。最終證據是照複製清單手動組 fixture
-    #: 跑整條 `make check`（MYL-91 AC2）；本測試是日常回歸的第一道，它的失效方向是
-    #: 「構造得比真實目標專案寬鬆 ⇒ 可能漏抓」，不是誤擋。
+    #: 要的素材全在裡面），其餘幾條是為了讓形狀真的接近目標專案。
+    #: ⚠️ 這份仍是**近似**，權威是複製清單本身；最終證據是照清單手動組 fixture 跑
+    #: 整條 `make check`（MYL-91 AC2）。但近似要往「比真實目標專案更貧瘠」的方向偏，
+    #: 偏鬆的代價是實測過的：只刪頭四條時，`skills/foundry-adopt/` 與「讀真設定檔的
+    #: **值**」兩種寫錯邊都能逃過守門（MYL-91 第 1 輪審查瑕疵 2）。
+    #: `.gitignore` 刻意不列——複製清單沒帶它，但目標專案幾乎一定有自己那份。
     ABSENT_IN_TARGET = ("docs", "scripts", ".github", "mkdocs.yml",
+                        "README.md", ".claude", ".mcp.json",
+                        "skills/foundry-adopt",
                         foundry_lint.RULE_REPO_MARKER_REL)
+
+    #: 目標專案形狀的 `.foundry/config.yml`：**存在但值不一樣**，這是 `ABSENT_IN_TARGET`
+    #: 表達不了的那一格。init 產出的是這個形狀（§2 第 2 點）——每一欄都刻意選成與
+    #: agent-foundry 自己那份不同的合法值，好讓「斷言真設定檔的值」在守門就報紅。
+    TARGET_CONFIG = (
+        "# 目標專案形狀的最小設定，由 PortableSuiteInTargetProjectTest 產生。\n"
+        "foundry: 2\n"
+        "devtools_platform: local-md\n"
+        "ai_platform: codex\n"
+        "platform_options:\n"
+        "  local-md:\n"
+        "    id_prefix: FND\n"
+        "gates:\n"
+        "  spec_approval: user\n"
+        "  design_approval:\n"
+        "    approver: user\n"
+        "  external_actions: user\n"
+        "push:\n"
+        "  branch_push: user\n"
+        "  main_push: user\n"
+    )
+    TARGET_AI_PLATFORM = "codex"
 
     def _marked_files(self, root):
         """`root` 底下所有帶標記的測試檔（相對路徑）。"""
@@ -791,6 +826,28 @@ class PortableSuiteInTargetProjectTest(unittest.TestCase):
         return foundry_lint.makefile_tools_dirs(
             (root / foundry_lint.MAKEFILE_REL).read_text(encoding="utf-8"))
 
+    def _retarget_foundry_dir(self, root):
+        """`.foundry/` 換成目標專案自己的宣告——它是**存在但值不同**的那一類。
+
+        刪掉不對（目標專案一定有 `config.yml`，`org-sync`／`mirror-recon` 都要讀它），
+        原封不動也不對（那正好讓「斷言 `devtools_platform == 'paperclip'`」這種寫錯邊
+        的測試在守門通過、到別人的專案才爆）。
+        `org.yml` 只動 `ai_platform` 一欄：其餘欄位是 protocol 第 9／8 節的投影，
+        目標專案照樣是那張圖（`O1`），改了反而不像真的。
+        """
+        (root / foundry_lint.CONFIG_REL).write_text(self.TARGET_CONFIG, encoding="utf-8")
+        org_path = root / foundry_lint.ORG_REL
+        org = org_path.read_text(encoding="utf-8")
+        cur = foundry_lint.parse_org(org)["ai_platform"]
+        self.assertNotEqual(
+            cur, self.TARGET_AI_PLATFORM,
+            "規則本體自己也宣告 %s 了——換一個值，否則這格構造不出「值不同」"
+            % self.TARGET_AI_PLATFORM)
+        org_path.write_text(
+            org.replace("ai_platform: " + cur,
+                        "ai_platform: " + self.TARGET_AI_PLATFORM),
+            encoding="utf-8")
+
     def _target_root(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -804,6 +861,7 @@ class PortableSuiteInTargetProjectTest(unittest.TestCase):
             self.assertTrue(path.exists(),
                             f"{rel} 在規則本體就不存在——這份清單漂了，要回頭對複製清單")
             shutil.rmtree(path) if path.is_dir() else path.unlink()
+        self._retarget_foundry_dir(root)
         marked = self._marked_files(root)
         self.assertIn("tools/foundry-lint/test_rule_repo.py", marked,
                       "本檔沒有帶標記——留在 root 裡子程序會再跑一次本測試＝無限遞迴")
@@ -830,20 +888,53 @@ class PortableSuiteInTargetProjectTest(unittest.TestCase):
                 self.assertNotIn("NO TESTS RAN", proc.stderr)
                 self.assertRegex(proc.stderr, r"Ran \d+ tests")
 
+    #: 三種「寫錯邊」的形狀，各配一個注入可攜檔的反例。三條都是實測過會逃過
+    #: 收緊前那版守門的（MYL-91 第 1 輪審查瑕疵 2）：只刪 `docs`／`scripts`／
+    #: `.github`／`mkdocs.yml`／`skills/foundry-init` 的話，下面第 2、3 條照樣綠。
+    #: 第 3 條就是 `RealConfigTest` 被搬走的**那一條原文**——有人把它搬回可攜檔，
+    #: 守門必須有反應。
+    WRONG_SIDE_PROBES = (
+        ("讀規則本體才有的_PRD",
+         "        (REPO_ROOT / 'docs' / 'features' / 'foundry-lint'\n"
+         "         / 'PRD.md').read_text(encoding='utf-8')\n",
+         "FileNotFoundError"),
+        ("讀不會被複製過去的_skill",
+         "        (REPO_ROOT / 'skills' / 'foundry-adopt'\n"
+         "         / 'SKILL.md').read_text(encoding='utf-8')\n",
+         "FileNotFoundError"),
+        ("斷言真設定檔的值",
+         "        cfg = foundry_lint.read_config(REPO_ROOT)\n"
+         "        assert cfg['devtools_platform'] == 'paperclip', cfg\n",
+         "AssertionError"),
+    )
+
     def test_把規則本體專屬的測試寫進可攜檔會被擋下(self):
         """反例：沒有它，上一條可能只是因為 root 構造得太寬鬆才綠。"""
+        for name, body, expected in self.WRONG_SIDE_PROBES:
+            with self.subTest(probe=name):
+                root = self._target_root()
+                portable = root / "tools" / "foundry-lint" / "test_foundry_lint.py"
+                portable.write_text(
+                    portable.read_text(encoding="utf-8")
+                    + "\n\nclass WrongFileCounterExampleTest(unittest.TestCase):\n"
+                      "    def test_反例_%s(self):\n" % name
+                    + body,
+                    encoding="utf-8")
+                proc = self._discover(root, "foundry-lint", "-k", "反例")
+                self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                self.assertIn(expected, proc.stderr)
+
+    def test_目標專案形狀的設定檔真的與規則本體不同(self):
+        """`_retarget_foundry_dir` 的守門：值一樣的話，上一條第 3 個探針就是假綠。"""
         root = self._target_root()
-        portable = root / "tools" / "foundry-lint" / "test_foundry_lint.py"
-        portable.write_text(
-            portable.read_text(encoding="utf-8")
-            + "\n\nclass WrongFileCounterExampleTest(unittest.TestCase):\n"
-              "    def test_反例_讀規則本體才有的_PRD(self):\n"
-              "        (REPO_ROOT / 'docs' / 'features' / 'foundry-lint'\n"
-              "         / 'PRD.md').read_text(encoding='utf-8')\n",
-            encoding="utf-8")
-        proc = self._discover(root, "foundry-lint", "-k", "反例")
-        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
-        self.assertIn("FileNotFoundError", proc.stderr)
+        target = foundry_lint.read_config(root)
+        real = foundry_lint.read_config(REPO_ROOT)
+        self.assertNotEqual(target.get("devtools_platform"),
+                            real.get("devtools_platform"))
+        self.assertEqual(foundry_lint.parse_org(
+            (root / foundry_lint.ORG_REL).read_text(encoding="utf-8"))["ai_platform"],
+            target.get("ai_platform"),
+            "兩份檔的 `ai_platform` 對不上——真的目標專案不長這樣，`org-sync` 會紅")
 
     def test_標記檔真的被排除掉了(self):
         """反例的反例：標記沒被讀到的話，上面兩條都會變成在測別的東西。"""
