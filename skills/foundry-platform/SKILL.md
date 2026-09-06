@@ -39,7 +39,8 @@ description: Foundry 平台 adapter 抽象層。凡是要對「執行層」（�
 - **依賴**：工單間的硬依賴一律用 `link_issues` 的 `blocked_by` 關聯表達，不用工單內文的文字描述代替（foundry-protocol 第 2 節）。各平台的承載欄位由 adapter 定義（github＝`Blocked-by:` 留言慣例＋`blocked` label；gitlab＝Premium 用原生 `is_blocked_by` 關聯、Free 退回與 github 相同的留言慣例；local-md＝frontmatter `blocked_by`；paperclip＝`blockedByIssueIds`）。
 - **標準 label 集**（`init_structure` 建立，命名空間固定）：
   - `type:brd`、`type:prd`、`type:hld`、`type:lld`、`type:impl`、`type:review`、`type:test`、`type:docs`
-  - `role:product-analyst`、`role:scrum-master`、`role:tech-lead`、`role:developer`、`role:code-reviewer`、`role:qa`
+  - `role:ceo`、`role:product-manager`、`role:product-analyst`、`role:frontend-verifier`、`role:tech-lead`、`role:developer`、`role:code-reviewer`、`role:qa`
+    （八格＝foundry-protocol 第 9 節組織圖的每個在編角色；MYL-115 依 MYL-96 正名並移除已退場的 `role:scrum-master`。**這一列是三個 adapter 的 `init_structure` 共同的來源**，改了要三份一起改）
   - `size:small`、`size:medium`、`size:large`（gates 的 `skip_below` 依此判定；未掛 size label 視為 `medium`）
 - **relation**：工單關聯只有兩種：`parent`（子單 → 父單）與 `blocked_by`（本單被某單阻塞）。方向以「動詞主詞」為準，見 §3.8。
 

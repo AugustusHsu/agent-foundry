@@ -76,7 +76,7 @@ curl -s -H "$GL_AUTH" "${GITLAB_URL}/api/v4/license" | jq '.plan'   # 需 admin�
    }
    for l in type:brd type:prd type:hld type:lld type:impl type:review type:test type:docs; do
      mklabel "$l" "#5319E7" "Foundry 工單類型"; done
-   for l in role:product-analyst role:scrum-master role:tech-lead role:developer role:code-reviewer role:qa; do
+   for l in role:ceo role:product-manager role:product-analyst role:frontend-verifier role:tech-lead role:developer role:code-reviewer role:qa; do
      mklabel "$l" "#0E8A16" "Foundry 角色"; done
    for l in size:small size:medium size:large; do
      mklabel "$l" "#FBCA04" "Foundry 工單規模"; done
