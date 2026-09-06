@@ -9,7 +9,8 @@
 #    角色可以先宣告在本檔、後才在平台上建出來（protocol `O1` 第 1 種情形；那段期間
 #    該角色在第 9 節決策權矩陣裡的格子依 `O4` 由匯報對象暫代），是預期行為不是漏同步。
 #    與平台的對帳歸承接建置的那張工單，不是 `org-sync` 的事。
-#    本檔宣告的 9 名已於 2026-09-06（MYL-79）全數在平台上建置並逐格對帳，現為一致。
+#    本檔宣告的 9 名已於 2026-09-06（MYL-79）全數在平台上建置並逐格對帳：**除下方 ⚠️
+#    那一處刻意保留的例外**（Frontend Verifier 的 `canAssignTasks`）外，其餘逐格一致。
 #
 # ⚠️ agent 不得自行改本檔（同 `.foundry/config.yml`）。改動走 protocol 第 9 節
 #    「結構調整先發卡提案、經使用者裁定」的同一條路徑；判準寫在 config-schema。
@@ -18,9 +19,12 @@
 # 讀這一欄的時候要分開看，兩種來源的證據強度不同：
 #
 # 1. **有裁定來源的授權**——CEO 與 PM 兩格逐條註明依據（見各該格的行內註解）。
-# 2. **登記現況**——其餘 7 名。2026-09-06 以平台 API 逐一核對（`GET /api/agents/{id}`，
-#    讀 `access.*` ＋ `access.grants[]`，**不讀面板的 `permissions.*`**——兩者會相反），
-#    7 名全部 `canCreateSkills: true`、`access.grants` 全空、`taskAssignSource: none`。
+# 2. **登記現況**——其餘 7 名。2026-09-06 以平台 API 逐一核對（`GET /api/agents/{id}`）：
+#    `access.grants[]` 7 名全空；`taskAssignSource` 其中 6 名為 `none`，**Frontend
+#    Verifier 是 `simple_default`**（原因見下方 ⚠️）。`canCreateSkills` 在 `access.*`
+#    沒有對應欄位，只透出於 `permissions.canCreateSkills`，7 名皆為 `true`。
+#    ⚠️ **會相反因而不可讀面板的是 `canAssignTasks` 這一項**，FV 就是實例：
+#    `access.canAssignTasks: true` 而 `permissions.canAssignTasks: false`。
 #    寫進本檔不是變更，是把既有事實登記下來；體例同 protocol 第 8 節對 Frontend
 #    Verifier 模型層的「登記現況」寫法。
 #
@@ -45,8 +49,11 @@ roles:
     # `O3`：CEO 是全隊唯一不掛第 1 層（foundry-protocol）的角色，代價由自己的 skill 承接。
     skills:
       - skills/roles/ceo/SKILL.md
-    # `assign_tasks`：平台上來自 `ceo_role`（角色內建，不是逐條授予的 grant）。派工的拍板者
-    #   依第 9 節矩陣是 PM，PM 已於 MYL-79 建置並持有自己的 `tasks:assign`，所以 CEO 這一格
+    # `assign_tasks`：平台上 `taskAssignSource` 解析為 `ceo_role`（角色內建優先），但 CEO
+    #   **另同時**持有 grant `c30a19e3` ＝ `tasks:assign`，且 `grantedByUserId` 有值
+    #   ＝使用者實際逐條授予過（全公司唯一一條有 granter 的 grant）。`taskAssignSource`
+    #   講的是「哪個來源贏得解析」，不等於「沒有 grant」——兩者要分開讀。派工的拍板者依
+    #   第 9 節矩陣是 PM，PM 已於 MYL-79 建置並持有自己的 `tasks:assign`，所以 CEO 這一格
     #   不再是 `O4` 的暫代、而是既有現況。要不要收回屬組織調整，走本檔頂部那條核可路徑。
     # `configure_agents`：登記現況（MYL-79 卡 `0bd69c99` Q5 核可補登記）。平台 grant
     #   `185a982d`，`grantedByUserId: null` ＝建 agent 時自帶、沒有人逐條授過。改 agent 的
@@ -76,8 +83,10 @@ roles:
     skills:
       - skills/foundry-protocol/SKILL.md
       - skills/roles/pm/SKILL.md
-    # 派工是本角色在第 9 節矩陣裡的拍板格，所以宣告 `assign_tasks`。平台上它是逐條授予的
-    #   grant（`41fd8b90`，`taskAssignSource: explicit_grant`），與 CEO 那格的角色內建不同。
+    # 派工是本角色在第 9 節矩陣裡的拍板格，所以宣告 `assign_tasks`。平台上 PM 是
+    #   `explicit_grant`（grant `41fd8b90`，`grantedByUserId: null` ＝ MYL-79 建置時自帶，
+    #   沒有人逐條授過）；CEO 那格則是角色內建（`ceo_role`）**加上**一條使用者實際授予的
+    #   grant。⚠️ 兩格的證據強度剛好與直覺相反，別拿 PM 這條去推 CEO 那條沒有 grant。
     # `model_tier: medium`：起草時填 `low`（第 8 節的建議值），使用者於 MYL-79 卡
     #   `0bd69c99` Q1 改判為中層，理由記在 protocol 第 8 節該條。已據以設定平台
     #   （`claude-opus-5`／`high`，2026-09-06 覆驗）。
