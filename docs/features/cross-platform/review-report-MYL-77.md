@@ -22,7 +22,7 @@
 | AC2 `adapters/paperclip.md` 增節，含建立／權限／skill／模型層四步 ＋ `canCreateAgents` 前提 ＋ 三條 board-only 路徑 | ✅ | `paperclip.md` §「provision_team」（179 行起）：`POST /api/companies/{companyId}/agents`（:209）、`PATCH …/permissions`（:252）、`POST …/skills/sync`（:265）、`PATCH /api/agents/<AID>` 設 `adapterConfig`（:277）。`canCreateAgents` 在前提表 :192。刪除／終止／暫停三條路徑 board-only 403 在 :304 ＋踩雷表 :316 |
 | AC3 `github.md`／`gitlab.md` 寫「本軸不適用」而非「降級」，並給四個文檔落點 | ✅ | `github.md:415`、`gitlab.md:432` 節名皆為「組織層：`provision_team` 在本軸不適用」；兩檔各以「降級的前提是同一條軸上能力不足」明確切開。落點表：`CODEOWNERS`（github:431）、`role:*` label（:432／gitlab:448）、roster（:433／:449）。`grep -c 降級` 於兩節內為 0 |
 | AC4 `local-md.md` 增節，純文檔對照表 | ✅ | `local-md.md:149` 同一節名；:156 寫明「連 `CODEOWNERS` 都沒有（那是 git server 的功能）」——落點只剩三個，且目錄結構 :12 同步加了 `roster.md` |
-| AC5 §7 對照表補一列並標明屬軸 A | ✅ | `SKILL.md` §7 表內 `| **【軸 A】** provision_team | …`，其下 4 行警語說明**該列的欄名要換一條軸讀**（`github`／`gitlab` 不是 `ai_platform` 的合法值），並指出軸 A 三平台自己的對照在 `foundry-ai-platform` §3 不在本表 |
+| AC5 §7 對照表補一列並標明屬軸 A | ✅ | `SKILL.md` §7 表內 `\| **【軸 A】** provision_team \| …`，其下 4 行警語說明**該列的欄名要換一條軸讀**（`github`／`gitlab` 不是 `ai_platform` 的合法值），並指出軸 A 三平台自己的對照在 `foundry-ai-platform` §3 不在本表 |
 | AC6 能力上限寫進規格正文而非附註 | ✅ | `SKILL.md` §8.3，開頭即「**這一節是規格正文，不是附註**」；三層表格（規則層 100%／執行層可攜／組織層只在有註冊表的平台可攜）＋三段說明。降級權威明確外指 `AP-4`，未另立一套 |
 | AC7 依 §5「全覆蓋」裁定檢查四份 adapter 覆蓋並在留言寫判定過程 | ✅ | 判定過程在交付回報留言 `de9c80cc` 第 4 節；結論落進 `SKILL.md:133-139`——三類平台三種門檻，並明寫「軸 A 沒有『寧缺勿殘』，缺了是降級不是不合格」「三者互不蘊含」 |
 | AC8 `--selfcheck` 全綠、`make check` 過 | ✅ | 我自己跑：`make check` exit 0；`--selfcheck` **12 項全綠**；測試 `155 + 15 + 34 + 107 = 311` OK。另確認 `Makefile:12` 的 `check: selfcheck test`——`make check` 確實含 selfcheck，不是只跑測試 |
