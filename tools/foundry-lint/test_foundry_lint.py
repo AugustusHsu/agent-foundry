@@ -1211,23 +1211,40 @@ class OrgSyncTest(RepoCopyTestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("foundry_org" in f for f in res.failures), res.failures)
 
-    def test_permissions_值域外的值擋下(self):
+    #: 值域外的權限，四種寫錯的方式各一個：中文值、看起來像權限名的英文值、
+    #: 與既有成員只差一個字母的近似值、只差大小寫的值。
+    #: 都是**自造**的值——不引用 `ORG_PERMISSIONS` 現在有哪些成員（見下方測試 docstring）。
+    OUT_OF_DOMAIN_PERMISSIONS = ("不在值域裡的權限", "do_anything", "create_skill", "CREATE_SKILLS")
+
+    def test_權限值域外被擋下(self):
         """封閉值域的反例。少了這條，打錯的權限名會被當成一個新權限默默收下。
 
-        **反例自己造兩端**：插一個保證不在值域裡的值，不去改寫某個現有的權限名。
-        本檔是可攜的那一半（`foundry-init` 會複製到目標專案），而目標專案的
-        `org.yml` 宣告什麼權限是它自己的事——依賴現值的話 `replace` 會變成
-        no-op，這條就從反例退化成「跑了一次真實 repo」。
+        **反例自己造兩端**：每個案例都**插一個**保證不在值域裡的值，不去改寫某個
+        現有的權限名。本檔是可攜的那一半（`foundry-init` 會複製到目標專案），而
+        目標專案的 `org.yml` 宣告什麼權限是它自己的事——依賴現值的話 `replace`
+        會變成 no-op，這條就從反例退化成「跑了一次真實 repo」。
+
+        本條是 MYL-97 A3：原本兩條測同一件事的測試收成這一條參數化（MYL-95 第 1
+        輪審查次要建議 2）。被收掉的那條寫法正是
+        `.replace("      - create_skills", "      - do_anything", 1)`——依賴目標專案
+        現在宣告了 `create_skills`，退化成 no-op 也不會有人知道。它涵蓋的值
+        （`do_anything`）留在下面的案例表裡，並補上三種其他寫錯的方式。
         """
-        text = self._org()
+        original = self._org()
         marker = "    permissions:\n"
-        self.assertIn(marker, text, "`org.yml` 的 `permissions:` 區塊形狀變了")
-        self.write(foundry_lint.ORG_REL,
-                   text.replace(marker, marker + "      - 不在值域裡的權限\n", 1))
-        res = self._run()
-        self.assertFalse(res.passed, "插了值域外的權限卻通過了")
-        self.assertTrue(any("不在值域裡的權限" in f and "值域" in f for f in res.failures),
-                        res.failures)
+        self.assertIn(marker, original, "`org.yml` 的 `permissions:` 區塊形狀變了")
+        for bogus in self.OUT_OF_DOMAIN_PERMISSIONS:
+            with self.subTest(值域外的值=bogus):
+                self.assertNotIn(bogus, foundry_lint.ORG_PERMISSIONS,
+                                 "這個案例的值被收進值域了，它就不再是反例")
+                mutated = original.replace(marker, marker + "      - %s\n" % bogus, 1)
+                self.assertNotEqual(mutated, original,
+                                    "反例沒改到東西——這輪等於只是跑了一次真實 repo")
+                self.write(foundry_lint.ORG_REL, mutated)
+                res = self._run()
+                self.assertFalse(res.passed, "插了值域外的權限卻通過了")
+                self.assertTrue(any(bogus in f and "值域" in f for f in res.failures),
+                                res.failures)
 
     def test_configure_agents_在值域內(self):
         """MYL-79 加入的值域成員。
@@ -1283,13 +1300,6 @@ class OrgSyncTest(RepoCopyTestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("skills/roles/pm/SKILL.md" in f for f in res.failures),
                         res.failures)
-
-    def test_權限值域外被擋下(self):
-        self.write(foundry_lint.ORG_REL,
-                   self._org().replace("      - create_skills", "      - do_anything", 1))
-        res = self._run()
-        self.assertFalse(res.passed)
-        self.assertTrue(any("do_anything" in f for f in res.failures), res.failures)
 
     def test_兩份設定檔的_ai_platform_不一致被擋下(self):
         """反例自己把兩份檔的值都寫定——**不得依賴規則本體現在宣告的是哪一家**。
