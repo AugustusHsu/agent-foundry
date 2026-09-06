@@ -228,7 +228,9 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    - 選 `paperclip` 時仍要寫，內容是「甲組能力等於所生 adapter」與該 adapter 的實際判級。
    - ⚠️ 特別點名 `AP-1` 的後果：降級後 HITL 閘門從**擋得住**變成**擋不住**（留言不會讓人停下來），
      這句話要出現在報告裡，不要讓使用者以為換平台沒有代價。
-4. **待辦**：github 模式的人工步驟清單（§3 第 4 點）；有產 `org.yml` 時**還要人工建哪幾個 agent**；其他未竟事項。
+4. **待辦**：github 模式的人工步驟清單（§3 第 4 點）；有產 `org.yml` 時的**組織待辦**——依 `ai_platform`
+   分兩種，內容見 §2 第 5 點最後一顆 bullet（**這裡不再寫一份**：同一組分岔寫兩處，改的時候只會改到一處）；
+   其他未竟事項。
 5. **下一步指引**（連到說明層網站 <https://augustushsu.github.io/agent-foundry/>；舊網址 `foundry-handbook` 自 MYL-55 起**直接斷、不轉址**，見 known-drift `R7`）：
    - 首次上手與日常指令 → 第 1、2 章（first-run、commands）
    - 開發流程與工單骨架 → 第 3 章（workflow）
@@ -243,7 +245,8 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
 - [ ] 步驟 1 的七題**每一題都有著落**：Q1～Q6 有使用者答覆證據（Q2／Q3／Q4 答「不宣告／不啟用」也算數，
       但要能指出是使用者選的、不是 agent 略過），Q7 有步驟 4 的 gates 確認卡；前置檢查全過。
 - [ ] `.foundry/config.yml` 依 config-schema.md 驗證合法；`external_actions` 與 `main_push` 皆 `user`。
-- [ ] 有產 `.foundry/org.yml` 時：`org-sync` 通過，且報告已列出待人工建立的 agent。
+- [ ] 有產 `.foundry/org.yml` 時：`org-sync` 通過，且報告已**依 `ai_platform` 列出對應的組織待辦**（§2 第 5 點）。
+      ⚠️ 這一條**不預設待辦內容**——「待人工建立的 agent」兩支都不對，照那句寫的報告打不了這個勾。
 - [ ] 複製清單逐檔在 `<TARGET>` 存在且與 `<SRC>` 一致；未覆蓋任何既有檔案。
 - [ ] `CLAUDE.md` 與 `AGENTS.md` 均已產生，佔位符全數填寫或整節刪除（無殘留 `{}`）；
       `foundry-lint --selfcheck` 的 `entry-sync` 通過。
