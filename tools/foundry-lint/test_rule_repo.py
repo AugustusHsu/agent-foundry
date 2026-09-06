@@ -33,6 +33,7 @@ MYL-87 就刻意做成兩層。本檔這批屬於後者、而且做不出第二�
 
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -276,6 +277,73 @@ class SelfcheckTest(unittest.TestCase):
         res = self._named("rule-marks")
         self.assertTrue(res.passed, res.failures)
         self.assertIn("違反段", res.summary)
+
+    # ── 界定前綴（MYL-99）─────────────────────────────────────────────
+    #
+    # 覆蓋判定原本是 `startswith("**違反：**")`，於是三種寫法悄悄掉出覆蓋：
+    # 規則 ID 冠在前（`` **`O4` 違反：** ``）、限定語塞進粗體內
+    # （`**違反（本節矩陣整體）：**`）、以及寫成清單項目（`- **違反：**`）。
+    # 前兩種是 MYL-79 第 1 輪的實際漏網——覆蓋數從 26 掉到 25，而檢查照樣綠。
+    #
+    # 這幾則一律比「覆蓋數有沒有變」而不寫死數字：數字會隨 protocol 增訂漂掉，
+    # 寫死只會養出一則每次增訂都要順手改的測試，而改它的人不會知道自己在放行什麼。
+
+    _MARK_COUNT_RE = re.compile(r"（(\d+) 行違反段）")
+
+    def _mark_count(self):
+        res = self._named("rule-marks")
+        m = self._MARK_COUNT_RE.search(res.summary)
+        self.assertIsNotNone(m, f"覆蓋數不在 summary 裡了：{res.summary}")
+        return int(m.group(1))
+
+    def test_規則_ID_冠在違反前照樣計入覆蓋(self):
+        before = self._mark_count()
+        self._sub_protocol("**違反：**（`O4`）沒有這條時",
+                           "**`O4` 違反：**沒有這條時")
+        self.assertEqual(self._mark_count(), before,
+                         "規則 ID 冠到「違反」前面之後，那一行掉出覆蓋了")
+
+    def test_限定語塞進粗體內照樣計入覆蓋(self):
+        before = self._mark_count()
+        self._sub_protocol("**違反：**（本節矩陣整體）兩個方向",
+                           "**違反（本節矩陣整體）：**兩個方向")
+        self.assertEqual(self._mark_count(), before,
+                         "限定語移進粗體之後，那一行掉出覆蓋了")
+
+    def test_帶界定前綴的違反行漏標被擋下(self):
+        """覆蓋數只是徵狀，這則才是後果：改寬之前，這個形狀漏標沒有人會出聲。"""
+        self._sub_protocol("**違反：**（`O4`）沒有這條時",
+                           "**`O4` 違反：**沒有這條時")
+        self._sub_protocol("是每天都會踩到。`【自律】`", "是每天都會踩到。")
+        res = self._named("rule-marks")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("沒有以標記收尾" in f for f in res.failures),
+                        res.failures)
+
+    def test_清單項目形式的違反行漏標被擋下(self):
+        """§9 有一段違反行寫成 `- **違反：**`，行首是項目符號而不是 `**`。"""
+        self._sub_protocol(
+            "於是它會慢慢漂到沒有人說得清它該做什麼。`【自律】`",
+            "於是它會慢慢漂到沒有人說得清它該做什麼。")
+        res = self._named("rule-marks")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("沒有以標記收尾" in f for f in res.failures),
+                        res.failures)
+
+    def test_散文裡的粗體違反句不被計入(self):
+        """放寬的是**界定前綴**，不是「粗體裡出現『違反：』就算」。
+
+        圖例節本來就有一行 `- **沒有「違反：」行的小節…**`，把這類句子算進
+        覆蓋，等於要求一段散文去補標記——誤殺比漏標更難救，它會逼下一個人
+        把誠實的敘述改成假的標記去迎合檢查。
+        """
+        before = self._mark_count()
+        p = self._protocol()
+        p.write_text(
+            p.read_text(encoding="utf-8")
+            + "\n- **本節不談違反：**這是散文，不是後果段。\n", encoding="utf-8")
+        self.assertEqual(self._mark_count(), before)
+        self.assertTrue(self._named("rule-marks").passed)
 
     def test_protocol_不存在被擋下(self):
         self._protocol().unlink()

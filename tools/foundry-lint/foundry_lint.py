@@ -232,7 +232,24 @@ STAMP_RE = re.compile(
 #: 三條、機械後盾程度不同，單一違反段的誠實寫法就是併記。要它二選一得先把那節拆成
 #: 三段違反行，那是改節結構、不是改標記。放行的是**字面完全相同**的三種，不是自由
 #: 組合：一旦開放組合，標記就從「可判定的值」退化成散文，本檢查也就白寫了。
-RULE_MARK_PREFIX = "**違反：**"
+#: 哪一行算「違反段」。原本是 `startswith("**違反：**")`，字面到連多一個界定語
+#: 都認不得，於是三種寫法悄悄掉出覆蓋而檢查照樣綠：規則 ID 冠在前
+#: （`` **`O4` 違反：** ``）、限定語塞進粗體內（`**違反（本節矩陣整體）：**`）、
+#: 寫成清單項目（`- **違反：**`）。前兩種是 MYL-79 第 1 輪的實際漏網——覆蓋數
+#: 從 26 掉到 25，沒有任何東西出聲；漏標本身也就跟著不會被擋（MYL-99）。
+#:
+#: 放寬的只有**界定前綴／後綴**：粗體裡除了「違反：」，只准再多一段反引號包的
+#: 規則 ID 或一組括號限定語。**不放寬成「粗體裡出現『違反：』就算」**——圖例節
+#: 本來就有 `- **沒有「違反：」行的小節…**` 這種散文句，把它算進覆蓋等於要求
+#: 散文去補標記，而誤殺比漏標更難救：它會逼下一個人把誠實的敘述改成假標記去
+#: 迎合檢查。行內、句中的「違反」照樣不算，理由見 `check_rule_marks` docstring。
+_RULE_MARK_QUALIFIER = r"(?:`[^`]+`|（[^）]*）|\([^)]*\))"
+RULE_MARK_LINE_RE = re.compile(
+    r"^[ \t]*(?:[-*+][ \t]+)?"                # 行首容許縮排與清單項目符號
+    rf"\*\*(?:{_RULE_MARK_QUALIFIER}[ \t]*)?"  # 粗體開頭，可帶界定前綴
+    rf"違反(?:[ \t]*{_RULE_MARK_QUALIFIER})?"   # 「違反」本體，可帶界定後綴
+    r"：\*\*"
+)
 RULE_MARK_VALUES = ("機械", "自律")
 RULE_MARK_ENDINGS = ("`【自律】`", "`【機械】`", "`【自律】`＋`【機械】`")
 #: 標記本身的 token（含全形括號），用來抓「第三種值」——寫成 `【半機械】` 之類的東西。
@@ -682,6 +699,11 @@ def check_rule_marks(root: Path) -> SelfcheckResult:
     標記只認**行尾**，不認「這行有沒有出現過這兩個詞」：`§7` 有兩段違反文在正文裡
     引用另一個標記（「從 `【自律】` 轉為機械攔截」），那是敘述不是標記，用 contains
     去判會把兩段都誤殺。
+
+    哪一行算違反段則交給 `RULE_MARK_LINE_RE`（MYL-99 放寬到容許界定前綴與清單
+    項目符號）。兩端都是同一個取捨：**判太窄會漏標無聲，判太寬會誤殺散文**。
+    所以放寬的是行首那一小段的形狀，不是「出現『違反：』就算」——後者會把圖例
+    節的敘述句一起抓進來，而那類誤報只能靠改散文去迎合，等於把檢查倒過來用。
     """
     res = SelfcheckResult("rule-marks", "protocol 違反行的標記合法")
     protocol = root / PROTOCOL_REL
@@ -696,7 +718,7 @@ def check_rule_marks(root: Path) -> SelfcheckResult:
         heading = HEADING_RE.match(line)
         if heading:
             section = heading.group(2)
-        if not line.startswith(RULE_MARK_PREFIX):
+        if not RULE_MARK_LINE_RE.match(line):
             continue
         marked += 1
         tail = RULE_MARK_TAIL_RE.search(line.rstrip())
