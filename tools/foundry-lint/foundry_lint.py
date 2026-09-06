@@ -921,6 +921,13 @@ def check_version_shape(root: Path) -> SelfcheckResult:
 #: `table-shape` 的掃描範圍（MYL-76 AC9）。`docs/features/` 也掃——那裡的表格
 #: 一樣會被切斷，而它是交付物；`big-files` 排除它是因為那項管的是 context 預算，理由不同。
 TABLE_SCAN_DIRS = ("docs", "skills")
+#: 根目錄的雙入口（MYL-85 AC9）。上面那份目錄清單涵蓋不到它們，而那是全 repo 表格
+#: 最密的兩份檔案，又受「共用正文逐字相同」約束——一處被空行切斷會**同時**壞兩份。
+#: ⚠️ 引用區塊內的表格（`> | … |`）**不在覆蓋內**且刻意不補：`is_table_row()` 只認
+#: 行首是 `|` 的行。目前全 repo 只有一處（`docs/features/git-flow/proposal.md`）、
+#: 屬歷史交付物，為它加一層前綴剝離不划算；日後手冊或 protocol 真的出現引用區塊內
+#: 的表格再回頭補。
+TABLE_SCAN_FILES = ("CLAUDE.md", "AGENTS.md")
 #: markdown 表格的分隔列（`| --- | --- |`）。前後空白由呼叫端 `strip()` 掉。
 TABLE_SEP_RE = re.compile(r"^\|(?:\s*:?-{2,}:?\s*\|)+$")
 #: 切格用的 `|`。GFM 是**先切格、再解析行內語法**，所以反引號與粗體都保護不了管線符號，
@@ -943,8 +950,8 @@ def is_table_header(lines: list, i: int) -> bool:
             and bool(TABLE_SEP_RE.match(lines[i + 1].strip())))
 
 
-def count_cells(line: str) -> int:
-    """這一列渲染出來會有幾格。
+def table_cells(line: str) -> list:
+    """這一列渲染出來的每一格（已去頭尾空白）。
 
     前導與收尾的 `|` 在 GFM 都是可選的裝飾，各自切出一個空段，不算格。
     """
@@ -953,7 +960,12 @@ def count_cells(line: str) -> int:
         parts = parts[1:]
     if parts and not parts[-1].strip():
         parts = parts[:-1]
-    return len(parts)
+    return [p.strip() for p in parts]
+
+
+def count_cells(line: str) -> int:
+    """這一列渲染出來會有幾格。"""
+    return len(table_cells(line))
 
 
 def table_column_mismatches(text: str) -> list:
@@ -1037,6 +1049,25 @@ def table_breaks(text: str) -> list:
     return breaks
 
 
+def table_scan_targets(root: Path) -> list:
+    """`table-shape` 要掃的 .md：`TABLE_SCAN_DIRS` 底下全部，加上根目錄雙入口。
+
+    去重後排序——雙入口不在那幾個目錄底下，這裡的 `set` 是為了讓日後往
+    `TABLE_SCAN_FILES` 加一份已經被目錄涵蓋的檔案時不會被掃兩次（同一處
+    報兩條一模一樣的紅字，讀的人會以為有兩個地方壞掉）。
+    """
+    found = set()
+    for top in TABLE_SCAN_DIRS:
+        base = root / top
+        if base.is_dir():
+            found.update(base.rglob("*.md"))
+    for rel in TABLE_SCAN_FILES:
+        path = root / rel
+        if path.is_file():
+            found.add(path)
+    return sorted(found)
+
+
 def check_table_shape(root: Path) -> SelfcheckResult:
     """markdown 表格的兩種「原文正常、渲染是壞的」：夾空行被切斷、欄數對不上表頭。
 
@@ -1046,45 +1077,491 @@ def check_table_shape(root: Path) -> SelfcheckResult:
 
     這一項與 `L13`／`L21`／`X4` 同族：**斷言全綠但渲染是壞的**。差別在於前三者
     是外部平台的行為，這兩條是 markdown 自己的，所以擋得住，也就該擋。
+
+    掃描範圍見 `TABLE_SCAN_DIRS` ＋ `TABLE_SCAN_FILES`——後者是 MYL-85 AC9 補上的
+    根目錄雙入口，在那之前全 repo 表格最密的兩份檔案不在覆蓋內。
     """
     res = SelfcheckResult("table-shape", "markdown 表格沒有被空行切斷、每列欄數與表頭一致")
     scanned = 0
-    for top in TABLE_SCAN_DIRS:
+    for path in table_scan_targets(root):
+        scanned += 1
+        rel = path.relative_to(root).as_posix()
+        text = read_text(path)
+        for lineno in table_breaks(text):
+            res.failures.append(
+                f"{rel}:{lineno} 是上面那張表的續列，但中間隔了空行"
+                "——渲染時表格在空行處就結束了，這一行起會變成普通段落，"
+                "連分隔符一起原樣印出來。刪掉那個空行；真要分成兩張表，"
+                "就給下面這段補上自己的表頭與分隔列"
+            )
+        for lineno, got, want, is_sep in table_column_mismatches(text):
+            if is_sep:
+                res.failures.append(
+                    f"{rel}:{lineno} 是分隔列，卻有 {got} 格、表頭有 {want} 格"
+                    "——兩者不等時 GFM 判定這整段根本不是表格，每一行的管線符號"
+                    f"都會原樣印出來。把分隔列補成 {want} 格"
+                )
+            elif got > want:
+                res.failures.append(
+                    f"{rel}:{lineno} 有 {got} 格，表頭只有 {want} 格"
+                    f"——GFM 以表頭定欄數，多出來的第 {want + 1} 格起會被**整格丟掉**，"
+                    "原文讀得到、渲染出來看不到。把多的格子併回去；"
+                    "格子內容裡的管線符號（含反引號裡的）要寫成 `\\|` 才不算分隔"
+                )
+            else:
+                res.failures.append(
+                    f"{rel}:{lineno} 只有 {got} 格，表頭有 {want} 格"
+                    "——渲染時缺的格子補成空白，看起來像漏填。補齊到 "
+                    f"{want} 格；真的要留白就寫成空格子"
+                )
+    res.summary += f"（掃 {scanned} 份）"
+    return res
+
+
+# ── `config-schema`：設定欄位名與 schema 版本 ↔ config-schema.md（MYL-85）──
+#
+# 這一格的特性是**錯了不會有任何聲音**：欄位名寫錯的設定檔在讀取端只是「必填欄位
+# 缺席」，而文件裡的欄位名多半只是散文。MYL-82 把 `platform` 正名成
+# `devtools_platform` 時，全 repo 沒有一項自檢在驗「設定欄位叫什麼名字」——那次靠
+# 的是全 repo 正則掃描＋人工判讀。做完了，缺口原樣留著；本項就是那個機械兜底。
+
+#: schema 權威。`.foundry/config.yml` 的每一個頂層欄位叫什麼、必不必填、值域是
+#: 什麼，都只寫在這一份的「頂層結構」表裡。本檢查把它當**唯一來源**讀，不在程式
+#: 裡另抄一份——另抄的那份就是下一個會漂的來源。
+CONFIG_SCHEMA_REL = "skills/foundry-platform/config-schema.md"
+#: 範例檔跟真設定檔一起驗：`foundry-init` 拿它當起點，它要是留著舊欄位名，錯誤會
+#: 被複製到之後導入的每一個專案，而那些專案不會知道自己抄到的是舊名。
+CONFIG_EXAMPLE_REL = "skills/foundry-platform/config.example.yml"
+CONFIG_SCHEMA_TOP_HEADING = "頂層結構"
+CONFIG_SCHEMA_HISTORY_HEADING = "版本沿革"
+#: 「頂層結構」表 `foundry` 那一列的散文側現行版本宣告。
+CONFIG_SCHEMA_CURRENT_RE = re.compile(r"目前固定 `(\d+)`")
+#: 表格第一欄的欄位名（`` `devtools_platform` ``）。整格必須就是一個反引號詞。
+CONFIG_SCHEMA_FIELD_RE = re.compile(r"^`([a-z][a-z0-9_]*)`$")
+#: 「版本沿革」表第一欄的版本號（`` `2` ``）。
+CONFIG_SCHEMA_VERSION_CELL_RE = re.compile(r"^`(\d+)`$")
+#: 必填欄的字面（非必填寫 `─`）。整格比對，所以**表裡只准出現這兩種寫法**：加任何
+#: 註記（`✅（見下）`）就會讓該欄位靜靜掉出必填集合，而必填集合同時是
+#: `foundry_config_fences()` 判準第 3 層的證據集，它縮小 ⇒ 舊欄位名掃描的覆蓋跟著
+#: 無聲變窄。認不得的第三種寫法由 `check_config_schema()` 的形狀守衛報紅。
+CONFIG_SCHEMA_REQUIRED_MARK = "✅"
+CONFIG_SCHEMA_OPTIONAL_MARK = "─"
+CONFIG_SCHEMA_REQUIRED_MARKS = (CONFIG_SCHEMA_REQUIRED_MARK, CONFIG_SCHEMA_OPTIONAL_MARK)
+#: 型別欄標這個字面的欄位，一定要讀得出值域——拿它當 `CONFIG_SCHEMA_ENUM_RE` 的對照
+#: 物（同樣由形狀守衛報紅）。少了對照，把分隔符從 `｜` 改成別的寫法會讓值域整組
+#: 靜默消失，而其餘檢查照常運作、紅綠完全無異狀。
+CONFIG_SCHEMA_ENUM_TYPE = "枚舉"
+#: 型別欄的合法字面——**白名單，不認得就紅**，不是「等於『枚舉』才檢查」那種相等
+#: 比對。相等比對的失敗方向是**靜靜跳過**：型別格被加一個註記（`枚舉（見下）`），
+#: 那一欄的值域守衛就整條消失，之後把它的值域寫壞也不會有人出聲（實測 M3a／M3c，
+#: MYL-111 審查補正）。⚠️ 這道守衛只擋得住加註記，擋不住把「枚舉」整格換成「物件」
+#: ——那是把宣告本身改了，不是本檢查讀錯。白名單的代價是：日後表裡真的要多一種型別
+#: 時本項會紅。那是刻意的——改型別欄的形狀就該回頭確認本檢查還讀得懂它。
+CONFIG_SCHEMA_TYPES = ("整數", CONFIG_SCHEMA_ENUM_TYPE, "物件")
+#: 說明欄**開頭**那一串 `a｜b｜c` ＝ 枚舉值域。只認開頭、不掃整格：說明文字裡本來
+#: 就到處是反引號（其他欄位名、檔案路徑、規則 ID、工單編號），掃整格會把它們全收
+#: 成「合法值」，那樣的值域擋不住任何東西。
+CONFIG_SCHEMA_ENUM_RE = re.compile(r"^(`[a-z0-9-]+`(?:｜`[a-z0-9-]+`)+)")
+#: 說明欄寫「值域同 `x`」時借用該欄的值域（`mirror_platform` 就是這樣寫的）。
+CONFIG_SCHEMA_ENUM_ALIAS_RE = re.compile(r"值域同 `([a-z][a-z0-9_]*)`")
+#: 已正名掉的舊欄位名 → 現名。手維護，但這份清單是**封閉**的：只有正名才會多一則，
+#: 而正名必經 CEO 提案＋使用者核可＋遞增 `foundry` 版本號（config-schema「合法性
+#: 總則」）。反過來從「版本沿革」表把改名剖析出來要讀散文，而散文會用各種寫法描述
+#: 同一次改名，剖析失敗的方向是**靜默漏掉**——比手維護一則更糟。
+RETIRED_CONFIG_FIELDS = {"platform": "devtools_platform"}   # MYL-82
+
+#: 掃「文件裡還有沒有人拿舊欄位名當設定欄位用」的範圍。
+CONFIG_FIELD_SCAN_DIRS = ("skills", "docs")
+CONFIG_FIELD_SCAN_FILES = ("CLAUDE.md", "AGENTS.md")
+#: ⚠️ `docs/features/` 排除（MYL-85 AC4，同 MYL-82 AC3）：那底下是各模組**當時**的
+#: 交付物（BRD／PRD／HLD／LLD／審查報告），寫的是那個時點的事實。把 MYL-9 HLD 裡的
+#: `platform:` 改成新名，等於竄改一份簽核過的設計文件，而且改完看起來更整齊、沒有
+#: 人會發現。與 `VERSION_SHAPE_ALLOW` 是同一條取捨（`V5`：這一格的風險方向是誤管
+#: 而不是漏管）。
+CONFIG_FIELD_SCAN_SKIP_PREFIXES = (("docs", "features"),)
+#: yaml 圍欄的開頭：資訊字串必須就是 `yaml`／`yml`。
+YAML_FENCE_RE = re.compile(r"^\s{0,3}(?:```|~~~)[ \t]*(?:yaml|yml)[ \t]*$", re.I)
+#: 頂格的 `鍵:`。**只認第 0 欄**——巢狀鍵（`platform_options` 底下那些）不是頂層
+#: 設定欄位，而被正名掉的都是頂層欄位。
+YAML_TOP_KEY_RE = re.compile(r"^([a-z][a-z0-9_]*):(?:[ \t]|$)")
+
+
+def first_table_rows(lines: list) -> list:
+    """這段裡**第一張**表的資料列（不含表頭與分隔列）。
+
+    只取第一張是必要的：`section_lines()` 取到的段落含更下層的子節，而
+    「頂層結構」底下的子節自己還有一張表（兩條軸的對照表）。混進來的話，
+    欄位清單會多出「開發工具面」這種不是欄位名的東西。
+    """
+    for i in range(len(lines)):
+        if is_table_header(lines, i):
+            rows = []
+            j = i + 2
+            while j < len(lines) and is_table_row(lines[j]):
+                rows.append(lines[j])
+                j += 1
+            return rows
+    return []
+
+
+def parse_schema_fields(text: str) -> dict:
+    """config-schema.md「頂層結構」表 → `{欄位名: (必填?, 說明欄原文)}`，保序。"""
+    fields: dict = {}
+    for row in first_table_rows(section_lines(text, CONFIG_SCHEMA_TOP_HEADING)):
+        cells = table_cells(row)
+        if len(cells) < 4:
+            continue
+        m = CONFIG_SCHEMA_FIELD_RE.match(cells[0])
+        if m:
+            fields[m.group(1)] = (cells[2] == CONFIG_SCHEMA_REQUIRED_MARK, cells[3])
+    return fields
+
+
+def parse_schema_marks(text: str) -> dict:
+    """同一張表 → `{欄位名: (型別欄原文, 必填欄原文)}`。只給形狀守衛用。
+
+    另開一個函式而不是把 `parse_schema_fields()` 的二元組擴成三元組：那個回傳值
+    有數處在做 `(req, desc)` 解包，改 arity 會一起壞，而這兩格只有守衛需要原文。
+
+    ⚠️ **本函式的鍵集與 `parse_schema_fields()` 相同是被依賴的性質，不是巧合**：
+    `check_config_schema()` 的行完整性守衛只比對 `first_table_rows()` 與
+    `parse_schema_fields()` 的長度，靠「兩者取列條件字面相同」（同一個
+    `first_table_rows()` ＋同一個 `len(cells) < 4` ＋同一個
+    `CONFIG_SCHEMA_FIELD_RE`）順帶覆蓋本函式——於是本函式底下那三道格守衛不會被
+    「整列讀丟」繞過。哪天這裡的取列條件與 `parse_schema_fields()` 被改得不一樣，
+    那道覆蓋會**無聲**消失（守衛數得對、卻守到另一批列）。要改取列條件請兩邊一起
+    改，或給本函式補一道自己的行完整性守衛（MYL-111 審查第 4 輪）。
+    """
+    marks: dict = {}
+    for row in first_table_rows(section_lines(text, CONFIG_SCHEMA_TOP_HEADING)):
+        cells = table_cells(row)
+        if len(cells) < 4:
+            continue
+        m = CONFIG_SCHEMA_FIELD_RE.match(cells[0])
+        if m:
+            marks[m.group(1)] = (cells[1], cells[2])
+    return marks
+
+
+def parse_schema_enums(fields: dict) -> dict:
+    """欄位 → 枚舉值域；沒有宣告值域的欄位不在回傳裡（物件型欄位就是這種）。
+
+    兩種來源：說明欄開頭那一串 `a｜b｜c`，以及「值域同 `x`」的借用。借用**只解
+    一層**——`mirror_platform` 借 `devtools_platform`，而後者自己寫了值域。哪天寫成
+    互相借用，這裡讀到的就是空的，於是那個欄位不受值域管；那是漏報不是誤報，
+    與本項其餘判準同一個方向。
+    """
+    direct: dict = {}
+    for name, (_, desc) in fields.items():
+        m = CONFIG_SCHEMA_ENUM_RE.match(desc)
+        if m:
+            direct[name] = tuple(v.strip("`") for v in m.group(1).split("｜"))
+    enums = dict(direct)
+    for name, (_, desc) in fields.items():
+        if name in enums:
+            continue
+        alias = CONFIG_SCHEMA_ENUM_ALIAS_RE.search(desc)
+        if alias and alias.group(1) in direct:
+            enums[name] = direct[alias.group(1)]
+    return enums
+
+
+def parse_schema_versions(text: str) -> tuple:
+    """`(「頂層結構」表宣告的現行版本, 「版本沿革」表最後一列的版本)`。
+
+    兩處各讀一次而不是只讀一處：它們是同一件事寫在兩個地方，而**遞增版本號時漏
+    改其中一處**是最可能的失手——只讀一處的話，本檢查就會拿一個過期的數字去核對
+    設定檔，而且核得振振有詞。讀不出來的那一側回 `None`，由呼叫端報形狀漂了。
+    「版本沿革」表按時間排，所以現行版本是最後一列。
+    """
+    declared = latest = None
+    for row in first_table_rows(section_lines(text, CONFIG_SCHEMA_TOP_HEADING)):
+        cells = table_cells(row)
+        if len(cells) >= 4 and cells[0] == "`foundry`":
+            m = CONFIG_SCHEMA_CURRENT_RE.search(cells[3])
+            declared = m.group(1) if m else None
+    for row in first_table_rows(section_lines(text, CONFIG_SCHEMA_HISTORY_HEADING)):
+        cells = table_cells(row)
+        m = CONFIG_SCHEMA_VERSION_CELL_RE.match(cells[0]) if cells else None
+        if m:
+            latest = m.group(1)
+    return declared, latest
+
+
+def config_field_scan_targets(root: Path) -> list:
+    """舊欄位名要掃的 .md（repo 相對路徑，已排序）。範圍與排除見上方常數註解。"""
+    found = set()
+    for top in CONFIG_FIELD_SCAN_DIRS:
         base = root / top
         if not base.is_dir():
             continue
-        for path in sorted(base.rglob("*.md")):
-            scanned += 1
-            rel = path.relative_to(root).as_posix()
-            text = read_text(path)
-            for lineno in table_breaks(text):
+        for path in base.rglob("*.md"):
+            rel = path.relative_to(root)
+            if any(rel.parts[: len(skip)] == skip
+                   for skip in CONFIG_FIELD_SCAN_SKIP_PREFIXES):
+                continue
+            found.add(rel.as_posix())
+    for rel in CONFIG_FIELD_SCAN_FILES:
+        if (root / rel).is_file():
+            found.add(rel)
+    return sorted(found)
+
+
+def foundry_config_fences(text: str, required: set) -> list:
+    """文中每一段「看得出是 `.foundry/config.yml` 範例」的 yaml 圍欄裡的頂層鍵。
+
+    回傳 `[(行號, 鍵), …]`。判準有三層，**全部往寧可漏報的方向收**（MYL-85 AC3）：
+
+    1. 圍欄的資訊字串是 `yaml`／`yml`——散文裡提到某個欄位名或平台名不算。
+    2. 鍵頂格（第 0 欄）——巢狀鍵不是頂層設定欄位。
+    3. 這段圍欄裡至少有一個鍵是 schema 標**必填**的欄位——這是「這段 yaml 是一份
+       Foundry 設定檔」的證據。少了這一層，`adapters/gitlab.md` 那段 GitLab CI
+       的 `pages:` 也會被收進來，而它跟設定欄位名毫無關係。
+
+    代價是漏報：孤零零示範改名那一行的圍欄（整段只有 `platform: github`）逃得掉。
+    這是刻意的——MYL-82 實測過寬鬆判準會掃出 25 檔而多數只是行文，那種檢查會變成
+    每次改文件都要哄它的雜訊源，**比沒有更糟**（誤報的檢查最後一定被關掉，
+    連同它本來擋得住的那些一起消失）。
+    """
+    out: list = []
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        if not YAML_FENCE_RE.match(lines[i]):
+            i += 1
+            continue
+        j = i + 1
+        keys = []
+        while j < len(lines) and not FENCE_RE.match(lines[j]):
+            m = YAML_TOP_KEY_RE.match(lines[j])
+            if m:
+                keys.append((j + 1, m.group(1)))
+            j += 1
+        if any(key in required for _, key in keys):
+            out.extend(keys)
+        i = j + 1
+    return out
+
+
+def check_config_schema(root: Path) -> SelfcheckResult:
+    """`.foundry/` 設定檔的欄位名與 schema 版本要對得上 config-schema.md（MYL-85）。
+
+    驗四件事：
+
+    1. **欄位名**：schema 標必填的欄位都在；設定檔裡沒有 schema 不認得的頂層欄位。
+       **兩個方向都要**——只驗前者的話，把 `devtools_platform` 打成
+       `devtool_platform` 只會報「缺必填欄位」，讀的人不會知道那個鍵其實就在檔案裡、
+       只是拼錯了一個字。
+    2. **schema 版本**：`foundry:` ＝ config-schema.md 宣告的現行版本；而
+       config-schema.md 自己的兩處版本宣告（散文側的「目前固定 `N`」與「版本沿革」
+       表最後一列）也要一致。
+    3. **枚舉值域**：值域寫在 schema 表裡的欄位，值要落在值域內。`org.yml` 的
+       `ai_platform` 一併驗（AC8）——⚠️ 它是**選填**，只驗「有填就要合法」，
+       不得驗成必填（MYL-82 的裁定，語意留給 `foundry-ai-platform`）。
+    4. **文件裡的舊欄位名**：已正名掉的名字不得再被當成設定欄位用。判準與它刻意
+       選的漏報方向見 `foundry_config_fences()`。
+
+    `.foundry/config.yml` 與 `config.example.yml` 兩份都驗，理由見
+    `CONFIG_EXAMPLE_REL` 的註解。
+
+    上面四件事全靠「讀得懂 config-schema.md 那張表」，所以另有一道**形狀守衛**：
+    不只擋「整表讀不出來」，也擋「只讀錯一格」（必填欄出現第三種字面、型別標
+    「枚舉」卻讀不出值域）。少了它，改 schema 時最可能發生的那兩種編輯會讓本項的
+    一部分靜默失效而仍然全綠——那正是本項存在要防的事（MYL-111 審查 §3）。
+
+    **本項不跳過目標專案**：兩份設定檔與 config-schema.md 都在 `foundry-init` 的
+    複製範圍內，對照端在目標專案照樣存在——而目標專案正是最需要這道把關的地方
+    （導入時抄到舊欄位名，讀取端只會說「缺必填欄位」）。
+    """
+    res = SelfcheckResult("config-schema", "設定檔欄位名與 schema 版本對得上 config-schema")
+    schema_path = root / CONFIG_SCHEMA_REL
+    if not schema_path.exists():
+        res.failures.append(
+            f"{CONFIG_SCHEMA_REL} 不存在——設定欄位名的唯一權威缺席，本項無從判定"
+        )
+        return res
+    schema_text = read_text(schema_path)
+
+    fields = parse_schema_fields(schema_text)
+    required = {name for name, (req, _) in fields.items() if req}
+    if not fields or not required:
+        res.failures.append(
+            f"讀不出 {CONFIG_SCHEMA_REL}「{CONFIG_SCHEMA_TOP_HEADING}」的欄位表"
+            f"（讀到 {len(fields)} 個欄位、{len(required)} 個必填）"
+            "——表的形狀變了就要一起改本檢查，不要讓它靜靜失效"
+        )
+        return res
+    enums = parse_schema_enums(fields)
+
+    # 形狀守衛：上面那道 `not fields or not required` 擋得住「整表讀不出來」，擋不住
+    # **只讀錯一格**——而本項存在的理由就是「設定欄位錯了不會有任何聲音」，讀 schema
+    # 的方式自己有這個失效點就自打嘴巴（MYL-111 審查 §3）。表裡的兩格各配對照物，
+    # 三道守衛**一律寫成白名單**（不認得就紅），不寫成相等比對——相等比對認不得的那
+    # 一格會被靜靜跳過，等於每加一層守衛只是把同一個靜默點往上搬一格（審查補正）：
+    #   - 必填欄字面限定 `✅`／`─`。出現第三種寫法時，該欄位會靜靜掉出必填集合，
+    #     接著「缺必填欄位」那一半與舊欄位名掃描的覆蓋一起無聲變窄。
+    #   - 型別欄字面限定 `CONFIG_SCHEMA_TYPES`。本檢查是拿這一格判「哪些欄位該有
+    #     值域」的，加了註記就等於把下面那道值域守衛從該欄位身上拆掉。
+    #   - 標「枚舉」卻讀不出值域 ⇒ 說明欄的分隔符被改寫了（`｜` → `/`、頓號…）。
+    #     那會讓值域與 `org.yml` 的 `ai_platform` 整組消失，而本項照樣印 ✅。
+    # 這幾道都是「schema 的形狀漂了」，先修 schema 再談設定檔，所以報完就 return。
+    #
+    # 行完整性擺在三道格守衛**之前**：它們守的是「格」的字面，守不住「整列根本沒被
+    # 讀進來」。`parse_schema_fields()`／`parse_schema_marks()` 都是 regex 不 match 就
+    # 跳過該列（沒有 else），而 `CONFIG_SCHEMA_FIELD_RE` 兩端錨定 ⇒ 欄位名格加任何裝飾
+    # （`**`x`**`、腳註）或少一格，那一列就連同它的必填／型別／值域三道守衛一起靜靜
+    # 消失。實測（MYL-111 審查 M4）：schema 把 `ai_platform` 那格加粗、`config.yml` 依
+    # schema 明文省略該段（合法），AC8 的 `org.yml` 值域驗證整項失效而 `--selfcheck`
+    # 退 0——綠字只從「3 組值域」變成「2 組值域」，沒有人會去 diff 一個 ✅ 的計數。
+    # 到這一層就收斂：表找不找得到 → 每一列都解得出 → 每一格都是認得的字面。
+    # ⚠️ 只 append 不 return：與下面三道守衛及舊欄位名後盾一起結算。搶先 return 會遮蔽
+    # 更具體的原因——欄位名被改掉的那一列同時觸發本條與 `RETIRED_CONFIG_FIELDS` 後盾，
+    # 而後盾那句才講得出「映射寫反還是又被正名一次」。
+    top_rows = first_table_rows(section_lines(schema_text, CONFIG_SCHEMA_TOP_HEADING))
+    if len(top_rows) != len(fields):
+        res.failures.append(
+            f"{CONFIG_SCHEMA_REL}「{CONFIG_SCHEMA_TOP_HEADING}」表有 {len(top_rows)} "
+            f"個資料列，只解得出 {len(fields)} 個欄位名——解不出的那一列會連同它的"
+            "必填／型別／值域三道守衛一起靜靜消失。欄位名格只認 `` `欄位名` ``"
+            "（整格，不帶粗體或註記），且每一列至少要有四格"
+        )
+    for name, (typ, mark) in parse_schema_marks(schema_text).items():
+        if mark not in CONFIG_SCHEMA_REQUIRED_MARKS:
+            res.failures.append(
+                f"{CONFIG_SCHEMA_REL}「{CONFIG_SCHEMA_TOP_HEADING}」表 `{name}` 的"
+                f"必填欄寫成 {mark!r}——本檢查是拿整格字面判必填的，只認 "
+                f"{'／'.join(CONFIG_SCHEMA_REQUIRED_MARKS)}。加了註記的那一格會讓"
+                "該欄位靜靜掉出必填集合，缺欄位與舊欄位名兩半的覆蓋跟著變窄"
+            )
+        if typ not in CONFIG_SCHEMA_TYPES:
+            res.failures.append(
+                f"{CONFIG_SCHEMA_REL}「{CONFIG_SCHEMA_TOP_HEADING}」表 `{name}` 的"
+                f"型別欄寫成 {typ!r}——本檢查是拿型別欄的字面判「哪些欄位該有值域」"
+                f"的，只認 {'／'.join(CONFIG_SCHEMA_TYPES)}。加了註記的那一格會讓該"
+                "欄位的值域守衛整條消失，之後把它的值域寫壞不會有任何聲音"
+            )
+        if typ == CONFIG_SCHEMA_ENUM_TYPE and name not in enums:
+            res.failures.append(
+                f"{CONFIG_SCHEMA_REL}「{CONFIG_SCHEMA_TOP_HEADING}」表 `{name}` 的"
+                f"型別是「{CONFIG_SCHEMA_ENUM_TYPE}」，說明欄卻讀不出值域——值域要"
+                "寫成開頭那一串 `` `a`｜`b`｜`c` ``（全形分隔符）或「值域同 `x`」。"
+                "換成別的寫法不會有任何聲音：值域整組消失，本項仍然全綠"
+            )
+    # `RETIRED_CONFIG_FIELDS` 是手維護的（取捨見它的註解），配一條廉價後盾：現名一定
+    # 在表裡、舊名一定不在。映射寫反、或現名日後又被正名一次而沒回頭改這份清單時，
+    # 當場報紅而不是讓「舊欄位名」那一半指著一個不存在的名字。
+    for old, new in sorted(RETIRED_CONFIG_FIELDS.items()):
+        if new not in fields:
+            res.failures.append(
+                f"`RETIRED_CONFIG_FIELDS` 說 `{old}` 的現名是 `{new}`，但 "
+                f"{CONFIG_SCHEMA_REL} 的「{CONFIG_SCHEMA_TOP_HEADING}」表沒有 "
+                f"`{new}`——不是映射寫反，就是它自己又被正名一次而沒回頭改這份清單"
+            )
+        if old in fields:
+            res.failures.append(
+                f"`RETIRED_CONFIG_FIELDS` 把 `{old}` 當已正名掉的舊名，"
+                f"{CONFIG_SCHEMA_REL} 卻還把它列成現行欄位——兩邊講的不是同一件事"
+            )
+    # 形狀守衛與這條後盾一起結算：兩者都是「schema 那張表已經對不上程式的讀法」，
+    # 而改一格常常同時觸發兩邊（把現名改掉 ⇒ 借用它值域的欄位也解不到）。先把
+    # schema 修好再談設定檔，所以此處報完就 return。
+    if res.failures:
+        return res
+
+    declared, latest = parse_schema_versions(schema_text)
+    if not declared or not latest:
+        res.failures.append(
+            f"讀不出 {CONFIG_SCHEMA_REL} 宣告的現行 schema 版本"
+            f"（「{CONFIG_SCHEMA_TOP_HEADING}」表讀成 {declared!r}、"
+            f"「{CONFIG_SCHEMA_HISTORY_HEADING}」表讀成 {latest!r}）"
+            "——兩處任一改了寫法就要一起改本檢查"
+        )
+        return res
+    if declared != latest:
+        res.failures.append(
+            f"{CONFIG_SCHEMA_REL} 自己就不一致：「{CONFIG_SCHEMA_TOP_HEADING}」表寫"
+            f"「目前固定 `{declared}`」，「{CONFIG_SCHEMA_HISTORY_HEADING}」表最後一列"
+            f"是 `{latest}`——遞增版本號時漏改其中一處，設定檔就會被拿一個過期的"
+            "數字去核對。先把 schema 自己對齊，再談設定檔"
+        )
+        return res
+
+    for rel in (CONFIG_REL, CONFIG_EXAMPLE_REL):
+        path = root / rel
+        if not path.exists():
+            res.failures.append(
+                f"{rel} 不存在——本項比對的兩份設定檔少了一份。"
+                f"把檔案補回來，或把它從本檢查的清單移除"
+            )
+            continue
+        cfg = parse_config(read_text(path))
+        version = cfg.get("foundry")
+        if version != declared:
+            res.failures.append(
+                f"{rel} 的 `foundry` 是 {version!r}，而 {CONFIG_SCHEMA_REL} 宣告"
+                f"現行版本是 `{declared}`——依「合法性總則」，讀取者遇到不認得的版本"
+                "要停下報錯，不得猜著解析"
+            )
+        for name in sorted(required - set(cfg)):
+            res.failures.append(
+                f"{rel} 缺必填欄位 `{name}`——依 config-schema「合法性總則」"
+                "整檔視為非法，依賴它的操作全部停擺，而讀取端只會說「缺欄位」"
+            )
+        for name in cfg:
+            if name in fields:
+                continue
+            if name in RETIRED_CONFIG_FIELDS:
                 res.failures.append(
-                    f"{rel}:{lineno} 是上面那張表的續列，但中間隔了空行"
-                    "——渲染時表格在空行處就結束了，這一行起會變成普通段落，"
-                    "連分隔符一起原樣印出來。刪掉那個空行；真要分成兩張表，"
-                    "就給下面這段補上自己的表頭與分隔列"
+                    f"{rel} 還在用舊欄位名 `{name}`，現名是 "
+                    f"`{RETIRED_CONFIG_FIELDS[name]}`——舊名會被當成未知欄位丟掉，"
+                    "於是必填欄位缺席、整檔非法。這是全有全無的失效，不是部分退化"
                 )
-            for lineno, got, want, is_sep in table_column_mismatches(text):
-                if is_sep:
-                    res.failures.append(
-                        f"{rel}:{lineno} 是分隔列，卻有 {got} 格、表頭有 {want} 格"
-                        "——兩者不等時 GFM 判定這整段根本不是表格，每一行的管線符號"
-                        f"都會原樣印出來。把分隔列補成 {want} 格"
-                    )
-                elif got > want:
-                    res.failures.append(
-                        f"{rel}:{lineno} 有 {got} 格，表頭只有 {want} 格"
-                        f"——GFM 以表頭定欄數，多出來的第 {want + 1} 格起會被**整格丟掉**，"
-                        "原文讀得到、渲染出來看不到。把多的格子併回去；"
-                        "格子內容裡的管線符號（含反引號裡的）要寫成 `\\|` 才不算分隔"
-                    )
-                else:
-                    res.failures.append(
-                        f"{rel}:{lineno} 只有 {got} 格，表頭有 {want} 格"
-                        "——渲染時缺的格子補成空白，看起來像漏填。補齊到 "
-                        f"{want} 格；真的要留白就寫成空格子"
-                    )
-    res.summary += f"（掃 {scanned} 份）"
+            else:
+                res.failures.append(
+                    f"{rel} 有頂層欄位 `{name}`，但 {CONFIG_SCHEMA_REL} 的"
+                    f"「{CONFIG_SCHEMA_TOP_HEADING}」表沒有它——不是打錯字，"
+                    "就是加了欄位沒回頭改 schema（加欄位走 CEO 提案＋使用者核可）"
+                )
+        for name in sorted(enums):
+            value = cfg.get(name)
+            if isinstance(value, str) and value and value not in enums[name]:
+                res.failures.append(
+                    f"{rel} 的 `{name}` 是 `{value}`，值域是 "
+                    f"{'｜'.join(enums[name])}（權威在 {CONFIG_SCHEMA_REL}）"
+                )
+
+    # `org.yml` 側的 `ai_platform`（MYL-85 AC8）。`org-sync` 只比對「兩份檔都有寫時
+    # 值是否相同」，所以 `config.yml` 整欄沒寫的時候，`org.yml` 填 `banana` 也照樣
+    # 通過——實測過。這裡補的是值域那一半，**不碰選填性**。
+    org_path = root / ORG_REL
+    if org_path.exists() and "ai_platform" in enums:
+        try:
+            org = parse_org(read_text(org_path))
+        except LintError:
+            org = {}    # 檔案形狀壞掉是 `org-sync` 的事，不在這裡重複報一次
+        value = org.get("ai_platform")
+        if isinstance(value, str) and value and value not in enums["ai_platform"]:
+            res.failures.append(
+                f"{ORG_REL} 的 `ai_platform` 是 `{value}`，值域是 "
+                f"{'｜'.join(enums['ai_platform'])}（權威在 {CONFIG_SCHEMA_REL}）"
+                f"——{CONFIG_REL} 沒寫這一欄時 `org-sync` 的兩檔比對不觸發，"
+                "值域外的值於是整個沒人擋"
+            )
+
+    scanned = 0
+    for rel in config_field_scan_targets(root):
+        scanned += 1
+        for lineno, key in foundry_config_fences(read_text(root / rel), required):
+            if key in RETIRED_CONFIG_FIELDS:
+                res.failures.append(
+                    f"{rel}:{lineno} 的 yaml 範例還拿 `{key}` 當設定欄位，現名是 "
+                    f"`{RETIRED_CONFIG_FIELDS[key]}`——照這段抄出來的設定檔會缺必填"
+                    "欄位而整檔非法，而讀取端只會說「缺欄位」，不會說「你抄到的是舊名」"
+                )
+    # 值域數也印出來：值域靜默消失（分隔符改寫）除了形狀守衛擋一道，摘要行上也會
+    # 當場現形——成本一個數字（MYL-111 審查 §4-4）。
+    res.summary += (f"（schema v{declared}、{len(required)} 個必填欄位、"
+                    f"{len(enums)} 組值域，掃 {scanned} 份文件）")
     return res
 
 
@@ -1245,8 +1722,9 @@ def check_org_sync(root: Path) -> SelfcheckResult:
     是預期行為。**下一個看到這裡的人請不要「補上」一個比對平台的檢查**，
     那會在整段期間誤報；與平台實況的對帳歸 T7。
 
-    `ai_platform` 的枚舉合法性歸 config-schema，本檢查只驗兩份設定檔講的是同一件事——
-    在程式裡另養一份枚舉，就是再造一個會漂的來源。
+    `ai_platform` 的枚舉合法性歸 `config-schema`（那一項直接讀 config-schema.md 的
+    值域，MYL-85 AC8），本檢查只驗兩份設定檔講的是同一件事——在程式裡另養一份枚舉，
+    就是再造一個會漂的來源。
     """
     res = SelfcheckResult("org-sync", "組織宣告與 protocol 第 9／8 節一致")
     path = root / ORG_REL
@@ -1333,9 +1811,23 @@ def check_org_sync(root: Path) -> SelfcheckResult:
         )
         return res
 
-    titles = {role.get("title"): rid for rid, role in by_id.items() if role.get("title")}
-    if len(titles) != len(by_id):
-        res.failures.append(f"{ORG_REL} 有重複的 `title`——組織圖靠它對接，不能重複")
+    # 重複只能靠「同一個 title 出現兩次」判定（MYL-85 AC7）。原本比的是
+    # `len(titles) != len(by_id)`，而**缺 `title` 的角色同樣會讓左邊變短**——於是
+    # 一份只是漏填 `title` 的 org.yml 會同時收到「缺必填欄位 `title`」與一句
+    # 根本不存在的「有重複的 `title`」。不會造成假綠（只在檔案已經非法時一起出現），
+    # 但那句話會把下一個人指去找一個不存在的重複。
+    titles: dict = {}
+    for rid, role in by_id.items():
+        title = role.get("title")
+        if not title:
+            continue
+        if title in titles:
+            res.failures.append(
+                f"{ORG_REL} `{rid}` 與 `{titles[title]}` 的 `title` 都是 `{title}`"
+                "——組織圖靠它對接，不能重複"
+            )
+            continue
+        titles[title] = rid
     for title in sorted(set(titles) - set(parents)):
         res.failures.append(
             f"{ORG_REL} 宣告了 `{title}`，但 protocol 第 9 節組織圖沒有這個節點"
@@ -2150,6 +2642,7 @@ SELFCHECK_LABELS = {
     "internal-links": "相對連結",
     "version-shape": "版本號形狀",
     "table-shape": "表格形狀",
+    "config-schema": "設定欄位",
     "org-sync": "組織宣告",
     "handbook-stamp": "手冊戳記",
     "init-copy-list": "init 複製清單",
@@ -2300,9 +2793,9 @@ def check_selfcheck_names(root: Path) -> SelfcheckResult:
 
 SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
               check_rule_marks, check_big_files, check_internal_links,
-              check_version_shape, check_table_shape, check_org_sync,
-              check_handbook_stamp, check_init_copy_list, check_selfcheck_names,
-              check_mirror_recon)
+              check_version_shape, check_table_shape, check_config_schema,
+              check_org_sync, check_handbook_stamp, check_init_copy_list,
+              check_selfcheck_names, check_mirror_recon)
 
 
 def run_selfcheck(root: Path) -> list:
