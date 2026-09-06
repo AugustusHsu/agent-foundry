@@ -14,6 +14,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -1435,6 +1436,321 @@ class OrgSyncTest(RepoCopyTestCase):
         """
         self.assertIn("id: pm", self._org())
         self.assertTrue(self._run().passed)
+
+    # ── 缺 `title` 不得多報一句不存在的「重複」（MYL-85 AC7）──────────────
+    def test_缺_title_不會多報一句假的重複(self):
+        """原本用 `len(titles) != len(by_id)` 判重複，缺 `title` 也會讓左邊變短。
+
+        失效方向不是假綠（檔案這時本來就非法），是**錯誤訊息把人指向錯的方向**：
+        讀到「有重複的 `title`」的人會去找那個不存在的重複。
+        """
+        text = self._org()
+        marker = "    title: Developer\n"
+        self.assertIn(marker, text, "`org.yml` 的角色欄位形狀變了")
+        self.write(foundry_lint.ORG_REL, text.replace(marker, "", 1))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("缺必填欄位 `title`" in f for f in res.failures), res.failures)
+        self.assertFalse([f for f in res.failures if "重複" in f],
+                         "缺 `title` 卻報了一句不存在的重複")
+
+    def test_真的重複時仍然報得出來(self):
+        """上一條的對照組：確認修法沒有把重複判定一起關掉。
+
+        反例自己造兩端——把某個角色的 `title` 改成**另一個角色的** `title`，
+        兩邊都從檔案現值取，不寫死任何一個 repo 的角色名。
+        """
+        roles = foundry_lint.parse_org(self._org())["roles"]
+        first, second = roles[0]["title"], roles[1]["title"]
+        self.assertNotEqual(first, second)
+        self.write(foundry_lint.ORG_REL,
+                   self._org().replace(f"    title: {second}\n",
+                                       f"    title: {first}\n", 1))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("重複" in f and first in f for f in res.failures), res.failures)
+
+
+class ConfigSchemaTest(RepoCopyTestCase):
+    """`config-schema`（MYL-85）：設定欄位名、schema 版本、值域、文件裡的舊欄位名。
+
+    每一條反例都**自己造兩端**——要用到的欄位名、必填集合與現行版本號一律從
+    `config-schema.md` 現值算出來，不寫死 agent-foundry 自己那份的值。本檔是可攜
+    的那一半，目標專案的 `.foundry/config.yml` 長什麼樣是它自己的事（MYL-91）。
+    """
+
+    #: 一段「看得出是 Foundry 設定檔」的 yaml 圍欄：帶必填欄位，且拿舊名當欄位。
+    def _bad_fence(self, retired, required_key):
+        return ("說明文字。\n\n```yaml\n"
+                f"foundry: {self._declared()}\n"
+                f"{retired}: github\n"
+                f"{required_key}:\n  spec_approval: user\n"
+                "```\n")
+
+    def _run(self):
+        return foundry_lint.check_config_schema(self.root)
+
+    def _schema(self):
+        return (self.root / foundry_lint.CONFIG_SCHEMA_REL).read_text(encoding="utf-8")
+
+    def _config(self):
+        return (self.root / foundry_lint.CONFIG_REL).read_text(encoding="utf-8")
+
+    def _fields(self):
+        return foundry_lint.parse_schema_fields(self._schema())
+
+    def _required(self):
+        return sorted(n for n, (req, _) in self._fields().items() if req)
+
+    def _declared(self):
+        declared, _ = foundry_lint.parse_schema_versions(self._schema())
+        self.assertIsNotNone(declared, "config-schema 讀不出現行版本，反例無從構造")
+        return declared
+
+    def _retired(self):
+        """挑一個已正名掉的舊欄位名——清單空了的話本組反例整批無從構造。"""
+        self.assertTrue(foundry_lint.RETIRED_CONFIG_FIELDS,
+                        "`RETIRED_CONFIG_FIELDS` 空了：舊欄位名那一半沒有反例守得住")
+        return sorted(foundry_lint.RETIRED_CONFIG_FIELDS)[0]
+
+    def test_真實_repo_通過(self):
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    # ── 欄位名（AC1 第 1 件事）────────────────────────────────────────
+    def test_必填欄位名打錯時兩個方向都報(self):
+        """只驗「缺必填」的話，讀的人不會知道那個鍵其實就在檔案裡、只是拼錯了。
+
+        逐一把每個必填欄位改成錯名——**不挑一個代表**：挑一個的話，日後某個欄位
+        從表格裡掉出必填集合也不會有人發現。
+        """
+        for name in self._required():
+            with self.subTest(field=name):
+                typo = name + "_打錯字"
+                text = re.sub(rf"^{name}:", typo + ":", self._config(), flags=re.M)
+                self.assertNotEqual(text, self._config(), f"`{name}:` 不在頂格")
+                self.write(foundry_lint.CONFIG_REL, text)
+                res = self._run()
+                self.assertFalse(res.passed)
+                self.assertTrue(any(f"缺必填欄位 `{name}`" in f for f in res.failures),
+                                res.failures)
+                self.assertTrue(any(f"`{typo}`" in f and "沒有它" in f
+                                    for f in res.failures), res.failures)
+
+    def test_設定檔裡的舊欄位名被擋下(self):
+        retired = self._retired()
+        self.write(foundry_lint.CONFIG_REL,
+                   self._config() + f"\n{retired}: github\n")
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(f"舊欄位名 `{retired}`" in f for f in res.failures),
+                        res.failures)
+
+    def test_範例檔也一起驗(self):
+        """`config.example.yml` 是 `foundry-init` 的起點：它寫錯，錯誤會被複製到
+        之後導入的每一個專案，而那些專案不會知道自己抄到的是舊名。
+
+        只驗 `.foundry/config.yml` 的話這一格整個沒人管——實測過（把範例檔從比對
+        清單拿掉，其餘 235 條測試全綠）。
+        """
+        rel = foundry_lint.CONFIG_EXAMPLE_REL
+        path = self.root / rel
+        self.assertTrue(path.exists(), f"{rel} 不存在——比對清單漂了")
+        path.write_text(path.read_text(encoding="utf-8")
+                        + f"\n{self._retired()}: github\n", encoding="utf-8")
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(rel in f for f in res.failures), res.failures)
+
+    def test_值域外的值被擋下(self):
+        """枚舉來自 config-schema 的表格，不是程式裡另抄的一份。"""
+        enums = foundry_lint.parse_schema_enums(self._fields())
+        self.assertTrue(enums, "config-schema 一個值域都讀不出來——表的形狀變了")
+        name = sorted(enums)[0]
+        text = re.sub(rf"^{name}:.*$", f"{name}: 不在值域裡的平台",
+                      self._config(), flags=re.M)
+        self.assertNotEqual(text, self._config(), f"`{name}:` 不在設定檔頂格")
+        self.write(foundry_lint.CONFIG_REL, text)
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("不在值域裡的平台" in f and "值域" in f for f in res.failures),
+                        res.failures)
+
+    # ── schema 版本（AC1 第 2 件事）──────────────────────────────────
+    def test_設定檔版本與_schema_不一致時擋下(self):
+        bogus = str(int(self._declared()) + 1)
+        text = re.sub(r"^foundry:.*$", f"foundry: {bogus}", self._config(), flags=re.M)
+        self.write(foundry_lint.CONFIG_REL, text)
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("`foundry`" in f and bogus in f for f in res.failures),
+                        res.failures)
+
+    def test_schema_自己兩處版本不一致時擋下(self):
+        """散文側「目前固定 `N`」與「版本沿革」表最後一列是同一件事寫兩個地方。
+
+        只讀其中一處的話，遞增版本號時漏改另一處，本檢查會拿過期的數字去核設定檔
+        而且核得振振有詞——那正是它該擋的那種靜默。
+        """
+        declared = self._declared()
+        bogus = str(int(declared) + 1)
+        self.write(foundry_lint.CONFIG_SCHEMA_REL,
+                   self._schema().replace(f"目前固定 `{declared}`",
+                                          f"目前固定 `{bogus}`", 1))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("自己就不一致" in f for f in res.failures), res.failures)
+
+    def test_欄位表讀不出來時報紅而不是靜靜通過(self):
+        self.write(foundry_lint.CONFIG_SCHEMA_REL,
+                   self._schema().replace(
+                       "## " + foundry_lint.CONFIG_SCHEMA_TOP_HEADING,
+                       "## 設定檔長什麼樣", 1))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("欄位表" in f for f in res.failures), res.failures)
+
+    # ── 選填性：`ai_platform` 不得被驗成必填（本單邊界第 2 條）───────────
+    def test_選填欄位缺席不算缺欄位(self):
+        """`ai_platform` 是選填（MYL-82 裁定），本項不得把它驗成必填。
+
+        只刪**純量**的選填欄位：物件型的（`platform_options` 那種）刪掉標題行會把
+        底下的巢狀鍵留在原地變成頂層鍵，那是把檔案寫壞，不是「欄位缺席」。
+        """
+        cfg = foundry_lint.parse_config(self._config())
+        scalar = [n for n, (req, _) in self._fields().items()
+                  if not req and isinstance(cfg.get(n), str)]
+        self.assertTrue(scalar, "設定檔一個純量選填欄位都沒有——反例無從構造")
+        text = self._config()
+        for name in scalar:
+            text = re.sub(rf"^{name}:.*$", "", text, flags=re.M)
+        self.write(foundry_lint.CONFIG_REL, text)
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    # ── AC8：`org.yml` 側的 `ai_platform` 值域 ───────────────────────
+    def test_org_yml_的_ai_platform_值域外被擋下(self):
+        """反例要造的是 `org-sync` 漏掉的那個形狀：`config.yml` **沒寫**這一欄。
+
+        兩檔都有寫時 `org-sync` 的比對會先報「兩個值」，那不是本條要證明的事。
+        把 `config.yml` 那一欄拿掉，兩檔比對整個不觸發——原本 `banana` 就是從
+        這個缺口溜過去的。
+        """
+        self.write(foundry_lint.CONFIG_REL,
+                   re.sub(r"^ai_platform:.*$", "", self._config(), flags=re.M))
+        org = (self.root / foundry_lint.ORG_REL).read_text(encoding="utf-8")
+        current = foundry_lint.parse_org(org)["ai_platform"]
+        self.write(foundry_lint.ORG_REL,
+                   org.replace(f"ai_platform: {current}", "ai_platform: banana", 1))
+        self.assertTrue(foundry_lint.check_org_sync(self.root).passed,
+                        "`org-sync` 這時就紅了——反例沒造出「只有本項擋得住」的那個缺口")
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(foundry_lint.ORG_REL in f and "banana" in f
+                            for f in res.failures), res.failures)
+
+    # ── 文件裡的舊欄位名：判準要分辨得出設定欄位與散文（AC3）────────────
+    def test_文件的_yaml_範例用舊欄位名被擋下(self):
+        retired = self._retired()
+        self.write("skills/drift-sample.md", self._bad_fence(retired, "gates"))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("skills/drift-sample.md:5" in f and retired in f
+                            for f in res.failures), res.failures)
+
+    def test_散文提到舊欄位名不誤報(self):
+        """MYL-82 實測寬鬆判準會掃出 25 檔而多數只是行文——那種紅字會被習慣性忽略。"""
+        retired = self._retired()
+        self.write(
+            "skills/drift-sample.md",
+            f"本欄原名 `{retired}`，MYL-82 正名。\n\n"
+            f"| 欄位 | 舊名 |\n| --- | --- |\n| 工具面 | `{retired}` |\n\n"
+            f"    {retired}: github\n\n```\n{retired}: github\n```\n",
+        )
+        self.assertTrue(self._run().passed, self._run().failures)
+
+    def test_不是_Foundry_設定的_yaml_圍欄不誤報(self):
+        """`adapters/gitlab.md` 那段 GitLab CI 就是這種：是 yaml，但不是設定檔。"""
+        retired = self._retired()
+        self.write("skills/drift-sample.md",
+                   f"```yaml\npages:\n  script:\n    - build\n{retired}: github\n```\n")
+        self.assertTrue(self._run().passed, self._run().failures)
+
+    def test_巢狀鍵不算頂層設定欄位(self):
+        retired = self._retired()
+        self.write("skills/drift-sample.md",
+                   f"```yaml\nfoundry: {self._declared()}\ngates:\n"
+                   f"  {retired}: github\n```\n")
+        self.assertTrue(self._run().passed, self._run().failures)
+
+    # ── AC4：歷史交付物不回溯改，也就不掃 ────────────────────────────
+    def test_歷史交付物不在掃描範圍內(self):
+        """`docs/features/` 是各模組**當時**的交付物，改它等於竄改簽核過的文件。"""
+        retired = self._retired()
+        rel = "docs/features/cross-platform/drift-sample.md"
+        self.write(rel, self._bad_fence(retired, "gates"))
+        self.assertTrue(self._run().passed, self._run().failures)
+        self.assertNotIn(rel, foundry_lint.config_field_scan_targets(self.root))
+
+    def test_排除的只有_docs_features(self):
+        """上一條的對照組：同一段內容放在 `docs/` 別處照樣紅。
+
+        少了這條，把排除規則寫成「整個 `docs/` 都不掃」也會通過。
+        """
+        retired = self._retired()
+        self.write("docs/standards/drift-sample.md", self._bad_fence(retired, "gates"))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("docs/standards/drift-sample.md" in f for f in res.failures),
+                        res.failures)
+
+
+class TableShapeEntryFileTest(RepoCopyTestCase):
+    """`table-shape` 的掃描範圍要涵蓋根目錄雙入口（MYL-85 AC9）。
+
+    那是全 repo 表格最密的兩份檔案，又受「共用正文逐字相同」約束——一處被空行
+    切斷會**同時**壞兩份，而在此之前它們完全不在覆蓋內。
+    """
+
+    TABLE = "| 欄 | 說明 |\n| --- | --- |\n| a | 甲 |\n"
+
+    def _run(self):
+        return foundry_lint.check_table_shape(self.root)
+
+    def test_入口檔的表格被空行切斷時擋下(self):
+        for rel in foundry_lint.TABLE_SCAN_FILES:
+            with self.subTest(entry=rel):
+                self.setUp()    # 每份各從乾淨副本開始
+                path = self.root / rel
+                self.assertTrue(path.exists(), f"{rel} 不存在——掃描清單漂了")
+                self.write(rel, path.read_text(encoding="utf-8")
+                           + "\n" + self.TABLE + "\n| b | 乙 |\n")
+                res = self._run()
+                self.assertFalse(res.passed, f"{rel} 沒被掃到")
+                self.assertTrue(any(f.startswith(rel + ":") for f in res.failures),
+                                res.failures)
+
+    def test_入口檔的欄數對不上表頭時擋下(self):
+        rel = foundry_lint.TABLE_SCAN_FILES[0]
+        path = self.root / rel
+        self.write(rel, path.read_text(encoding="utf-8")
+                   + "\n" + self.TABLE + "| b | 乙 | 多出來的一格 |\n")
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(rel in f and "整格丟掉" in f for f in res.failures),
+                        res.failures)
+
+    def test_引用區塊內的表格不納入(self):
+        """AC9 明寫不納入（全 repo 只有一處、屬歷史交付物）。
+
+        這條是「刻意的缺口」的守衛，不是在慶祝漏檢：日後真要補前綴剝離，
+        改的是這條測試的期望，而不是在別處悄悄加一層而沒有人知道範圍變了。
+        """
+        rel = foundry_lint.TABLE_SCAN_FILES[0]
+        quoted = "".join("> " + ln + "\n" for ln in self.TABLE.splitlines())
+        self.write(rel, (self.root / rel).read_text(encoding="utf-8")
+                   + "\n" + quoted + ">\n> | b | 乙 |\n")
+        self.assertTrue(self._run().passed, self._run().failures)
 
 
 if __name__ == "__main__":

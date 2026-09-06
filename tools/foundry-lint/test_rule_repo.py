@@ -469,9 +469,9 @@ class SelfcheckTest(unittest.TestCase):
         self.assertEqual({c["name"] for c in data["checks"]},
                          {"entry-sync", "nav-sync", "anchors", "rule-ids",
                           "rule-marks", "big-files", "internal-links",
-                          "version-shape", "table-shape", "org-sync",
-                          "handbook-stamp", "init-copy-list", "selfcheck-names",
-                          "mirror-recon"})
+                          "version-shape", "table-shape", "config-schema",
+                          "org-sync", "handbook-stamp", "init-copy-list",
+                          "selfcheck-names", "mirror-recon"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()

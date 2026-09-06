@@ -11,7 +11,7 @@ help: ## 列出所有可用指令
 
 check: selfcheck test ## 跑完所有機械層閘門（＝pre-commit 會擋的內容）
 
-selfcheck: ## repo 規範自檢：雙入口同步、手冊 nav、錨點、規則 ID、規則標記、大檔清單、相對連結、版本號形狀、表格形狀、組織宣告、手冊戳記、init 複製清單、自檢名稱清單、鏡像對帳
+selfcheck: ## repo 規範自檢：雙入口同步、手冊 nav、錨點、規則 ID、規則標記、大檔清單、相對連結、版本號形狀、表格形狀、設定欄位、組織宣告、手冊戳記、init 複製清單、自檢名稱清單、鏡像對帳
 	@python3 tools/foundry-lint/foundry_lint.py --selfcheck
 
 # 每個工具各自 discover：unittest 會把 start dir 加進 sys.path，
