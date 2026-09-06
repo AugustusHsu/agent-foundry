@@ -1222,6 +1222,15 @@ def parse_schema_marks(text: str) -> dict:
 
     另開一個函式而不是把 `parse_schema_fields()` 的二元組擴成三元組：那個回傳值
     有數處在做 `(req, desc)` 解包，改 arity 會一起壞，而這兩格只有守衛需要原文。
+
+    ⚠️ **本函式的鍵集與 `parse_schema_fields()` 相同是被依賴的性質，不是巧合**：
+    `check_config_schema()` 的行完整性守衛只比對 `first_table_rows()` 與
+    `parse_schema_fields()` 的長度，靠「兩者取列條件字面相同」（同一個
+    `first_table_rows()` ＋同一個 `len(cells) < 4` ＋同一個
+    `CONFIG_SCHEMA_FIELD_RE`）順帶覆蓋本函式——於是本函式底下那三道格守衛不會被
+    「整列讀丟」繞過。哪天這裡的取列條件與 `parse_schema_fields()` 被改得不一樣，
+    那道覆蓋會**無聲**消失（守衛數得對、卻守到另一批列）。要改取列條件請兩邊一起
+    改，或給本函式補一道自己的行完整性守衛（MYL-111 審查第 4 輪）。
     """
     marks: dict = {}
     for row in first_table_rows(section_lines(text, CONFIG_SCHEMA_TOP_HEADING)):
