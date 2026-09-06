@@ -85,6 +85,23 @@ class RealConfigTest(unittest.TestCase):
         self.assertEqual(cfg.get("devtools_platform"), "paperclip")
 
 
+class RealOrgTest(unittest.TestCase):
+    """`.foundry/org.yml` 的內容——斷言的是 agent-foundry 自己那份的宣告。
+
+    分工：值域成員本身（`configure_agents` 在不在 `ORG_PERMISSIONS` 裡）與值域
+    的反例都是可攜的，守在 `OrgSyncTest`；這裡守的是「**本 repo** 的 CEO 確實
+    登記了它」——那是本 repo 的資料，目標專案沒有義務長成一樣。
+    """
+
+    def test_CEO_登記了_configure_agents(self):
+        text = (REPO_ROOT / foundry_lint.ORG_REL).read_text(encoding="utf-8")
+        ceo = next(r for r in foundry_lint.parse_org(text)["roles"] if r["id"] == "ceo")
+        self.assertIn(
+            "configure_agents", ceo["permissions"],
+            "CEO 的 `agents:configure` 登記不見了——那是 MYL-79 卡 `0bd69c99` Q5 核可"
+            "補上的既有現況，移除它要走 `org.yml` 的核可路徑，不是順手改")
+
+
 class SelfcheckTest(unittest.TestCase):
     """在真實 repo 的副本上做變異，證明每項檢查都真的擋得住。
 

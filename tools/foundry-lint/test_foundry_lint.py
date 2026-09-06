@@ -1211,6 +1211,36 @@ class OrgSyncTest(RepoCopyTestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("foundry_org" in f for f in res.failures), res.failures)
 
+    def test_permissions_值域外的值擋下(self):
+        """封閉值域的反例。少了這條，打錯的權限名會被當成一個新權限默默收下。
+
+        **反例自己造兩端**：插一個保證不在值域裡的值，不去改寫某個現有的權限名。
+        本檔是可攜的那一半（`foundry-init` 會複製到目標專案），而目標專案的
+        `org.yml` 宣告什麼權限是它自己的事——依賴現值的話 `replace` 會變成
+        no-op，這條就從反例退化成「跑了一次真實 repo」。
+        """
+        text = self._org()
+        marker = "    permissions:\n"
+        self.assertIn(marker, text, "`org.yml` 的 `permissions:` 區塊形狀變了")
+        self.write(foundry_lint.ORG_REL,
+                   text.replace(marker, marker + "      - 不在值域裡的權限\n", 1))
+        res = self._run()
+        self.assertFalse(res.passed, "插了值域外的權限卻通過了")
+        self.assertTrue(any("不在值域裡的權限" in f and "值域" in f for f in res.failures),
+                        res.failures)
+
+    def test_configure_agents_在值域內(self):
+        """MYL-79 加入的值域成員。
+
+        上一條只證明「值域擋得住外來值」，擋不住有人把這個成員從值域**刪掉**——
+        那會讓任何登記了它的 `org.yml` 突然變非法，而錯誤訊息會指向 `org.yml`
+        （看起來像宣告寫錯），真正的原因卻在值域那一行。
+        這裡只斷言常數本身，不斷言任何一份 `org.yml` 的內容：本 repo 的 CEO 確實
+        登記了它（卡 `0bd69c99` Q5 核可），但那是本 repo 的資料，守在
+        `test_rule_repo.py`；目標專案要不要用這個值是它自己的事。
+        """
+        self.assertIn("configure_agents", foundry_lint.ORG_PERMISSIONS)
+
     def test_漏宣告組織圖上的角色被擋下(self):
         text = self._org()
         head, _, _ = text.partition("  - id: qa-engineer")

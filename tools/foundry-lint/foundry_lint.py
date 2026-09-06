@@ -983,7 +983,9 @@ ORG_SCHEMA_VERSION = "1"
 #: `model_tier` 的值 → protocol 第 8 節「三層預設」表第一欄的字面。
 ORG_MODEL_TIERS = {"high": "高", "medium": "中", "low": "低"}
 #: `permissions[]` 的封閉值域（Foundry 級名稱；落到各平台哪個欄位見 config-schema）。
-ORG_PERMISSIONS = ("assign_tasks", "create_agents", "create_skills")
+#: `configure_agents` 由 MYL-79 加入：它與前三個不同，在 Paperclip 上**只讀得到、寫不進去**
+#: （沒有對應的面板布林，來源是建 agent 時自帶的 grant），所以它永遠只能是「登記現況」。
+ORG_PERMISSIONS = ("assign_tasks", "configure_agents", "create_agents", "create_skills")
 #: 第 9 節組織圖的樹根，以及 `reports_to` 裡代表它的值。
 ORG_TREE_ROOT = "使用者"
 ORG_ROOT_REPORTS_TO = "user"

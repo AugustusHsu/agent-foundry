@@ -201,9 +201,11 @@ protocol 第 9 節的散文、`skills/roles/` 底下的角色 skill、以及在�
 **本檔是「應然」不是「實然」。** 它是規則層的宣告——這個專案**該有**哪些角色、誰向誰匯報、
 各自掛什麼、用哪一層模型；它**不是平台狀態的鏡子**。`foundry-lint --selfcheck` 的 `org-sync`
 因此只比對 `org.yml` ↔ protocol 第 9 節組織圖 ↔ 第 8 節分層表，**刻意不比對平台實況**。
-現成的例子：本 repo 的 `org.yml` 宣告了 PM，而 PM 的 agent 要到 MYL-79（T7）才真的被建出來，
-中間隔著幾張單——那段期間宣告一個平台上還不存在的成員是**預期行為，不是 bug**。
-與平台實況的對帳歸 T7；`test_不比對平台實況` 是這條規定的回歸守衛。
+角色可以先宣告在本檔、後才在平台上建出來——那段期間宣告一個平台上還不存在的成員是
+**預期行為，不是 bug**（protocol `O1` 第 1 種情形；該角色在第 9 節決策權矩陣裡的格子
+依 `O4` 由匯報對象暫代）。本 repo 自己走過這一段：建檔（MYL-76）時宣告的 PM，
+到 MYL-79 才真的在平台上建出來。與平台實況的對帳歸承接建置的那張工單，
+`test_不比對平台實況` 是這條規定的回歸守衛。
 ⚠️ **不要「順手補」一個比對平台的檢查**——它在上述整段期間都會誤報，而誤報的檢查會被關掉。
 
 ### 為什麼沒有 `org.example.yml`（MYL-78 裁定，不要再提案）
@@ -245,16 +247,20 @@ protocol 第 9 節的散文、`skills/roles/` 底下的角色 skill、以及在�
 | 值 | 語意 | 在 Paperclip 上落到哪 |
 | --- | --- | --- |
 | `assign_tasks` | 指派工單（＝第 9 節矩陣的「派工」格）。在 Paperclip 上，指派同時是唯一的喚醒原語 | 寫 `permissions.canAssignTasks` |
+| `configure_agents` | 改**既有** agent 的設定：顯示名、圖示、模型層、權限旗標。不含建置新 agent（那是 `create_agents`） | **只讀得到**：`access.grants[]` 裡的 `agents:configure`。沒有對應的寫入欄位 |
 | `create_agents` | 建置新的 agent | 寫 `permissions.canCreateAgents` |
 | `create_skills` | 建立／匯入 skill | 寫 `permissions.canCreateSkills` |
 
 ⚠️ **寫入與稽核讀的不是同一組欄位**（本 repo 執行層實測）：設定時寫 `permissions.*`，
 但稽核要讀 `access.*` 與 `access.grants`——兩者可能給出相反的答案。所以本欄用 Foundry 級名稱
 宣告「應然」，平台欄位的對應寫在這張表與各平台 adapter，**不把平台欄位名寫進 `org.yml`**。
+`configure_agents`（MYL-79 加入）是這個不對稱的極端形態：它**只有讀的那一半**——來源是建
+agent 時自帶的 grant，沒有任何面板欄位寫得到它，所以宣告了也無法照著設定，那一格永遠只能是
+「登記現況」而不是「應然」（實測見 `docs/standards/known-drift.md` `L24`）。
 真正把宣告套到平台上（含這組對應要怎麼驗）是軸 A 動詞 `provision_team` 的事，
 規格見 `SKILL.md` §8（MYL-77 定義），Paperclip 的指令對照見 `adapters/paperclip.md`
-的「provision_team」一節；**在平台上真的建出成員屬 MYL-79（T7）**。
-在那之前本檔只被 `org-sync` 讀。
+的「provision_team」一節。本 repo 的 9 名成員已於 **2026-09-06（MYL-79）** 全數建置並逐格
+對帳完畢；`org-sync` 仍**只**比對本檔 ↔ protocol，與平台的對帳歸各該建置工單。
 
 ### 誰能改 `org.yml`
 

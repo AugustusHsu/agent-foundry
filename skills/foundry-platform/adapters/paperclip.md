@@ -219,13 +219,15 @@ Product Analyst 與 Scrum Master **都是 `pm`**。`role` 只影響平台 UI 分
 兩邊都不是 agent 能自己決定的（改 `org.yml` 的授權路徑見 `../config-schema.md`）。
 `name` 沒有平台層的唯一性保證，所以**同一個鍵配到多筆時同樣停下報告**，不得任挑一筆。
 
-**2026-09-06 全公司 8 名成員實測**（`org.yml` 宣告 9 個角色），差異共**三項**：
+**2026-09-06 全公司實測**（`org.yml` 宣告 9 個角色）。同日 MYL-79 建置 PM，**建置前**平台上
+是 8 名、差異三項；**建置後**是 9 名、差異剩**兩項**（下表 PM 那列保留，因為它示範的正是
+「缺的那一堆」長什麼樣、補上之後又如何）：
 
 | 宣告 `title` | 平台 `name`（對帳鍵） | 平台 `title`（顯示名） | 判定 |
 | --- | --- | --- | --- |
 | `CEO` | `CEO` | **`null`** | ✅ 對得上。**這一格就是不能拿平台 `title` 當鍵的證據**——它是樹根（`reports_to: user`），而 §8.2 要求由上而下建置，用 `title` 當鍵的話第一個動作就是在樹根建出第二個 CEO |
 | `Developer` | `Developer` | **`Developer（全端）`** | ✅ 對得上。顯示名與宣告不一致屬 §8.2 的**第五種差異**：只報告，不自動改 |
-| `PM` | （不存在） | （不存在） | 屬「缺的」那一堆，且是**預期的**——MYL-79／T7 才建 |
+| `PM` | `PM` | `PM` | ✅ 現已對得上（MYL-79 依步驟 1 建置）。**建置前**這一格是「缺的」那一堆，且是**預期的**——規範先於平台，處置見 protocol `O1` 第 1 種情形與 `O4` |
 
 其餘 6 個角色三欄一致，無差異。上表是**同一次實測的完整結果**，不是舉例。
 
@@ -339,6 +341,7 @@ curl -s "${AUTH[@]}" "$PAPERCLIP_API_BASE/api/companies/<CID>/issues?view=compac
 | `POST /api/companies/<CID>/issues` 的 body | OpenAPI 未展開該 schema；欄位取自 issue 物件實際回傳欄位與既有開單實務 |
 | 「provision_team」一節的**讀取面**：`GET …/agents`（裸陣列、`role` 的 12 值粗桶、步驟 0 那張 8 名成員對帳表——含 CEO 的平台 `title` 為 `null` 與 `Developer（全端）` 的顯示名分岔）、`GET /api/agents/me` 的 `adapterConfig`、讀別人回 `{}`、`…/skills` 的 `deny_missing_membership` | 2026-09-06 於本公司以 agent 身分實機執行驗證（MYL-77） |
 | `POST /api/companies/<CID>/agents` 的 `required` 只有 `name`（`minLength: 1`）、`title` 為 `nullable: true` 的選填欄位——**對帳鍵定在 `name` 的全部依據** | 依平台 `GET /api/openapi.json` 的 schema 定義（2026-09-06 取，MYL-77） |
-| 「provision_team」一節的**寫入面**：`POST …/agents`、`PATCH …/permissions`、`POST …/skills/sync`、`PATCH /api/agents/<AID>` 的欄位與必填 | 依平台 `GET /api/openapi.json` 的 schema 定義。**本單未實跑任何寫入**——依工單邊界，真的在平台上建 agent 屬 MYL-79（T7）。第一次執行時逐步比對實際回傳，對不上就改回本節 |
+| 「provision_team」一節的**寫入面**：`POST …/agents`、`PATCH …/permissions`、`PATCH /api/agents/<AID>` 的欄位與必填 | **2026-09-06 於本公司實機執行並逐欄覆驗（MYL-79）**：`POST …/agents` 回 201、`PATCH …/permissions` 回 200、`PATCH /api/agents/<AID>` 回 200。實跑撿到三處 schema 看不出來的行為，已收進 `docs/standards/known-drift.md` `L24`～`L26`——動寫入面之前先讀那三條 |
+| 「provision_team」一節的 `POST …/skills/sync` | **仍未實跑**：建立成員時直接帶 `desiredSkills` 就掛好了三份 skill（MYL-79 實測），沒有用到這一支。要用它之前先比對實際回傳 |
 
 首次在新專案套用本 adapter 時，先用一張測試工單走一遍 `create_issue → set_labels → update_status → comment → list_issues`，確認無誤再正式使用。
