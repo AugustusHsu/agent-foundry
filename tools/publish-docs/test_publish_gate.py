@@ -18,6 +18,10 @@ MYL-50 原本要測的是 `scripts/publish-handbook.sh` 裡那段 shell 閘門�
 環境需求：只要 `git` 與 `python3`。刻意不碰網路——碰網路的測試在 pre-commit 裡
 就是隨機失敗的來源。
 """
+# FOUNDRY:RULE-REPO-ONLY —— 本檔以 agent-foundry 自身為 fixture，foundry-init 不複製它
+# 需要 `docs/handbook/`、`scripts/lib/publish-gate.sh` 與 `mkdocs.yml`，
+# 三者複製清單都不帶，所以**整份**在目標專案跑不起來（MYL-91 實測 25 errors）。
+
 
 import os
 import shutil
