@@ -40,9 +40,16 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
 `skills/foundry-ai-platform/SKILL.md`——**Q2 答完就去查該檔 §3 對照表**，凡是 ⚠️／❌ 的能力，
 在步驟 5 的報告裡逐項列出降級方式（`AP-1`～`AP-6`），不得靜默帶過。
 
-⚠️ **Q4 答「要建團隊」時要誠實講清楚**：`.foundry/org.yml` 目前是**宣告**，
-沒有任何動詞會依它到平台上把 agent 建出來（`foundry-ai-platform` §6）。
-可攜的是那份宣告，不是那支團隊——建人本身仍是平台側的人工動作。
+⚠️ **Q4 答「要建團隊」時要誠實講清楚，而且講法取決於 Q2**：`.foundry/org.yml` 產出來的是一份**宣告**，
+把它變成平台上真的存在的那支團隊要靠 `provision_team`（`foundry-platform` §8），而這個動詞
+**只在有 agent 註冊表的平台跑得動——軸 A 三個值裡只有 `paperclip` 有**。所以：
+
+- Q2 答 `paperclip` ⇒ 講明「之後套用得了，但**本流程不會順手幫你跑**」：該動詞自有前置閘門，
+  其中「建成員會持續燒模型額度」屬 `H3`，第一次在這個專案上跑要另外經使用者核可。
+- Q2 答 `claude-code`／`codex`／不宣告 ⇒ 講明「這份檔產完就到此為止」：它從那一刻起只是一份
+  約束**人**的文件，降級走 `AP-4`（`foundry-ai-platform` §6）。
+
+兩種情況下**可攜的都是那份宣告，不是那支團隊**。
 
 ### 1.2 發卡與前置檢查
 
@@ -150,8 +157,11 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
      只能填第 3 點真的複製過去的檔案（`skills/roles/<id>/SKILL.md` ＋ `skills/foundry-protocol/SKILL.md`）。
      CEO 依 `O3` 不掛第 1 層，它的清單只有自己的角色 skill；那是規範裡的例外，不是漏寫。
    - **不得由 agent 憑空指派角色給不存在的人**。
-   - ⚠️ 產生這份檔**不等於團隊建好了**：沒有動詞會依它到平台上建 agent（見
-     `foundry-ai-platform` §6）。步驟 5 的報告要把「還要人工建哪幾個 agent」列成待辦。
+   - ⚠️ 產生這份檔**不等於團隊建好了**，而「還差什麼」依 `ai_platform` 分兩種寫法：
+     `paperclip` ⇒ 差的是**跑一次 `provision_team`**（`foundry-platform` §8），步驟 5 的報告
+     把它列成待辦並註明它自有前置閘門（含 `H3` 花錢核可），**本步驟不順手跑掉它**；
+     `claude-code`／`codex`／未宣告 ⇒ 沒有 agent 註冊表可建，報告列的是「哪個**人**扮演哪個角色」，
+     降級走 `AP-4`（`foundry-ai-platform` §6）。
 6. 驗證：`.foundry/config.yml` 依 config-schema.md 逐欄檢查合法（必填齊、枚舉值合法、`external_actions` 與 `main_push` 皆 `user`）；複製清單逐檔存在；有產 `org.yml` 時 `org-sync` 通過。
 
 ## 2.5. 步驟 2.5：產生雙入口檔＋機械層閘門（MYL-36 增訂）
@@ -236,7 +246,9 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    - 選 `paperclip` 時仍要寫，內容是「甲組能力等於所生 adapter」與該 adapter 的實際判級。
    - ⚠️ 特別點名 `AP-1` 的後果：降級後 HITL 閘門從**擋得住**變成**擋不住**（留言不會讓人停下來），
      這句話要出現在報告裡，不要讓使用者以為換平台沒有代價。
-4. **待辦**：github 模式的人工步驟清單（§3 第 4 點）；有產 `org.yml` 時**還要人工建哪幾個 agent**；其他未竟事項。
+4. **待辦**：github 模式的人工步驟清單（§3 第 4 點）；有產 `org.yml` 時的**組織待辦**——依 `ai_platform`
+   分兩種，內容見 §2 第 5 點最後一顆 bullet（**這裡不再寫一份**：同一組分岔寫兩處，改的時候只會改到一處）；
+   其他未竟事項。
 5. **下一步指引**（連到說明層網站 <https://augustushsu.github.io/agent-foundry/>；舊網址 `foundry-handbook` 自 MYL-55 起**直接斷、不轉址**，見 known-drift `R7`）：
    - 首次上手與日常指令 → 第 1、2 章（first-run、commands）
    - 開發流程與工單骨架 → 第 3 章（workflow）
@@ -251,7 +263,8 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
 - [ ] 步驟 1 的七題**每一題都有著落**：Q1～Q6 有使用者答覆證據（Q2／Q3／Q4 答「不宣告／不啟用」也算數，
       但要能指出是使用者選的、不是 agent 略過），Q7 有步驟 4 的 gates 確認卡；前置檢查全過。
 - [ ] `.foundry/config.yml` 依 config-schema.md 驗證合法；`external_actions` 與 `main_push` 皆 `user`。
-- [ ] 有產 `.foundry/org.yml` 時：`org-sync` 通過，且報告已列出待人工建立的 agent。
+- [ ] 有產 `.foundry/org.yml` 時：`org-sync` 通過，且報告已**依 `ai_platform` 列出對應的組織待辦**（§2 第 5 點）。
+      ⚠️ 這一條**不預設待辦內容**——「待人工建立的 agent」兩支都不對，照那句寫的報告打不了這個勾。
 - [ ] 複製清單逐檔在 `<TARGET>` 存在且與 `<SRC>` 一致；未覆蓋任何既有檔案。
 - [ ] `CLAUDE.md` 與 `AGENTS.md` 均已產生，佔位符全數填寫或整節刪除（無殘留 `{}`）；
       `foundry-lint --selfcheck` 的 `entry-sync` 通過。
