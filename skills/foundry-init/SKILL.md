@@ -211,9 +211,17 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    帶著紅字交付等於教會接手者忽略它（MYL-87）。有任何 ❌ 就是 init 沒做完，回頭修，
    不要寫進報告當「已知狀況」。
    - ⏭ 是預期的：`nav-sync`／`anchors`／`handbook-stamp`／`init-copy-list` 這四項
-     在尚未建手冊的新專案會印 ⏭ 並附跳過理由（判準見 `foundry_lint.py` 的
-     `handbook_absent_skip()`）。**⏭ 不是 ✅**——它明說「沒有實際檢查」，
-     總結行也會另報跳過數。目標專案哪天自建了 `docs/handbook/`，前三項就自動回到照驗。
+     在尚未建手冊的新專案會印 ⏭ 並附跳過理由。**⏭ 不是 ✅**——它明說「沒有實際檢查」，
+     總結行也會另報跳過數。
+   - **自建手冊之後，這四項回到照驗的時點不一樣**（MYL-92）：
+     - `nav-sync`／`anchors`（判準：`foundry_lint.py` 的 `handbook_absent_skip()`）——
+       建了 `docs/handbook/` 就回到照驗。這時報的紅（例如 `mkdocs.yml 不存在`）
+       是**你自己專案的**真缺陷，照零紅字的要求修掉它。
+     - `handbook-stamp`（判準：同檔的 `stamped_chapters_absent_skip()`）——要到你**複製了
+       agent-foundry 自家那四章**（`03-workflow.md`／`04-decision-points.md`／
+       `06-org-structure.md`／`07-workflows.md`）其中之一才回到照驗。自建的手冊叫別的
+       名字就仍然 ⏭：那四章的戳記追的是 agent-foundry 的 protocol 修改歷史，
+       不是你的。真複製了就得把戳記維護齊全，那時的紅是對的。
    - `entry-sync` 與 `big-files` 必須 ✅——分別是雙入口檔產對、與 §4 大檔表填對的證明。
    - ⚠️ 本段列的是**這一版**的跳過項，不是承諾。以檢查實際印出來的 ⏭ 與理由為準；
      跟這裡對不上時信程式、回報差異，不要照這段散文推斷哪一項「應該」跳過。

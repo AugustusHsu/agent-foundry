@@ -553,6 +553,65 @@ class HandbookStampTest(unittest.TestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("少了一份" in f for f in res.failures), res.failures)
 
+    # ── 層 1.5：跳過判準（MYL-92）──────────────────────────────────────
+    #
+    # 本類的 fixture **不是規則本體**（沒造 `skills/foundry-init/`），所以底下每一條
+    # 打的都是第 2 層條件本身。三條合起來把它夾在唯一正確的位置上：四章全不在才跳、
+    # 留一章就不跳、有第 1 層時一律不跳。
+
+    def _drop_all_stamped_chapters(self):
+        for name in foundry_lint.STAMPED_CHAPTERS:
+            self.chapter(name).unlink()
+
+    def test_四章一份都不在時整項跳過而不是報四條不存在(self):
+        """目標專案自建手冊的情境：手冊在，但那四章是別人家的。
+
+        改判準之前這裡吐四條「掛戳記的章節少了一份」，指名一個目標專案沒有理由
+        擁有、也修不掉的東西。
+        """
+        self._drop_all_stamped_chapters()
+        self.chapter("01-first-run.md").write_text("# 1. 第一次上工\n", encoding="utf-8")
+        res = self.stamp_check()
+        self.assertTrue(res.passed, res.failures)
+        self.assertTrue(res.skipped, "沒有跳過理由＝被印成 ✅")
+        self.assertIn("沒有任何一份掛戳記的章節", res.skipped)
+
+    def test_只複製了四章其中一章時不跳過_缺的三章照樣紅(self):
+        """反例：擋住「`docs/handbook/` 裡有東西就一律跳過」那種寫法。
+
+        真複製了掛戳記的章節，就該把戳記維護齊全——這時的紅是對的、也修得掉。
+        """
+        kept, *dropped = foundry_lint.STAMPED_CHAPTERS
+        for name in dropped:
+            self.chapter(name).unlink()
+        res = self.stamp_check()
+        self.assertFalse(res.passed, "留著一章還跳過，等於第 2 層條件寫成了『有手冊就跳』")
+        self.assertFalse(res.skipped)
+        self.assertEqual(len(res.failures), len(dropped), res.failures)
+        self.assertTrue(all("少了一份" in f for f in res.failures), res.failures)
+        self.assertFalse(any(kept in f for f in res.failures), res.failures)
+
+    def test_規則本體四章刪光仍然紅而不是跳過(self):
+        """判準①的守門測試：第 1 層一成立，第 2 層就完全不參與判斷。"""
+        (self.root / foundry_lint.RULE_REPO_MARKER_REL).mkdir(parents=True)
+        self.assertTrue(foundry_lint.is_rule_repo(self.root), "前提沒成立")
+        self._drop_all_stamped_chapters()
+        res = self.stamp_check()
+        self.assertFalse(res.passed, "規則本體把四章刪光被放行")
+        self.assertFalse(res.skipped, "規則本體被跳過")
+        self.assertEqual(len(res.failures), len(foundry_lint.STAMPED_CHAPTERS),
+                         res.failures)
+
+    def test_規則本體戳記落後仍然紅(self):
+        """判準①的另一半：跳過判準換掉之後，落後偵測沒有跟著失效。"""
+        (self.root / foundry_lint.RULE_REPO_MARKER_REL).mkdir(parents=True)
+        self.write_protocol("初版規範\n新增一條\n")
+        self.commit("改規範但沒動手冊")
+        res = self.stamp_check()
+        self.assertFalse(res.passed)
+        self.assertFalse(res.skipped)
+        self.assertTrue(all("戳記停在" in f for f in res.failures), res.failures)
+
     def test_淺_clone_擋下且指向_fetch_depth_而不是誤報戳記寫錯(self):
         """`fetch-depth: 1` 的 CI 上，戳記 sha 一律解不出來。
 
