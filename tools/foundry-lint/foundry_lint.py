@@ -1151,6 +1151,13 @@ CONFIG_SCHEMA_REQUIRED_MARKS = (CONFIG_SCHEMA_REQUIRED_MARK, CONFIG_SCHEMA_OPTIO
 #: 物（同樣由形狀守衛報紅）。少了對照，把分隔符從 `｜` 改成別的寫法會讓值域整組
 #: 靜默消失，而其餘檢查照常運作、紅綠完全無異狀。
 CONFIG_SCHEMA_ENUM_TYPE = "枚舉"
+#: 型別欄的合法字面——**白名單，不認得就紅**，不是「等於『枚舉』才檢查」那種相等
+#: 比對。相等比對的失敗方向是**靜靜跳過**：型別格被加一個註記（`枚舉（見下）`），
+#: 那一欄的值域守衛就整條消失，之後把它的值域寫壞也不會有人出聲（實測 M3a／M3c，
+#: MYL-111 審查補正）。⚠️ 這道守衛只擋得住加註記，擋不住把「枚舉」整格換成「物件」
+#: ——那是把宣告本身改了，不是本檢查讀錯。白名單的代價是：日後表裡真的要多一種型別
+#: 時本項會紅。那是刻意的——改型別欄的形狀就該回頭確認本檢查還讀得懂它。
+CONFIG_SCHEMA_TYPES = ("整數", CONFIG_SCHEMA_ENUM_TYPE, "物件")
 #: 說明欄**開頭**那一串 `a｜b｜c` ＝ 枚舉值域。只認開頭、不掃整格：說明文字裡本來
 #: 就到處是反引號（其他欄位名、檔案路徑、規則 ID、工單編號），掃整格會把它們全收
 #: 成「合法值」，那樣的值域擋不住任何東西。
@@ -1379,12 +1386,16 @@ def check_config_schema(root: Path) -> SelfcheckResult:
 
     # 形狀守衛：上面那道 `not fields or not required` 擋得住「整表讀不出來」，擋不住
     # **只讀錯一格**——而本項存在的理由就是「設定欄位錯了不會有任何聲音」，讀 schema
-    # 的方式自己有這個失效點就自打嘴巴（MYL-111 審查 §3）。表裡的兩格各配一個對照物：
-    #   - 必填欄：字面限定 `✅`／`─`。出現第三種寫法時，該欄位會靜靜掉出必填集合，
+    # 的方式自己有這個失效點就自打嘴巴（MYL-111 審查 §3）。表裡的兩格各配對照物，
+    # 三道守衛**一律寫成白名單**（不認得就紅），不寫成相等比對——相等比對認不得的那
+    # 一格會被靜靜跳過，等於每加一層守衛只是把同一個靜默點往上搬一格（審查補正）：
+    #   - 必填欄字面限定 `✅`／`─`。出現第三種寫法時，該欄位會靜靜掉出必填集合，
     #     接著「缺必填欄位」那一半與舊欄位名掃描的覆蓋一起無聲變窄。
-    #   - 型別欄：標「枚舉」卻讀不出值域 ⇒ 說明欄的分隔符被改寫了（`｜` → `/`、頓號…）。
+    #   - 型別欄字面限定 `CONFIG_SCHEMA_TYPES`。本檢查是拿這一格判「哪些欄位該有
+    #     值域」的，加了註記就等於把下面那道值域守衛從該欄位身上拆掉。
+    #   - 標「枚舉」卻讀不出值域 ⇒ 說明欄的分隔符被改寫了（`｜` → `/`、頓號…）。
     #     那會讓值域與 `org.yml` 的 `ai_platform` 整組消失，而本項照樣印 ✅。
-    # 兩者都是「schema 的形狀漂了」，先修 schema 再談設定檔，所以報完就 return。
+    # 三者都是「schema 的形狀漂了」，先修 schema 再談設定檔，所以報完就 return。
     for name, (typ, mark) in parse_schema_marks(schema_text).items():
         if mark not in CONFIG_SCHEMA_REQUIRED_MARKS:
             res.failures.append(
@@ -1392,6 +1403,13 @@ def check_config_schema(root: Path) -> SelfcheckResult:
                 f"必填欄寫成 {mark!r}——本檢查是拿整格字面判必填的，只認 "
                 f"{'／'.join(CONFIG_SCHEMA_REQUIRED_MARKS)}。加了註記的那一格會讓"
                 "該欄位靜靜掉出必填集合，缺欄位與舊欄位名兩半的覆蓋跟著變窄"
+            )
+        if typ not in CONFIG_SCHEMA_TYPES:
+            res.failures.append(
+                f"{CONFIG_SCHEMA_REL}「{CONFIG_SCHEMA_TOP_HEADING}」表 `{name}` 的"
+                f"型別欄寫成 {typ!r}——本檢查是拿型別欄的字面判「哪些欄位該有值域」"
+                f"的，只認 {'／'.join(CONFIG_SCHEMA_TYPES)}。加了註記的那一格會讓該"
+                "欄位的值域守衛整條消失，之後把它的值域寫壞不會有任何聲音"
             )
         if typ == CONFIG_SCHEMA_ENUM_TYPE and name not in enums:
             res.failures.append(

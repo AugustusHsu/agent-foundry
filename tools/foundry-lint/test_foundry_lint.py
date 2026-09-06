@@ -1659,6 +1659,84 @@ class ConfigSchemaTest(RepoCopyTestCase):
         self.assertTrue(any(f"`{name}`" in f and "讀不出值域" in f for f in res.failures),
                         res.failures)
 
+    def _lonely_enum_field(self):
+        """型別標「枚舉」、而且**沒有別的欄位借用它的值域**的那一個。
+
+        借用型的鄰居會替被借的那一欄叫一聲（`mirror_platform` 寫「值域同
+        `devtools_platform`」，自己的型別格是乾淨的），於是被借的那一欄型別格被加
+        註記時**看起來**仍有人擋——那是順帶接住的，不是它自己的守衛。反例挑沒有
+        鄰居的那一欄，才驗得到型別欄那道白名單本身（審查補正的 M3b 誤判）。
+        """
+        marks = foundry_lint.parse_schema_marks(self._schema())
+        enums = foundry_lint.parse_schema_enums(self._fields())
+        borrowed = set()
+        for _, (_, desc) in self._fields().items():
+            m = foundry_lint.CONFIG_SCHEMA_ENUM_ALIAS_RE.search(desc)
+            if m:
+                borrowed.add(m.group(1))
+        names = [n for n in sorted(enums)
+                 if marks.get(n, ("", ""))[0] == foundry_lint.CONFIG_SCHEMA_ENUM_TYPE
+                 and n not in borrowed]
+        self.assertTrue(names, "schema 沒有值域無人借用的枚舉欄位——反例無從構造")
+        return names[0]
+
+    def _edit_row(self, text, name, fn, why):
+        """把欄位表裡 `name` 那一列交給 `fn` 改寫，回傳整份文字。
+
+        每一步都斷言「改完 ≠ 原字串」：`replace` 打錯一個字就退化成 no-op，而
+        no-op 的表現跟「修好了」一模一樣。
+        """
+        row = f"| `{name}` |"
+        self.assertIn(row, text, f"`{name}` 不在欄位表第一格——反例沒造出來")
+        head, sep, tail = text.partition(row)
+        line, nl, rest = tail.partition("\n")
+        new = fn(line)
+        self.assertNotEqual(new, line, f"{why}——反例沒造出來")
+        return head + sep + new + nl + rest
+
+    def _annotate_type(self, text, name):
+        typ = foundry_lint.CONFIG_SCHEMA_ENUM_TYPE
+        return self._edit_row(text, name,
+                              lambda line: line.replace(f" {typ} |", f" {typ}（見下） |", 1),
+                              "型別格不是預期的寫法")
+
+    def test_型別欄加註記時擋下(self):
+        """型別欄的守衛是**白名單**，不是「等於『枚舉』才檢查」的相等比對。
+
+        相等比對認不得 `枚舉（見下）`，失敗方向是靜靜跳過：那一欄的值域守衛整條
+        消失，而本項照樣全綠（審查補正實測 M3a）。
+        """
+        name = self._lonely_enum_field()
+        self.write(foundry_lint.CONFIG_SCHEMA_REL,
+                   self._annotate_type(self._schema(), name))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(f"`{name}`" in f and "型別欄寫成" in f for f in res.failures),
+                        res.failures)
+
+    def test_型別欄加註記後值域再被改寫也擋下(self):
+        """M3a 的下一步：守衛消失之後，把那一欄的值域寫壞不會有任何聲音。
+
+        這一條要證明的是**型別欄那道白名單自己**接住了它——所以同時斷言「讀不出
+        值域」那道守衛在本情境下根本沒觸發（型別格已經不是「枚舉」了）。
+        """
+        name = self._lonely_enum_field()
+        text = self._annotate_type(self._schema(), name)
+        text = self._edit_row(text, name, lambda line: line.replace("｜", " / "),
+                              "值域不是全形分隔符")
+        self.write(foundry_lint.CONFIG_SCHEMA_REL, text)
+        # 值域讀不出來之後，設定檔那一欄填什麼都沒人管——連值域外的值一起塞進去。
+        for rel in (foundry_lint.CONFIG_REL, foundry_lint.ORG_REL):
+            cur = (self.root / rel).read_text(encoding="utf-8")
+            if re.search(rf"^{name}:", cur, flags=re.M):
+                self.write(rel, re.sub(rf"^{name}:.*$", f"{name}: 香蕉", cur, flags=re.M))
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any(f"`{name}`" in f and "型別欄寫成" in f for f in res.failures),
+                        res.failures)
+        self.assertFalse(any(f"`{name}`" in f and "讀不出值域" in f for f in res.failures),
+                         f"值域守衛不該是這一組的網子：{res.failures}")
+
     def test_必填欄加註記時擋下(self):
         """必填欄是拿**整格字面**比對的，`✅（見下）` 會讓該欄位靜靜掉出必填集合。
 
