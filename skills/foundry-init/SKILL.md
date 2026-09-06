@@ -113,10 +113,11 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    - 不複製：`skills/foundry-init/`（目標專案用不到）。
      ⚠️ **這一行同時是 `--selfcheck` 判斷「規則本體 vs 目標專案」的依據**（MYL-87）：
      `foundry_lint.py` 的 `is_rule_repo()` 就用「有沒有 `skills/foundry-init/` 這個目錄」
-     判定，而它成立的唯一理由是本行——本行說了目標專案不會有它。四項檢查
-     （`nav-sync`／`anchors`／`handbook-stamp`／`init-copy-list`）靠這個判準決定要不要跳過。
+     判定，而它成立的唯一理由是本行——本行說了目標專案不會有它。五項檢查
+     （`nav-sync`／`anchors`／`handbook-stamp`／`init-copy-list`／`selfcheck-names`）
+     靠這個判準決定要不要跳過。
      **要把這個目錄改成複製之前先讀 `foundry_lint.py` 的 `RULE_REPO_MARKER_REL` 那段註解**，
-     否則目標專案會突然被當成規則本體，四項一起回到必紅。
+     否則目標專案會突然被當成規則本體，這五項一起回到必紅。
      ⚠️ **MYL-78 修正**：本行原本還列著 `skills/roles/`，理由是「組織分工屬 agent-foundry
      自身設定，MYL-14 範疇」。那個理由在 MYL-76 之後不成立了——protocol 第 9 節被逐字複製過去，
      而 `org-sync` 把 `org.yml` 的角色集合綁死在那張圖上，目標專案的編制**不是**它自己的決策。
@@ -210,10 +211,23 @@ description: 新專案首次導入 Foundry 的初始化 workflow（MYL-9 HLD §6
    **要求是零紅字**——`make check` 就是入口檔叫每個新 session 跑的那一行，
    帶著紅字交付等於教會接手者忽略它（MYL-87）。有任何 ❌ 就是 init 沒做完，回頭修，
    不要寫進報告當「已知狀況」。
-   - ⏭ 是預期的：`nav-sync`／`anchors`／`handbook-stamp`／`init-copy-list` 這四項
-     在尚未建手冊的新專案會印 ⏭ 並附跳過理由（判準見 `foundry_lint.py` 的
-     `handbook_absent_skip()`）。**⏭ 不是 ✅**——它明說「沒有實際檢查」，
-     總結行也會另報跳過數。目標專案哪天自建了 `docs/handbook/`，前三項就自動回到照驗。
+   - ⏭ 是預期的：`nav-sync`／`anchors`／`handbook-stamp`／`init-copy-list`／`selfcheck-names`
+     這五項在剛 init 完的專案會印 ⏭ 並附跳過理由。**⏭ 不是 ✅**——它明說「沒有實際檢查」，
+     總結行也會另報跳過數。
+   - **它們變成 ✅ 的時點不一樣，分三種**（MYL-92）。讀完這段，你對每一個印 ⏭ 的項目
+     都要答得出「它什麼時候會變 ✅」；答不出來就別為它動手：
+     - `nav-sync`／`anchors`（判準：`foundry_lint.py` 的 `handbook_absent_skip()`）——
+       建了 `docs/handbook/` 就回到照驗。這時報的紅（例如 `mkdocs.yml 不存在`）
+       是**你自己專案的**真缺陷，照零紅字的要求修掉它。
+     - `handbook-stamp`（判準：同檔的 `stamped_chapters_absent_skip()`）——要到你**複製了
+       agent-foundry 自家那四章**（`03-workflow.md`／`04-decision-points.md`／
+       `06-org-structure.md`／`07-workflows.md`）其中之一才回到照驗。自建的手冊叫別的
+       名字就仍然 ⏭：那四章的戳記追的是 agent-foundry 的 protocol 修改歷史，
+       不是你的。真複製了就得把戳記維護齊全，那時的紅是對的。
+     - `init-copy-list`／`selfcheck-names`（判準只有 `is_rule_repo()` 一層，與建不建手冊
+       無關）——在目標專案**永遠是 ⏭，不會變 ✅**。它們的對照端（`foundry-init` 的複製清單、
+       入口檔 §6 那份自檢名稱清單）依規格在目標專案就不存在，沒有東西可修；更不要為了
+       讓它們變綠去把 `skills/foundry-init/` 複製過來——那會讓上面每一項都被當成規則本體照驗。
    - `entry-sync` 與 `big-files` 必須 ✅——分別是雙入口檔產對、與 §4 大檔表填對的證明。
    - ⚠️ 本段列的是**這一版**的跳過項，不是承諾。以檢查實際印出來的 ⏭ 與理由為準；
      跟這裡對不上時信程式、回報差異，不要照這段散文推斷哪一項「應該」跳過。

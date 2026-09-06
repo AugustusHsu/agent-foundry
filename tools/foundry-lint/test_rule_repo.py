@@ -708,12 +708,60 @@ class TargetProjectSkipTest(RepoCopyTestCase):
     def test_目標專案自建手冊與_nav_對不上時仍然紅(self):
         """少了第二層條件，這個情境會被靜默放行。"""
         self._make_target_project()
-        (self.root / "docs" / "handbook").mkdir(parents=True)
-        (self.root / "docs" / "handbook" / "01-first-run.md").write_text(
-            "# 1. 第一次上工\n", encoding="utf-8")
+        self._build_own_handbook()
         res = self._named("nav-sync")
         self.assertFalse(res.passed)
         self.assertFalse(res.skipped)
+
+    def _build_own_handbook(self, *names):
+        """目標專案自己建一份手冊；`names` 未給時全是它自己的章名。"""
+        d = self.root / "docs" / "handbook"
+        d.mkdir(parents=True, exist_ok=True)
+        for name in (names or ("01-first-run.md",)):
+            (d / name).write_text(f"# {name}\n", encoding="utf-8")
+
+    # ── MYL-92：`handbook-stamp` 的第 2 層條件與另外兩項分家 ───────────
+    def test_目標專案自建手冊後_handbook_stamp_仍跳過(self):
+        """`STAMPED_CHAPTERS` 是 agent-foundry 自家四章，目標專案沒理由擁有。
+
+        分家前這裡吐四條「章節不存在」，而 `foundry-init` 步驟 4 同時要求零紅字
+        ——把導入者指去修一個修不掉的紅字。
+        """
+        self._make_target_project()
+        self._build_own_handbook()
+        res = self._named("handbook-stamp")
+        self.assertTrue(res.passed, res.failures)
+        self.assertTrue(res.skipped, "沒有跳過理由＝被印成 ✅")
+
+    def test_分家沒有把_nav_sync_與_anchors_一起放寬(self):
+        """這兩項在這個情境**應該照驗**——對照端是目標專案自己的 `mkdocs.yml`
+        與章內錨點，報出來的紅是真缺陷、也修得掉。
+
+        ⚠️ **這條擋的不是「把新條件寫進共用函式」**：實測過，那樣改不會弄壞這兩項，
+        因為它們是在 `docs/handbook/` 不存在時**才**去問那支函式，而目錄不存在時
+        四章必然也不在。它擋的是下一步——有人把跳過判斷上移到檢查最前面（統一成
+        `handbook-stamp` 的寫法）。那個等價一上移就沒了，而在本條之前不會有測試紅。
+        """
+        self._make_target_project()
+        self._build_own_handbook()
+        for name in ("nav-sync", "anchors"):
+            with self.subTest(check=name):
+                self.assertFalse(self._named(name).skipped,
+                                 f"{name} 被 handbook-stamp 的新判準連帶放寬了")
+
+    def test_目標專案複製了掛戳記的章節之一就回到照驗(self):
+        """真帶了那幾章就得把戳記維護齊全，缺的三章報紅是對的。"""
+        self._make_target_project()
+        kept, *dropped = foundry_lint.STAMPED_CHAPTERS
+        self._build_own_handbook("01-first-run.md", kept)
+        res = self._named("handbook-stamp")
+        self.assertFalse(res.passed, "帶了掛戳記的章節還跳過")
+        self.assertFalse(res.skipped)
+        self.assertTrue(any(kept in f and "第一個非空行" in f for f in res.failures),
+                        res.failures)
+        for name in dropped:
+            self.assertTrue(any(name in f and "少了一份" in f for f in res.failures),
+                            res.failures)
 
     # ── AC4：`big-files` 沒有被關掉 ─────────────────────────────────
     def test_目標專案漏列達門檻檔案仍然紅(self):

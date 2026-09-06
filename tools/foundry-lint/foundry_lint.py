@@ -278,10 +278,10 @@ def is_rule_repo(root: Path) -> bool:
 
 
 def handbook_absent_skip(root: Path) -> str:
-    """手冊三項（`nav-sync`／`anchors`／`handbook-stamp`）該不該跳過；回傳跳過理由。
+    """手冊兩項（`nav-sync`／`anchors`）該不該跳過；回傳跳過理由。
 
-    MYL-87：這三項守的是「手冊與 nav／錨點／protocol 對得上」。目標專案沒有
-    `docs/handbook/`，那個對應關係根本不存在，於是三項一起紅——而 `make check`
+    MYL-87：這兩項守的是「手冊與 nav／錨點對得上」。目標專案沒有
+    `docs/handbook/`，那個對應關係根本不存在，於是它們一起紅——而 `make check`
     正是入口檔叫每個新 session 跑的那一行，第一次跑就掛。
 
     **跳過條件刻意是兩層，缺一不可**：
@@ -290,6 +290,16 @@ def handbook_absent_skip(root: Path) -> str:
        會從 ❌ 變成 ⏭」。那是把閘門放鬆，不是修好它。
     2. `docs/handbook/` 真的不存在——只有這一層擋得住「目標專案哪天自建了手冊卻
        與 nav 對不上，檢查卻沉默」。手冊一旦存在就照驗，不因為它是目標專案而放寬。
+       這一層對這兩項成立，是因為它們的對照端（`mkdocs.yml` 的 nav、章內錨點）
+       **是目標專案自己的東西**：自建手冊後報出來的紅字（`mkdocs.yml 不存在`）
+       既是真缺陷、也修得掉。**`handbook-stamp` 不同**，它的對照端是 agent-foundry
+       自家那四章，第 2 層另立判準，見 `stamped_chapters_absent_skip()`（MYL-92）。
+
+    ⚠️ 本函式只在**呼叫點已經確定 `docs/handbook/` 不存在**時才被問到（兩處都是
+    `if not handbook.is_dir():` 底下）。所以上面第 2 層在這裡其實恆真——它寫出來是
+    為了讓條件的完整形狀留在單一來源，不是每次呼叫都真的在判。要把呼叫點上移到
+    檢查最前面（`handbook-stamp` 就是那樣）之前，先讀 `stamped_chapters_absent_skip()`
+    最後那段：那正是兩支函式沒有合併的理由。
 
     跳過用 `SelfcheckResult.skipped`（印 ⏭、總結行另報跳過數），**不是靜靜略過**：
     沿用 `mirror-recon` 已經在用的那套姿態，不新增第二種。
@@ -298,6 +308,46 @@ def handbook_absent_skip(root: Path) -> str:
         return ""
     return (f"本專案不是 Foundry 規則本體（沒有 `{RULE_REPO_MARKER_REL}/`）"
             f"且沒有 `{HANDBOOK_REL}/`，沒有手冊可對照")
+
+
+def stamped_chapters_absent_skip(root: Path) -> str:
+    """`handbook-stamp` 該不該跳過；回傳跳過理由（MYL-92）。
+
+    第 1 層與 `handbook_absent_skip()` 相同（`is_rule_repo()`），第 2 層不同：
+    問的是「**那四章一份都不在**」，而不是「`docs/handbook/` 不存在」。
+
+    **為什麼要換掉第 2 層**：`STAMPED_CHAPTERS` 是 agent-foundry 自家的四章，目標
+    專案沒有任何理由擁有它們。沿用「手冊不存在」那一層，目標專案一自建手冊（哪怕
+    只放一份 `01-start.md`），本項就立刻吐四條「章節不存在」，指名它不該有的檔案
+    ——**那個紅字在目標專案修不掉**，等於逼維護者習慣性忽略紅字（`SelfcheckResult`
+    的 docstring 論證過這個失效模式）。
+
+    **為什麼是另立函式，而不是把條件改進 `handbook_absent_skip()`**：不是因為那樣
+    會弄壞另外兩項——實測過，不會。`nav-sync`／`anchors` 是**在 `docs/handbook/`
+    不存在時才**去問那支函式（見兩處呼叫點的 `if not handbook.is_dir():`），而目錄
+    不存在時四章必然也不在，兩種寫法對它們等價。理由是這個等價**靠的是呼叫點的
+    守衛、不是函式本身的契約**：條件一旦寫進共用函式，那支函式就開始依賴
+    `STAMPED_CHAPTERS`，而它對三個呼叫者裡的兩個毫無意義，回傳的理由字串也會說成
+    「沒有掛戳記的章節」——對那兩項而言那不是它們跳過的原因。誰哪天把呼叫點上移
+    統一（本項就是這麼寫的），等價就沒了，而且不會有任何測試紅。分成兩支函式，
+    每一支的條件與訊息都只對自己的呼叫者負責。
+    ⚠️ MYL-92 的 AC0 留言把這一段說成「改共用函式會讓那兩項一起跳過」，**那句是
+    錯的**，正確的理由是上面這段；定案（(a) 改程式）不受影響。
+
+    判準①（本 repo 不得因此變鬆）由第 1 層保證，與第 2 層無關：規則本體恆有
+    `skills/foundry-init/`，四章刪光也照驗、戳記落後也照驗。
+    規則本體**少一章**同樣照驗——還有三章在，第 2 層不成立。
+
+    已知且刻意的邊界：目標專案若只複製四章中的一部分，缺的那幾章仍報紅。
+    那個紅是對的——它確實有掛戳記的章節，就該把戳記維護齊全。
+    """
+    if is_rule_repo(root):
+        return ""
+    if any((root / HANDBOOK_REL / name).exists() for name in STAMPED_CHAPTERS):
+        return ""
+    return (f"本專案不是 Foundry 規則本體（沒有 `{RULE_REPO_MARKER_REL}/`）"
+            f"且 `{HANDBOOK_REL}/` 裡沒有任何一份掛戳記的章節"
+            f"（{'、'.join(STAMPED_CHAPTERS)}），沒有戳記可對照")
 
 
 def _strip_inline(text: str) -> str:
@@ -1333,12 +1383,13 @@ def check_handbook_stamp(root: Path) -> SelfcheckResult:
     agent 身上（見上方三層設計）。
     """
     res = SelfcheckResult("handbook-stamp", "手冊四章戳記不落後於 protocol")
-    # MYL-87：目標專案沒有手冊時整項跳過（判準見 `handbook_absent_skip()`）。
-    # 位置在最前面是刻意的：底下淺 clone 那一段講的是「有手冊但驗不了歷史」，
-    # 跟「根本沒有手冊」是兩件事，混在一起會吐出一個指錯方向的處置。
-    res.skipped = handbook_absent_skip(root)
+    # MYL-87／MYL-92：目標專案一份掛戳記的章節都沒有時整項跳過。判準**不是**
+    # 另外兩項那支共用函式，理由見 `stamped_chapters_absent_skip()` 的 docstring。
+    # 位置在最前面是刻意的：底下淺 clone 那一段講的是「有章節但驗不了歷史」，
+    # 跟「根本沒有那幾章」是兩件事，混在一起會吐出一個指錯方向的處置。
+    res.skipped = stamped_chapters_absent_skip(root)
     if res.skipped:
-        res.summary += "（沒有手冊，未驗）"
+        res.summary += "（沒有掛戳記的章節，未驗）"
         return res
     has_git, _ = git_run(root, "rev-parse", "--verify", "HEAD")
     # 淺 clone 是「有 git 但沒有歷史」——戳記 sha 一律解不出來，於是四章一起偽裝成
