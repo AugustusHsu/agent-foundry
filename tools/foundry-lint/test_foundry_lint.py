@@ -2077,8 +2077,17 @@ _AGENTS = [{"id": "ceo-id", "name": "CEO"},
            {"id": "tl-id", "name": "Tech Lead"}]
 
 
-def _authored(ref, agent="", user=""):
-    return foundry_lint.AuthoredIssue(ref=ref, author_agent=agent, author_user=user)
+def _authored(ref, agent="", user="", issue_id=""):
+    return foundry_lint.AuthoredIssue(ref=ref, author_agent=agent, author_user=user,
+                                      issue_id=issue_id)
+
+
+def _comment(body, agent=None, user=None, deleted=None, on_behalf="user-1"):
+    """一則留言的最小形狀。`on_behalf` 預設有值是**故意的**：實測 agent 留的留言
+    `onBehalfOfUserId` 也有值，拿它判「使用者留的」會讓任何 agent 自我特赦。"""
+    return {"body": body, "authorAgentId": agent, "authorUserId": user,
+            "authorType": "user" if user else "agent",
+            "onBehalfOfUserId": on_behalf, "deletedAt": deleted}
 
 
 class IssueAuthorAuditTest(unittest.TestCase):
@@ -2141,6 +2150,117 @@ class IssueAuthorAuditTest(unittest.TestCase):
     def test_訊息不得把事後檢查說成擋得住(self):
         failures = self.audit([_authored("MYL-130", agent="tl-id")])
         self.assertIn("事後檢查不是閘門", failures[0])
+
+    def test_白名單依宣告順序印而不是依_agent_id_排(self):
+        """依 uuid 排的話，同一句話在不同環境印出不同順序，讀的人以為規則變了。"""
+        failures = foundry_lint.audit_issue_authors(
+            [_authored("MYL-130", agent="tl-id")],
+            {"zzz-ceo": "CEO", "aaa-pm": "Product Manager"},
+            self.NAMES, self.SINCE)
+        self.assertIn("使用者／CEO／Product Manager", failures[0])
+
+    def test_訊息要寫出收斂路徑(self):
+        """紅字沒有出口的話，讀的人唯一做得到的事就是把整項關掉——那正是
+        CR 第 1 輪退回的東西。"""
+        failures = self.audit([_authored("MYL-130", agent="tl-id")])
+        self.assertIn("I1-覆核完成", failures[0])
+        self.assertIn("不要改起算點", failures[0])
+
+    def test_覆核完成標記讓那一張不再報(self):
+        cleared = self.audit_cleared([_authored("MYL-130", agent="tl-id")],
+                                     lambda it: True)
+        self.assertEqual(cleared, [])
+
+    def test_標記查詢只對違規的那幾張呼叫(self):
+        """對每張單都翻留言＝每次 `make check` 多打 N 次 API。體例同
+        `fetch_source_issues()` 只翻看起來漏建的那幾張。"""
+        asked = []
+        self.audit_cleared([_authored("MYL-130", agent="tl-id"),      # 違規
+                            _authored("MYL-131", agent="ceo-id"),     # 白名單內
+                            _authored("MYL-124", agent="tl-id"),      # 起算點之前
+                            _authored("MYL-132")],                    # 平台自建
+                           lambda it: asked.append(it.ref) or False)
+        self.assertEqual(asked, ["MYL-130"])
+
+    def audit_cleared(self, issues, cleared):
+        return foundry_lint.audit_issue_authors(
+            issues, self.ALLOWED, self.NAMES, self.SINCE, cleared=cleared)
+
+
+class AuthorReviewMarkTest(unittest.TestCase):
+    """`I1` 的收斂出口：覆核完成標記（MYL-116 CR 第 1 輪瑕疵 #1）。
+
+    這一格是**散文正則＋作者判定**兩道守衛。測試的責任是把「窄」證出來：不只證
+    成立的那則會清掉紅字，更要證幾種**很像但不該算數**的寫法不會——尤其是違規者
+    自己留一則就把自己特赦，那會讓整項退化成打勾。
+    """
+
+    MARK = "I1-覆核完成：已交回 Product Manager 覆核，依 `D2` 判定不退回原單"
+    REVIEWERS = frozenset({"pm-id"})
+
+    def mark(self, comments):
+        return foundry_lint.has_author_review_mark(comments, self.REVIEWERS)
+
+    def test_pm_留的標記算數(self):
+        self.assertTrue(self.mark([_comment(self.MARK, agent="pm-id")]))
+
+    def test_使用者留的標記算數(self):
+        """PM 缺席時（例如它一時指派不動）使用者是唯一的出口，不能只認 PM。"""
+        self.assertTrue(self.mark([_comment(self.MARK, user="user-1")]))
+
+    def test_違規者自己留的不算(self):
+        """自己特赦自己的話，`I1` 就只是一顆打勾鈕。"""
+        self.assertFalse(self.mark([_comment(self.MARK, agent="tl-id")]))
+
+    def test_不得拿_onBehalfOfUserId_當使用者(self):
+        """實測 agent 留的留言那一格也有值——拿它判等於全體 agent 都能自我特赦。"""
+        self.assertFalse(self.mark(
+            [_comment(self.MARK, agent="tl-id", on_behalf="user-1")]))
+
+    def test_形狀不對不算(self):
+        for bad in ("覆核完成了，這張不退回",              # 沒有標記前綴
+                    "已經 I1-覆核完成：見上",               # 不在行首
+                    "I1-覆核完成：",                        # 前綴後面空的
+                    "I1-覆核完畢：已判不退回"):             # 措辭不同
+            with self.subTest(bad=bad):
+                self.assertFalse(self.mark([_comment(bad, agent="pm-id")]))
+
+    def test_全形冒號與半形冒號都收(self):
+        self.assertTrue(self.mark([_comment("I1-覆核完成: 依 `D2` 不退回",
+                                            agent="pm-id")]))
+
+    def test_多行留言裡的標記行算數(self):
+        body = "## 覆核結果\n\nI1-覆核完成：依 `D2` 判定不退回，內容照原樣繼續\n"
+        self.assertTrue(self.mark([_comment(body, agent="pm-id")]))
+
+    def test_刪掉的留言不算(self):
+        self.assertFalse(self.mark(
+            [_comment(self.MARK, agent="pm-id", deleted="2026-09-07T00:00:00Z")]))
+
+    def test_沒有留言或形狀怪的元素都不炸(self):
+        self.assertFalse(self.mark(None))
+        self.assertFalse(self.mark([None, "字串", 42]))
+
+    def test_把正則放鬆掉_不成立的寫法就靜默通過(self):
+        """反向突變證之一：形狀那道守衛。"""
+        bad = [_comment("覆核完成了，這張不退回", agent="pm-id")]
+        self.assertFalse(self.mark(bad))
+        with mock.patch.object(foundry_lint, "ISSUE_AUTHOR_CLEARED_RE",
+                               re.compile(".")):
+            self.assertTrue(self.mark(bad))
+
+    def test_拿掉作者判定_違規者自己留的就靜默通過(self):
+        """反向突變證之二：作者那道守衛。把違規者放進覆核者集合＝那道守衛不存在。"""
+        bad = [_comment(self.MARK, agent="tl-id")]
+        self.assertFalse(self.mark(bad))
+        self.assertTrue(foundry_lint.has_author_review_mark(
+            bad, frozenset({"pm-id", "tl-id"})))
+
+    def test_撈不到留言時紅字留著而不是轉綠(self):
+        """失效方向：看得見的紅，不是靜靜的綠。"""
+        with mock.patch.object(foundry_lint, "api_get", return_value=(None, "連不上")):
+            self.assertFalse(foundry_lint.fetch_author_review_mark(
+                "b", "t", "uuid", self.REVIEWERS))
 
 
 class PmIssueFieldsAuditTest(unittest.TestCase):
@@ -2207,6 +2327,13 @@ class PmIssueFieldsAuditTest(unittest.TestCase):
         failures = foundry_lint.audit_pm_issue_fields([self.one(**self.BAD["upstream"])])
         self.assertIn("**上游**", failures[0])
         self.assertIn("單號", failures[0])
+
+    def test_缺驗收標準時訊息要說出那一格認的形狀(self):
+        """上游欄特地補了第二條路的形狀說明，AC 這欄同樣該講——實查最近 12 張單
+        有 5 張是因為寫成 `## AC1` 這類標題而判缺（CR 第 1 輪次要建議 #6）。"""
+        failures = foundry_lint.audit_pm_issue_fields([self.one(**self.BAD["has_ac"])])
+        self.assertIn("**驗收標準**", failures[0])
+        self.assertIn("## AC1", failures[0])
 
     def test_上位單不算上游欄的第三條路(self):
         """`parentId` 拿來抵上游欄的話，那個「或」會因為上位單本來就是必備欄位
@@ -2331,6 +2458,30 @@ class IssueRulesCheckTest(unittest.TestCase):
         self.assertIn("MYL-130", res.failures[0])
         self.assertIn("2 張", res.summary)
 
+    def test_覆核完成後走完整條路會轉綠(self):
+        """CR 第 1 輪瑕疵 #1 的驗收條件：**照 protocol 處置完，`make check` 要回綠**
+        ——而且是在沒有動起算點、沒有把單藏起來、沒有設離線旗標的前提下。
+
+        第二段是守門的那半：同一份輸入、只把留言的作者換成違規者自己，紅字要回來。
+        少了它，「處置有效」與「這條路根本沒接上（誰留都算）」兩種綠分不出來。
+        """
+        violation = [_authored("MYL-130", agent="tl-id", issue_id="u1")]
+        for author, expect_pass in ((dict(agent="pm-id"), True),
+                                    (dict(user="user-1"), True),
+                                    (dict(agent="tl-id"), False)):
+            with self.subTest(author=author):
+                comments = [_comment("I1-覆核完成：依 `D2` 判定不退回", **author)]
+                with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                        mock.patch.object(foundry_lint, "fetch_company_agents",
+                                          return_value=(_AGENTS, "")), \
+                        mock.patch.object(foundry_lint, "fetch_authored_issues",
+                                          return_value=(violation, "")), \
+                        mock.patch.object(foundry_lint, "api_get",
+                                          return_value=(comments, "")):
+                    res = foundry_lint.check_issue_authors(self.root)
+                self.assertEqual(res.passed, expect_pass)
+                self.assertFalse(res.skipped)   # 綠是「判過了」不是「跳過了」
+
     def test_讀不到平台編制是跳過不是紅燈(self):
         with mock.patch.dict(os.environ, _ONLINE_ENV), \
                 mock.patch.object(foundry_lint, "fetch_company_agents",
@@ -2382,6 +2533,27 @@ class IssueRulesCheckTest(unittest.TestCase):
         self.assertFalse(res.passed)
         self.assertIn("上位單同時被填進上游依賴", res.failures[0])
         self.assertNotIn("缺了", res.failures[0])
+
+    def test_其中一張撈不到時_其餘幾張的紅字不會被丟掉(self):
+        """CR 第 1 輪次要建議 #1：整項轉 `skipped` 等於 `passed`，那幾張真的缺
+        欄位的紅字這一輪就不見了——而看不見的漏報比多擋一次 commit 貴。"""
+        listed = [{"id": "u1", "identifier": "MYL-130", "createdByAgentId": "pm-id"},
+                  {"id": "u2", "identifier": "MYL-131", "createdByAgentId": "pm-id"}]
+        bad = {"assigneeAgentId": "dev-id", "parentId": None, "blockedBy": [],
+               "description": "**驗收標準**\n1. b\n"}
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(foundry_lint, "fetch_company_agents",
+                                  return_value=(_AGENTS, "")), \
+                mock.patch.object(foundry_lint, "api_get",
+                                  side_effect=[(listed, ""), (bad, ""),
+                                               (None, "連不上")]):
+            res = foundry_lint.check_pm_issue_fields(self.root)
+        self.assertFalse(res.passed)
+        self.assertFalse(res.skipped)
+        self.assertEqual(len(res.failures), 2)
+        self.assertIn("上位單", res.failures[0])          # 真紅字還在
+        self.assertIn("MYL-131", res.failures[1])          # 撈不到的那張也看得見
+        self.assertIn("PM 開了 2 張", res.summary)
 
 
 class FetchPmIssueFieldsTest(unittest.TestCase):

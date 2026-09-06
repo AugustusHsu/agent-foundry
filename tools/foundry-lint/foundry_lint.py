@@ -2560,10 +2560,35 @@ PM_ROLE_ID = "product-manager"
 #: 要跟著往後推；推之前先逐張確認中間那幾張確實不在射程內，不要只為了轉綠而推。
 ISSUE_RULES_SINCE = "MYL-125"
 
+#: `I1` 違規的**收斂出口**：覆核完成標記（MYL-116 CR 第 1 輪瑕疵 #1）。體例同
+#: `MIRROR_SKIPPED_RE`——來源工單上留一則固定形狀的留言，本項讀到就不再報那一張。
+#: **為什麼非有一條不可**：`I1` 認的是 `createdByAgentId`，那一格平台沒有任何更新
+#: 路徑（known-drift `L28`），而 `--selfcheck` 掛在 pre-commit 的 `always_run` 上
+#: ⇒ 沒有出口的話，一張違規單＝**所有 agent、所有 commit、永久被擋**，最後只會
+#: 逼人把整項關掉——與 `ISSUE_RULES_SINCE` 註解講的是同一件事的兩端：那條線收的
+#: 是規則上線前的舊單，這條出口收的是上線後真的發生的違規。
+#: **它不是把違規抹掉**：留言與開單者欄位都留在單上，收斂掉的只有那條紅字。
+#: ⚠️ 弱點與 `UPSTREAM_LINE_RE` 同一型：形狀寫死在這裡，措辭一改就靜默失效。
+ISSUE_AUTHOR_CLEARED_RE = re.compile(r"^I1-覆核完成[：:]\s*\S", re.M)
+
+#: 誰留的覆核完成標記才算數，以 `.foundry/org.yml` 的 `roles[].id` 表示。
+#: **使用者一律算數**，不必列在這裡（判法是留言的使用者欄有值，見
+#: `has_author_review_mark()`）——他是白名單第一位，也是 PM 缺席時的唯一出口。
+#: 為什麼要限作者：不限的話，違規開單的那位自己補一行就把自己的紅字關掉了，
+#: 這一項當場退化成打勾。`Mirror-skipped:` 不需要這一層——它聲明的是「這張刻意
+#: 不鏡像」（誰講都一樣可查），這裡聲明的是「**另一個人**覆核過了」。
+#: 值引用 `PM_ROLE_ID` 而不是再寫一次字面值：條文說的覆核者就是 `I2` 拘束的
+#: 那一位，兩處各寫一次的話，角色 id 哪天改了會有一處被漏掉。
+ISSUE_AUTHOR_REVIEWER_ROLE_IDS = (PM_ROLE_ID,)
+
 #: `I2` 上游欄的欄位名。它**不是**單一個平台欄位，是「依賴欄非空 **或** 描述裡有
 #: 那一行」的合成判準（見 `PmIssueFields.upstream`），所以取一個不叫 `blocked_by`
 #: 的名字——叫 `blocked_by` 會讓下一個人以為它只讀那一格。
 UPSTREAM_FIELD = "upstream"
+
+#: `I2` 驗收標準那一欄的欄位名。取常數是為了讓訊息那一段（要告訴 PM 這一格認的
+#: 是什麼形狀）與 `PM_REQUIRED_FIELDS` 指的是同一格，不靠字面字串對上。
+AC_FIELD = "has_ac"
 
 #: 上游欄的第二條路（使用者於卡 `2ed8d122` q1 選 B）：`blockedBy` 空著時，描述裡
 #: 要有一行固定形狀寫出前置單編號。**為什麼要有第二條路**：實查 agent 開的 47 張
@@ -2588,7 +2613,7 @@ PM_REQUIRED_FIELDS = (
     ("assignee", "指派對象"),
     ("parent", "上位單"),
     (UPSTREAM_FIELD, "上游依賴（擋住本單的單）"),
-    ("has_ac", "驗收標準"),
+    (AC_FIELD, "驗收標準"),
 )
 
 #: `I2` 的反向欄位：值為真就是違規。刻意與 `PM_REQUIRED_FIELDS` 同形
@@ -2612,11 +2637,15 @@ class AuthoredIssue:
 
     **兩個欄位皆空＝平台自建**（例如生產力審查單），`I1` 明文收容——那不是任何
     角色的動作，收不進白名單，也修不掉。
+
+    `issue_id` 是平台的 uuid（`ref` 是看得懂的那個編號）。留著它是因為兩件事都得
+    拿 uuid 去打端點：`I1` 違規時要翻該單的留言找覆核完成標記，`I2` 要逐張撈欄位。
     """
 
     ref: str
     author_agent: str = ""
     author_user: str = ""
+    issue_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -2647,31 +2676,94 @@ class PmIssueFields:
         return bool(self.blocked_by) or self.upstream_line
 
 
-def audit_issue_authors(issues: list, allowed: dict, names: dict, since: str) -> list:
-    """純函式：`I1` 白名單對帳，回傳 failure 訊息清單。
+def issue_author_violations(issues: list, allowed: dict, since: str) -> list:
+    """純函式：挑出射程內、開單者不在 `I1` 白名單的單（還沒看覆核標記）。
 
-    `allowed`／`names` 都是 `{agent id: 顯示名}`；前者是白名單、後者是全編制
-    （用來把違規訊息裡的 id 換成讀得懂的名字）。
+    與組訊息那支拆開，是為了讓「覆核完成標記」只對**這幾張**去翻留言——體例同
+    `fetch_source_issues()` 只對看起來漏建的單翻留言：對每張單都翻等於 N 次呼叫，
+    而絕大多數單根本不在射程內。
     """
-    failures = []
-    allowed_label = "／".join(["使用者"] + [allowed[k] for k in sorted(allowed)])
+    out = []
     for it in issues:
         if not ref_at_or_after(it.ref, since):
             continue
         if it.author_user:
-            continue                        # 白名單第一位：使用者
+            # 白名單第一位：使用者。**目前不可達**——實查 124 張單沒有一張兩欄
+            # 同時有值，使用者開的單 `createdByAgentId` 一律 null，會被下一行的
+            # 「平台自建」收容接走。留著是防「哪天平台改成兩欄都填」那種形狀；
+            # ⚠️ 它是 fail-open（那時白名單外的 agent 代開會被放行），真出現了
+            # 要回頭改成「兩欄都看」而不是只信這一行。
+            continue
         if not it.author_agent:
             continue                        # 平台自建，`I1` 明文收容
         if it.author_agent in allowed:
+            continue
+        out.append(it)
+    return out
+
+
+def audit_issue_authors(issues: list, allowed: dict, names: dict, since: str,
+                        cleared=None) -> list:
+    """純函式：`I1` 白名單對帳，回傳 failure 訊息清單。
+
+    `allowed`／`names` 都是 `{agent id: 顯示名}`；前者是白名單、後者是全編制
+    （用來把違規訊息裡的 id 換成讀得懂的名字）。**白名單依傳入順序印**（呼叫端
+    給的是 `ISSUE_AUTHOR_ALLOWED_ROLE_IDS` 的宣告順序）——照 agent uuid 排的話，
+    同一句話在不同環境會印出不同順序，讀紅字的人以為規則變了。
+
+    `cleared(it) -> bool` 是可選的「這張的覆核完成標記在不在」查詢，**只會對違規
+    的那幾張呼叫**（見 `issue_author_violations()`）。不傳＝不查，一律當作沒有：
+    純函式測試因此不必假造留言，連線那條路才把它接上去。
+    """
+    failures = []
+    allowed_label = "／".join(["使用者"] + [allowed[k] for k in allowed])
+    for it in issue_author_violations(issues, allowed, since):
+        if cleared is not None and cleared(it):
             continue
         who = names.get(it.author_agent) or f"`{it.author_agent}`"
         failures.append(
             f"{it.ref} 的開單者是「{who}」，不在 `I1` 的白名單（{allowed_label}）"
             "——`I1` 是事後檢查不是閘門，這張單已經開出來了。處置是把它交回 "
             "Product Manager 覆核、依 `D1`～`D4` 判要不要退回原單；"
-            "**不要刪單、也改不了作者**（平台沒有更新開單者的路徑，known-drift `L28`）"
+            "**不要刪單、也改不了作者**（平台沒有更新開單者的路徑，known-drift `L28`）。"
+            "覆核完成後由覆核者（Product Manager，或使用者本人）在該單留一則 "
+            "`I1-覆核完成：<判了什麼>` 的留言，本項就不再報它——**那是唯一的收斂"
+            "路徑**，不要改起算點、不要把單藏起來"
         )
     return failures
+
+
+def has_author_review_mark(comments: list, reviewer_ids) -> bool:
+    """留言裡有沒有一則成立的「覆核完成標記」（`I1` 的收斂出口）。
+
+    兩個條件都要成立：**形狀對**（`ISSUE_AUTHOR_CLEARED_RE`），而且**是覆核者留
+    的**——使用者，或 `reviewer_ids` 裡的 agent（＝Product Manager）。限作者的
+    理由見 `ISSUE_AUTHOR_REVIEWER_ROLE_IDS`。
+
+    ⚠️ 判「使用者留的」只能看 `authorUserId`／`authorType`，**不能看
+    `onBehalfOfUserId`**——agent 留的留言那一格也有值（實測本單的留言全數如此），
+    拿它判等於任何 agent 都能自我特赦。已刪除的留言（`deletedAt` 有值）不算。
+    """
+    for c in comments or []:
+        if not isinstance(c, dict) or c.get("deletedAt"):
+            continue
+        if not ISSUE_AUTHOR_CLEARED_RE.search(c.get("body") or ""):
+            continue
+        if c.get("authorUserId") or c.get("authorType") == "user":
+            return True
+        if c.get("authorAgentId") in reviewer_ids:
+            return True
+    return False
+
+
+def fetch_author_review_mark(base: str, token: str, issue_id: str,
+                             reviewer_ids) -> bool:
+    """撈單張單的留言，判有沒有覆核完成標記。
+
+    撈不到就當作沒有——**失效方向是安全的**：紅字留著（看得見），不是靜靜轉綠。
+    """
+    comments, _ = api_get(base, f"/api/issues/{issue_id}/comments", token)
+    return has_author_review_mark(comments, reviewer_ids)
 
 
 def audit_pm_issue_fields(issues: list) -> list:
@@ -2703,6 +2795,12 @@ def audit_pm_issue_fields(issues: list) -> list:
                 "上游欄有第二條路：前置在開單當下已經結案、或上游就是母單而填不得時，"
                 "在描述裡寫一行 `**上游**：前置 MYL-97 已結案，本單可獨立開工`"
                 "（要寫得出單號）就算交代"
+            )
+        if any(attr == AC_FIELD for attr, _ in missing):
+            parts.append(
+                "驗收標準那一欄認的形狀是描述裡**一行粗體 `**驗收標準**`**"
+                "（第 1 節四段骨架的第三段）——寫成 `## AC1` 這類標題、或在散文裡"
+                "提到「驗收標準」四個字都不算"
             )
         if wrong:
             parts.append(
@@ -2769,7 +2867,14 @@ def fetch_company_agents(base: str, token: str, company_id: str):
 
 
 def fetch_authored_issues(base: str, token: str, company_id: str, project_id: str):
-    """撈來源端每張單的「誰開的」。分頁前提同 `fetch_source_issues()`（沒有分頁）。"""
+    """撈來源端每張單的「誰開的」。分頁前提同 `fetch_source_issues()`（沒有分頁）。
+
+    **兩項檢查共用這一支**（`I1` 判白名單、`I2` 用它篩出 PM 開的單）：清單撈取
+    ＋三道過濾（`projectId`／`hiddenAt`／空 `identifier`）各寫一次的話，哪天多一道
+    過濾就會有一處被漏掉——這正是抽 `paperclip_source_endpoint()` 時寫的那把尺
+    （MYL-116 CR 第 1 輪次要建議 #2：當時 `I2` 那份就漏了空 `identifier` 那道，
+    一張沒有編號的單會吐出開頭是空白的紅字）。
+    """
     data, why = api_get(base, f"/api/companies/{company_id}/issues", token)
     if data is None:
         return None, why
@@ -2786,7 +2891,8 @@ def fetch_authored_issues(base: str, token: str, company_id: str, project_id: st
             continue
         out.append(AuthoredIssue(ref=ref,
                                  author_agent=it.get("createdByAgentId") or "",
-                                 author_user=it.get("createdByUserId") or ""))
+                                 author_user=it.get("createdByUserId") or "",
+                                 issue_id=it.get("id") or ""))
     return out, ""
 
 
@@ -2863,8 +2969,12 @@ def check_issue_authors(root: Path) -> SelfcheckResult:
         res.skipped = f"讀不到來源端：{why}"
         return res
 
+    reviewer_ids = {allowed[rid][0] for rid in ISSUE_AUTHOR_REVIEWER_ROLE_IDS
+                    if rid in allowed}
     res.failures.extend(audit_issue_authors(
-        issues, dict(allowed.values()), names, ISSUE_RULES_SINCE))
+        issues, dict(allowed.values()), names, ISSUE_RULES_SINCE,
+        cleared=lambda it: bool(it.issue_id) and fetch_author_review_mark(
+            base, token, it.issue_id, reviewer_ids)))
     in_scope = [i for i in issues if ref_at_or_after(i.ref, ISSUE_RULES_SINCE)]
     res.summary += (f"（{ISSUE_RULES_SINCE} 起 {len(in_scope)} 張，"
                     f"全部 {len(issues)} 張）")
@@ -2893,30 +3003,29 @@ def check_pm_issue_fields(root: Path) -> SelfcheckResult:
         return res
     pm_id = allowed[PM_ROLE_ID][0]
 
-    data, why = api_get(base, f"/api/companies/{company_id}/issues", token)
-    if data is None or not isinstance(data, list):
-        res.skipped = f"讀不到來源端：{why or 'issues 端點沒有回陣列'}"
+    issues, why = fetch_authored_issues(base, token, company_id, project_id)
+    if issues is None:
+        res.skipped = f"讀不到來源端：{why}"
         return res
 
-    fields = []
-    for it in data:
-        if project_id and it.get("projectId") != project_id:
+    fields, unreadable = [], []
+    for it in issues:
+        if it.author_agent != pm_id or not ref_at_or_after(it.ref, ISSUE_RULES_SINCE):
             continue
-        if it.get("hiddenAt"):
-            continue
-        ref = it.get("identifier") or ""
-        if (it.get("createdByAgentId") or "") != pm_id:
-            continue
-        if not ref_at_or_after(ref, ISSUE_RULES_SINCE):
-            continue
-        one, why = fetch_pm_issue_fields(base, token, it.get("id") or "", ref)
+        one, why = fetch_pm_issue_fields(base, token, it.issue_id, it.ref)
         if one is None:
-            res.skipped = f"讀不到 {ref} 的欄位：{why}"
-            return res
+            # **不中斷、也不整項轉 skipped**：整項跳過等於 `passed`，那幾張真的
+            # 缺欄位的紅字這一輪就不見了（MYL-116 CR 第 1 輪次要建議 #1）。
+            # 記成 failure 的代價是暫時性錯誤會擋一次 commit——但它下一輪自己會
+            # 消，而漏報不會。
+            unreadable.append(f"{it.ref} 的欄位讀不到，本輪判不了：{why}"
+                              "（其餘幾張的結果照常在下面；這一則下一輪會自己消失）")
+            continue
         fields.append(one)
 
     res.failures.extend(audit_pm_issue_fields(fields))
-    res.summary += f"（{ISSUE_RULES_SINCE} 起 PM 開了 {len(fields)} 張）"
+    res.failures.extend(unreadable)
+    res.summary += f"（{ISSUE_RULES_SINCE} 起 PM 開了 {len(fields) + len(unreadable)} 張）"
     return res
 
 
