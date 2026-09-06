@@ -901,11 +901,79 @@ def check_version_shape(root: Path) -> SelfcheckResult:
 TABLE_SCAN_DIRS = ("docs", "skills")
 #: markdown 表格的分隔列（`| --- | --- |`）。前後空白由呼叫端 `strip()` 掉。
 TABLE_SEP_RE = re.compile(r"^\|(?:\s*:?-{2,}:?\s*\|)+$")
+#: 切格用的 `|`。GFM 是**先切格、再解析行內語法**，所以反引號與粗體都保護不了管線符號，
+#: 只有 `\|` 逃得掉——`` `a|b` `` 寫在表格列裡實際會切成兩格。這裡照 GFM 數，
+#: 不照作者的意圖數：意圖數不出來，而讀者看到的正是 GFM 數出來的那個結果。
+TABLE_CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
 
 
 def is_table_row(line: str) -> bool:
     """這一行渲染時會被當成表格列（縮排在清單裡的表格也算）。"""
     return line.lstrip().startswith("|")
+
+
+def is_table_header(lines: list, i: int) -> bool:
+    """`lines[i]` 是表頭列——它自己是表格列，且**下一行是分隔列**。
+
+    少了後半這道，任何以 `|` 開頭的段落都會被誤判成表。
+    """
+    return (is_table_row(lines[i]) and i + 1 < len(lines)
+            and bool(TABLE_SEP_RE.match(lines[i + 1].strip())))
+
+
+def count_cells(line: str) -> int:
+    """這一列渲染出來會有幾格。
+
+    前導與收尾的 `|` 在 GFM 都是可選的裝飾，各自切出一個空段，不算格。
+    """
+    parts = TABLE_CELL_SPLIT_RE.split(line.strip())
+    if parts and not parts[0].strip():
+        parts = parts[1:]
+    if parts and not parts[-1].strip():
+        parts = parts[:-1]
+    return len(parts)
+
+
+def table_column_mismatches(text: str) -> list:
+    """回傳欄數與表頭對不上的列：`(行號, 這列幾格, 表頭幾格, 是不是分隔列)`。
+
+    GFM 用**表頭那一列**決定表格有幾欄，其餘每一列一律裁切或補齊到那個數：
+    多出來的格子**整格丟掉**、少的補成空白。兩邊都不會有任何警告。
+
+    `8416f66`（MYL-79 訂正 `known-drift` 的 `S5`）就是多出來那一種：改寫後的
+    `S5` 有 4 格、同表其餘 8 列與表頭都是 3 格，於是**整個「正確寫法」欄在渲染時
+    消失**——原文讀起來完全正常，`--selfcheck` 全綠，`table-shape` 當時只驗連續性。
+
+    分隔列另外看：它的格數與表頭不符時 GFM 判定**整段根本不是表格**，會原樣印出
+    每一行的管線符號。這種時候後面的列數多少都沒有意義，所以報完就跳過整張表。
+    """
+    lines = text.splitlines()
+    bad = []
+    in_fence = False
+    i = 0
+    while i < len(lines):
+        if FENCE_RE.match(lines[i]):
+            in_fence = not in_fence
+            i += 1
+            continue
+        if in_fence or not is_table_header(lines, i):
+            i += 1
+            continue
+        want = count_cells(lines[i])
+        sep = count_cells(lines[i + 1])
+        j = i + 2
+        if sep != want:
+            bad.append((i + 2, sep, want, True))
+        else:
+            while j < len(lines) and is_table_row(lines[j]):
+                got = count_cells(lines[j])
+                if got != want:
+                    bad.append((j + 1, got, want, False))
+                j += 1
+        while j < len(lines) and is_table_row(lines[j]):
+            j += 1
+        i = j
+    return bad
 
 
 def table_breaks(text: str) -> list:
@@ -928,10 +996,7 @@ def table_breaks(text: str) -> list:
             in_fence = not in_fence
             i += 1
             continue
-        # 表頭單獨一行不算表格，要下一行是分隔列才算——少了這道，
-        # 任何以 `|` 開頭的段落都會被誤判成表。
-        if (in_fence or not is_table_row(lines[i])
-                or i + 1 >= len(lines) or not TABLE_SEP_RE.match(lines[i + 1].strip())):
+        if in_fence or not is_table_header(lines, i):
             i += 1
             continue
         end = i + 2
@@ -951,12 +1016,16 @@ def table_breaks(text: str) -> list:
 
 
 def check_table_shape(root: Path) -> SelfcheckResult:
-    """markdown 表格中間不得夾空行——夾了會被切斷，而機械斷言看不見（MYL-76 AC9）。
+    """markdown 表格的兩種「原文正常、渲染是壞的」：夾空行被切斷、欄數對不上表頭。
+
+    - 夾空行（MYL-76 AC9）：表格在空行處結束，後面的續列變成普通段落。
+    - 欄數（MYL-98，出處 `8416f66`）：GFM 以表頭決定欄數，多的格子整格丟掉、
+      少的補空白，兩邊都不出聲——`S5` 那次多出來的那一格裝著整個「正確寫法」欄。
 
     這一項與 `L13`／`L21`／`X4` 同族：**斷言全綠但渲染是壞的**。差別在於前三者
-    是外部平台的行為，這一條是 markdown 自己的，所以擋得住，也就該擋。
+    是外部平台的行為，這兩條是 markdown 自己的，所以擋得住，也就該擋。
     """
-    res = SelfcheckResult("table-shape", "markdown 表格沒有被空行切斷")
+    res = SelfcheckResult("table-shape", "markdown 表格沒有被空行切斷、每列欄數與表頭一致")
     scanned = 0
     for top in TABLE_SCAN_DIRS:
         base = root / top
@@ -965,13 +1034,34 @@ def check_table_shape(root: Path) -> SelfcheckResult:
         for path in sorted(base.rglob("*.md")):
             scanned += 1
             rel = path.relative_to(root).as_posix()
-            for lineno in table_breaks(read_text(path)):
+            text = read_text(path)
+            for lineno in table_breaks(text):
                 res.failures.append(
                     f"{rel}:{lineno} 是上面那張表的續列，但中間隔了空行"
                     "——渲染時表格在空行處就結束了，這一行起會變成普通段落，"
                     "連分隔符一起原樣印出來。刪掉那個空行；真要分成兩張表，"
                     "就給下面這段補上自己的表頭與分隔列"
                 )
+            for lineno, got, want, is_sep in table_column_mismatches(text):
+                if is_sep:
+                    res.failures.append(
+                        f"{rel}:{lineno} 是分隔列，卻有 {got} 格、表頭有 {want} 格"
+                        "——兩者不等時 GFM 判定這整段根本不是表格，每一行的管線符號"
+                        f"都會原樣印出來。把分隔列補成 {want} 格"
+                    )
+                elif got > want:
+                    res.failures.append(
+                        f"{rel}:{lineno} 有 {got} 格，表頭只有 {want} 格"
+                        f"——GFM 以表頭定欄數，多出來的第 {want + 1} 格起會被**整格丟掉**，"
+                        "原文讀得到、渲染出來看不到。把多的格子併回去；"
+                        "格子內容裡的管線符號（含反引號裡的）要寫成 `\\|` 才不算分隔"
+                    )
+                else:
+                    res.failures.append(
+                        f"{rel}:{lineno} 只有 {got} 格，表頭有 {want} 格"
+                        "——渲染時缺的格子補成空白，看起來像漏填。補齊到 "
+                        f"{want} 格；真的要留白就寫成空格子"
+                    )
     res.summary += f"（掃 {scanned} 份）"
     return res
 
@@ -2037,7 +2127,7 @@ SELFCHECK_LABELS = {
     "big-files": "大檔清單",
     "internal-links": "相對連結",
     "version-shape": "版本號形狀",
-    "table-shape": "表格連續性",
+    "table-shape": "表格形狀",
     "org-sync": "組織宣告",
     "handbook-stamp": "手冊戳記",
     "init-copy-list": "init 複製清單",

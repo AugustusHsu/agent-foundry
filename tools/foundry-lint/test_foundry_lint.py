@@ -1128,6 +1128,112 @@ class TableShapeTest(RepoCopyTestCase):
         self.assertFalse(self._run().passed)
 
 
+class TableColumnCountTest(RepoCopyTestCase):
+    """欄數與表頭對不上（MYL-98，出處 `8416f66`）。
+
+    這一組跟上面的 `TableShapeTest` 同屬 `table-shape`，但驗的是另一種靜默：
+    表格沒被切斷、渲染得出來，只是**多出來的那一格連同內容一起消失**。
+    `8416f66` 那次某列 4 格、同表其餘 8 列 3 格，被吃掉的是整個「正確寫法」欄。
+    """
+
+    #: 表頭 3 欄，兩列正常資料——`8416f66` 那張表的最小形。
+    TABLE = ("| # | 陷阱 | 正確寫法 |\n| --- | --- | --- |\n"
+             "| S1 | 甲 | 乙 |\n| S2 | 丙 | 丁 |\n")
+    #: 第 5 行：多出第 4 格，裝著本來要給讀者看的內容。
+    OVERFLOW = TABLE + "| S3 | 戊 | 己 | 多出來的這一整格會不見 |\n"
+
+    def _run(self):
+        return foundry_lint.check_table_shape(self.root)
+
+    def test_真實_repo_通過(self):
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_某列比表頭多一格時擋下(self):
+        """`8416f66` 的形狀：某列 4 格，其餘與表頭都是 3 格。"""
+        self.write("docs/standards/drift-sample.md", self.OVERFLOW)
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(
+            any("docs/standards/drift-sample.md:5" in f and "整格丟掉" in f
+                for f in res.failures),
+            res.failures,
+        )
+
+    def test_舊版邏輯擋不住這個反例(self):
+        """AC1：確認上一則不是空轉——只驗連續性的舊邏輯對同一份輸入是綠的。
+
+        問的是舊版判準本身（`table_breaks`），而不是「把新程式碼註解掉再跑一次」：
+        反例要擋得住，前提是它在**加這項檢查之前**確實會漏網。
+        """
+        self.assertEqual(foundry_lint.table_breaks(self.OVERFLOW), [])
+        self.assertTrue(foundry_lint.table_column_mismatches(self.OVERFLOW))
+
+    def test_某列比表頭少一格時也擋下(self):
+        self.write("skills/drift-sample.md", self.TABLE + "| S3 | 戊 |\n")
+        res = self._run()
+        self.assertFalse(res.passed)
+        self.assertTrue(any("skills/drift-sample.md:5" in f for f in res.failures),
+                        res.failures)
+
+    def test_分隔列格數與表頭不符時擋下(self):
+        """分隔列對不上時 GFM 連表格都不渲染，錯得比少一格更徹底。"""
+        self.write("skills/drift-sample.md",
+                   "| a | b | c |\n| --- | --- |\n| 1 | 2 | 3 |\n")
+        res = self._run()
+        self.assertFalse(res.passed)
+        mine = [f for f in res.failures if "skills/drift-sample.md" in f]
+        self.assertTrue(any("分隔列" in f for f in mine), res.failures)
+        # 分隔列一壞整張表就不是表，後面每一列不再逐列重報一次
+        self.assertEqual(len(mine), 1, res.failures)
+
+    def test_前後沒有管線符號的列不誤殺(self):
+        """GFM 的前導／收尾 `|` 是可選的裝飾，寫不寫都是同樣的欄數。"""
+        self.write("skills/drift-sample.md",
+                   "| a | b |\n| --- | --- |\n| 1 | 2\n| 3 | 4 |\n")
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_逃脫過的管線符號不算分隔(self):
+        self.write("skills/drift-sample.md", self.TABLE + "| S3 | `a \\| b` | 己 |\n")
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_反引號保護不了管線符號(self):
+        """GFM 先切格再解析行內語法——`` `a|b` `` 實際會切成兩格，那是真的壞掉。"""
+        self.write("skills/drift-sample.md", self.TABLE + "| S3 | `a | b` | 己 |\n")
+        self.assertFalse(self._run().passed)
+
+    def test_圍欄裡的示例不算(self):
+        self.write("skills/drift-sample.md", "```markdown\n" + self.OVERFLOW + "```\n")
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+    def test_沒有分隔列的段落不算表(self):
+        self.write("skills/drift-sample.md", "| 這只是一行文字\n| 另一行 | 有兩格 |\n")
+        res = self._run()
+        self.assertTrue(res.passed, res.failures)
+
+
+class CountCellsTest(unittest.TestCase):
+    """`count_cells()` 照 GFM 數格，不照作者的意圖數。"""
+
+    def test_各種寫法(self):
+        for line, want in (
+            ("| a | b |", 2),
+            ("|a|b|", 2),
+            ("a | b", 2),             # 前導／收尾的 `|` 在 GFM 是可選的
+            ("| a | b", 2),
+            ("a | b |", 2),
+            ("| a |  |", 2),          # 留白仍是一格
+            ("  | a | b |  ", 2),     # 縮排與行尾空白不影響
+            ("| a \\| b |", 1),       # 逃脫過的不切
+            ("| `a | b` |", 2),       # 反引號保護不了
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(foundry_lint.count_cells(line), want)
+
+
 class ParseOrgTest(unittest.TestCase):
     """`.foundry/org.yml` 的 parser：不支援的寫法要**拋錯**，不是靜靜忽略。"""
 

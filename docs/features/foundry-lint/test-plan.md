@@ -78,6 +78,6 @@
 | T-10 | ✅ 通過 | 章節內容全空仍 exit 0 |
 | T-11 | ✅ 通過 | 通過案例 `{"file": ..., "type": "prd", "passed": true, "missing_sections": []}` exit 0；缺章節案例 `passed: false`、`missing_sections: ["## 5. 邊界情況與錯誤處理"]` exit 1；`json.loads` 解析成功、keys 恰為四欄位、原文含中文無 `\u` 轉義、缺漏清單與 T-2 text 模式一致 |
 | T-12 | ✅ 通過 | exit 2；stdout 0 byte（無 JSON）；stderr 與 T-7 同一訊息 |
-| T-13 | ✅ 通過 | `grep -nE "^(import|from) (socket|urllib|http|requests)" tools/foundry-lint/*.py` 零筆；實作僅 6 條 stdlib import |
+| T-13 | ✅ 通過 | `grep -nE "^(import\|from) (socket\|urllib\|http\|requests)" tools/foundry-lint/*.py` 零筆；實作僅 6 條 stdlib import |
 | T-14 | ✅ 通過 | `python3 tools/foundry-lint/foundry_lint.py --type test-plan docs/features/foundry-lint/test-plan.md` → exit 0（本文件定稿後實測） |
 | T-15 | ✅ 通過 | `python3 -m unittest discover tools/foundry-lint` → `Ran 26 tests in 0.652s`／`OK`／exit 0 |
