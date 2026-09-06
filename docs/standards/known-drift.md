@@ -157,6 +157,7 @@
 | GAP-4 | **`claude_local` adapter 內建說明字串的 `effort` 只寫到 `(low\|medium\|high)`，已過時。** 實際支援 `low/medium/high/xhigh/max`；adapter 對 `effort` 原樣傳給 CLI 不做驗證 | 實測 `claude-opus-5`＋`max` EXIT=0。protocol 第 8 節附註已載明 |
 | GAP-5 | **瀏覽器工具綁的是「情境」不是「人」。** `.mcp.json` 放在共用 repo 裡，該 repo 的**所有** agent 都拿得到瀏覽器工具，不只 Frontend Verifier。要真正做到 per-agent 綁定得靠平台 tool-profile（`L7`，board-only） | MYL-37 卡 `myl37:frontend-verifier:plan:f7cf0b84` 的 `gateway: gateway_now`——使用者選擇由自己在 UI 補上閘道，能力層不等它。**2026-09-04 更正：這條缺口用閘道關不掉**——stdio 型 MCP 送不進 agent session（`L10`），硬掛遠端連線反而會把 `.mcp.json` 整份廢掉（`L9`）。維持 `.mcp.json`、以「不把遠端 app 授權給 Frontend Verifier」為代償規則 |
 | GAP-6 | **`handbook-stamp` 只驗「有動到手冊任一檔」，不驗「動到對應章」。** `unsynced_protocol_commits()` 看的是 `diff-tree ... -- docs/handbook` 有沒有輸出，所以「改 protocol 第 3 節、手冊只動 `06` 章、`03` 章戳記仍停在舊 sha」四章照樣全綠（MYL-73 的 `0a0b461` 就是這個形狀）。**刻意不做**：protocol 的節與手冊的章不是一對一，硬做對應表等於新增第二份要人工維護的映射，而那正是本 repo 反覆記錄的漂移來源——這道閘門要擋的是「完全沒看手冊」，「哪一章要改」的判斷本來就在層 2 的 agent 身上 | MYL-76 AC10 判定（工單授權「先判斷值不值得做」，由 Developer 判；非使用者裁定）。判準與這條缺口一併寫在 `check_handbook_stamp()` 的 docstring，避免下一個人重新發現一次 |
+| GAP-7 | **來源工單上陳舊的 `Mirrored-to:` 登記沒有任何機械偵測。** 對帳只讀鏡像 issue 的 body 首行（那是唯一權威），所以來源端那則反查快取指到一張**已經脫鉤的 issue** 時，`mirror-recon` 照樣全綠。MYL-104 上的 `Mirrored-to: github#38` 就是這個形狀——`#38` 已於 05:07:03 移除標記，登記留言仍在。**刻意不做**：要驗它得對每張來源單撈留言（本 repo 現況 51 張＝每次多 51 次 API 呼叫），而 `fetch_source_issues()` 現在只對「看起來漏建」的那幾張撈，正是為了避開這個成本 | MYL-108 判定不修。代償是**人手更正**：發現作廢的登記時在來源工單補一則更正留言把它標明（平台不提供刪留言），並在 adapter「收斂重複鏡像的手法」列為必做的第三步 |
 
 ## 5. 併發與競態：多個 run 共用同一個 workspace
 
@@ -199,6 +200,11 @@
     1. 唯讀查看用 `git --git-dir=.git --work-tree=. <指令>`，這條不改任何東西就能繞過 `core.bare`。
     2. 要 commit 就**開自己的 linked worktree**：`git --git-dir=<repo>/.git worktree add "$PAPERCLIP_RUN_SCRATCH_DIR/wt-<單號>" <分支>`，把工作區檔案複製過去，在那裡跑 `make check` 與 commit。分支與 ref 是共用的，commit 一樣進得了本 repo。
   → commit 時**顯式帶身分**（`git -c user.name=… -c user.email=… commit`），否則會用到別人留在 repo config 裡的測試身分。這一條與 `X1` 是同一類問題的兩種形態：`X1` 是 HEAD 被換掉，`X8` 是 config 被換掉。
+- `X9` **`mirror-recon` 的紅燈是延遲偵測，於是同一片紅燈會被併行的 run 各自看到，「順手補」就補成一對多。** 2026-09-06 完整走過一遍：同一次作業連續建了八張來源單、只鏡像六張（時機 1 是 `【自律】`，漏了當下沒有任何東西擋你），紅燈要等**下一個人 commit** 才浮出來——而那時已經有好幾個 run 醒著。MYL-104 因此在 **27 秒內被兩個不同的 run 各建了一張鏡像**（`#37` Developer 05:04:40、`#38` QA 05:05:07）。**公開 issue 送出去就收不回來**，這條紅燈的處置成本是不對稱的。
+  → **紅燈訊息會過期，而且兩個方向都會過期。** 同一串留言裡出現過兩則**互相矛盾**的通報，兩則都是過期讀取、兩則照著動手都會出錯：05:08 的報告寫「MYL-104／MYL-105 漏建」（那一輪的 `gh issue list` 落在 05:04:30，三張鏡像都還沒建出來）——照它動手會建出第三、第四張重複鏡像；05:10 的跨單通報寫「一對多紅燈：`#37`／`#38`」（`#38` 已於 05:07:03 脫鉤）——照它動手會去關一張早就關掉的 issue。⇒ **動手前一律重查，不要拿手上那份輸出當現況**；而重查**只能走 REST**（`gh api repos/{o}/{r}/issues`），因為 `gh issue list` 走 GraphQL，正好在同一種故障下讀不到東西。
+  → **處置規則已成文**：`skills/foundry-platform/adapters/github.md` 的「一次建多張（批次建單）」與「看到紅燈時誰動手（認領規則）」兩節。四個要點——**一張一鏡像**（建單迴圈裡不得有「稍後統一鏡像」階段）、**批次收尾前自查**（不要把偵測留給下一個 commit 的人）、**只補自己建的那張**（別人的單只回報，除非工單明文授權代建）、**動手前重查**。
+  → **收斂重複鏡像的手法（可逆，優先於刪除）**：移除多餘那張的 `Foundry-Source:` 首行 ＋ `close not planned` ＋ 回來源工單補一則更正登記留言。移除首行之後對帳就看不到它了，不必刪 issue。`#38` 即以此收斂（05:07:03），事後查證：body 首行已非標記、`state_reason: not_planned`、`mirror-recon` 不再報一對多。
+  → 與 `X1`／`X8` 同族但機制不同：那兩條是併行 run 搶**同一份本機狀態**，本條是併行 run 對**同一片外部紅燈**各自反應。防法也不同——前者靠隔離工作區，後者靠認領規則。（MYL-108）
 
 ### 兩份 nav 的結構性漂移 — **已收斂（2026-09-05，MYL-55）**
 
