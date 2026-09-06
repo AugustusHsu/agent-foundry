@@ -1163,6 +1163,12 @@ class ParseOrgTest(unittest.TestCase):
 class OrgSyncTest(RepoCopyTestCase):
     """組織宣告 ↔ protocol 第 9／8 節（MYL-76 AC3）：每個比對方向各配一個反例。"""
 
+    #: 值域外的權限，四種寫錯的方式各一個：中文值、看起來像權限名的英文值、
+    #: 與既有成員只差一個字母的近似值、只差大小寫的值。
+    #: 都是**自造**的值——不引用 `ORG_PERMISSIONS` 現在有哪些成員
+    #: （見 `test_權限值域外被擋下` 的 docstring）。
+    OUT_OF_DOMAIN_PERMISSIONS = ("不在值域裡的權限", "do_anything", "create_skill", "CREATE_SKILLS")
+
     def _run(self):
         return foundry_lint.check_org_sync(self.root)
 
@@ -1211,11 +1217,6 @@ class OrgSyncTest(RepoCopyTestCase):
         self.assertFalse(res.passed)
         self.assertTrue(any("foundry_org" in f for f in res.failures), res.failures)
 
-    #: 值域外的權限，四種寫錯的方式各一個：中文值、看起來像權限名的英文值、
-    #: 與既有成員只差一個字母的近似值、只差大小寫的值。
-    #: 都是**自造**的值——不引用 `ORG_PERMISSIONS` 現在有哪些成員（見下方測試 docstring）。
-    OUT_OF_DOMAIN_PERMISSIONS = ("不在值域裡的權限", "do_anything", "create_skill", "CREATE_SKILLS")
-
     def test_權限值域外被擋下(self):
         """封閉值域的反例。少了這條，打錯的權限名會被當成一個新權限默默收下。
 
@@ -1228,7 +1229,13 @@ class OrgSyncTest(RepoCopyTestCase):
         輪審查次要建議 2）。被收掉的那條寫法正是
         `.replace("      - create_skills", "      - do_anything", 1)`——依賴目標專案
         現在宣告了 `create_skills`，退化成 no-op 也不會有人知道。它涵蓋的值
-        （`do_anything`）留在下面的案例表裡，並補上三種其他寫錯的方式。
+        （`do_anything`）留在 `OUT_OF_DOMAIN_PERMISSIONS`，並補上三種其他寫錯的方式。
+
+        **訊息斷言只看「值域是 …」之前那半段**，別放寬回整句子字串比對。訊息尾巴
+        會列舉值域全部成員，`create_skill` 這種近似值會被 `create_skills` 吃掉，
+        那一例就恆真了。守著這條鑑別力的突變（MYL-106 第 1 輪審查瑕疵 1）：把
+        `foundry_lint.py` 訊息裡的 `` 有 `{perm}` `` 改成 `` 有 `某個值` ``——
+        訊息不再指名犯規的值，四個案例都必須轉紅。
         """
         original = self._org()
         marker = "    permissions:\n"
@@ -1243,8 +1250,10 @@ class OrgSyncTest(RepoCopyTestCase):
                 self.write(foundry_lint.ORG_REL, mutated)
                 res = self._run()
                 self.assertFalse(res.passed, "插了值域外的權限卻通過了")
-                self.assertTrue(any(bogus in f and "值域" in f for f in res.failures),
-                                res.failures)
+                self.assertTrue(
+                    any("`%s`" % bogus in f.split("值域是")[0] and "值域" in f
+                        for f in res.failures),
+                    res.failures)
 
     def test_configure_agents_在值域內(self):
         """MYL-79 加入的值域成員。
