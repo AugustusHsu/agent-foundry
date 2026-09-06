@@ -2150,10 +2150,15 @@ class PmIssueFieldsAuditTest(unittest.TestCase):
     """
 
     FULL = dict(ref="MYL-130", assignee="dev-id", parent="MYL-96",
-                blocked_by=1, has_ac=True, parent_is_blocker=False)
-    #: 每一欄「違規」時的值：必備欄是空值、反向欄是 True。
-    BAD = {"assignee": "", "parent": "", "blocked_by": 0, "has_ac": False,
-           "parent_is_blocker": True}
+                blocked_by=1, upstream_line=False, has_ac=True,
+                parent_is_blocker=False)
+    #: 每一欄「違規」時要餵的建構參數。值是 **dict 而不是單一值**：上游欄是合成
+    #: 判準（依賴欄 or 描述那一行），要讓它犯規得同時把兩條路都關掉。
+    BAD = {"assignee": dict(assignee=""),
+           "parent": dict(parent=""),
+           "upstream": dict(blocked_by=0, upstream_line=False),
+           "has_ac": dict(has_ac=False),
+           "parent_is_blocker": dict(parent_is_blocker=True)}
 
     def one(self, **overrides):
         return foundry_lint.PmIssueFields(**{**self.FULL, **overrides})
@@ -2179,9 +2184,35 @@ class PmIssueFieldsAuditTest(unittest.TestCase):
             for attr, label in guard:
                 with self.subTest(attr=attr):
                     failures = foundry_lint.audit_pm_issue_fields(
-                        [self.one(**{attr: self.BAD[attr]})])
+                        [self.one(**self.BAD[attr])])
                     self.assertEqual(len(failures), 1)
                     self.assertIn(label, failures[0])
+
+    def test_上游欄兩條路各自都算交代(self):
+        """卡 `2ed8d122` q1＝B：依賴欄非空**或**描述有那一行，兩條路都過。
+
+        兩條路分開驗，而不是只驗其中一條——只驗依賴欄那條的話，第二條路寫壞了
+        （例如正則永遠不命中）也看不出來，而那正是它靜默失效的樣子。
+        """
+        self.assertEqual(foundry_lint.audit_pm_issue_fields(
+            [self.one(blocked_by=1, upstream_line=False)]), [])
+        self.assertEqual(foundry_lint.audit_pm_issue_fields(
+            [self.one(blocked_by=0, upstream_line=True)]), [])
+        self.assertTrue(foundry_lint.audit_pm_issue_fields(
+            [self.one(blocked_by=0, upstream_line=False)]))
+
+    def test_上游欄缺了時訊息要指出第二條路(self):
+        """紅字只說「缺上游依賴」的話，看到的人會去掛一條假依賴——而那正是
+        `PM_FORBIDDEN_FIELDS` 那一格在擋的事。"""
+        failures = foundry_lint.audit_pm_issue_fields([self.one(**self.BAD["upstream"])])
+        self.assertIn("**上游**", failures[0])
+        self.assertIn("單號", failures[0])
+
+    def test_上位單不算上游欄的第三條路(self):
+        """`parentId` 拿來抵上游欄的話，那個「或」會因為上位單本來就是必備欄位
+        而永遠成立，抓漏力歸零——本單卡 `117b822a` 的來回就是為了這件事。"""
+        self.assertTrue(foundry_lint.audit_pm_issue_fields(
+            [self.one(parent="MYL-96", blocked_by=0, upstream_line=False)]))
 
     def test_拿掉某一欄的判定_那一格的反例就靜默通過(self):
         """AC1 反向突變證：把該欄從它那一族的清單拿掉＝那道守衛不存在。
@@ -2193,7 +2224,7 @@ class PmIssueFieldsAuditTest(unittest.TestCase):
         """
         for name, guard in self.guards():
             for attr, _ in guard:
-                counter_example = [self.one(**{attr: self.BAD[attr]})]
+                counter_example = [self.one(**self.BAD[attr])]
                 without = tuple(p for p in guard if p[0] != attr)
                 with self.subTest(guard=name, attr=attr):
                     self.assertTrue(
@@ -2393,8 +2424,55 @@ class FetchPmIssueFieldsTest(unittest.TestCase):
         one, err = self.fetch({})
         self.assertEqual(err, "")
         self.assertEqual((one.assignee, one.parent, one.blocked_by,
-                          one.has_ac, one.parent_is_blocker),
-                         ("", "", 0, False, False))
+                          one.upstream_line, one.has_ac, one.parent_is_blocker),
+                         ("", "", 0, False, False, False))
+
+
+class UpstreamLineTest(unittest.TestCase):
+    """上游欄第二條路的形狀（使用者於卡 `2ed8d122` q1 選 B）。
+
+    這一格是**散文正則**，弱點寫在 `UPSTREAM_LINE_RE` 的註解裡。測試的責任是
+    把「窄」證出來：不是只證合法的那行會過，而是證幾種很像但不成立的寫法
+    **不會**過——否則這一格會靜靜退化成打勾。
+    """
+
+    def line(self, description):
+        with mock.patch.object(foundry_lint, "api_get",
+                               return_value=({"description": description}, "")):
+            one, _ = foundry_lint.fetch_pm_issue_fields("b", "t", "uuid", "MYL-130")
+        return one.upstream_line
+
+    def test_固定形狀那一行算數(self):
+        self.assertTrue(self.line(
+            "**Inputs**\n- a\n\n**上游**：前置 MYL-97 已於 2026-09-05 結案，"
+            "本單可獨立開工\n"))
+
+    def test_全形冒號與半形冒號都收(self):
+        self.assertTrue(self.line("**上游**: 前置 MYL-97 已結案"))
+
+    def test_沒寫出單號的空話不算(self):
+        """「無上游依賴」這種寫法過得了的話，這一格就只是一顆打勾鈕。"""
+        self.assertFalse(self.line("**上游**：本單從零起念，沒有前置"))
+
+    def test_散文裡提到上游不算那一行(self):
+        self.assertFalse(self.line("這張單的上游是 MYL-97，做完才動得了"))
+
+    def test_單號要在同一行(self):
+        self.assertFalse(self.line("**上游**：見下\n\nMYL-97 已結案\n"))
+
+    def test_把正則放鬆掉_不成立的寫法就靜默通過(self):
+        """反向突變證：`UPSTREAM_LINE_RE` 是這一格唯一的守衛。
+
+        換成一個什麼都命中的正則（＝這道守衛不存在），上面那幾種不成立的寫法
+        會全部轉綠——證明它們現在的紅不是因為別的旁枝。
+        """
+        loose = re.compile(r".")
+        for bad in ("**上游**：本單從零起念，沒有前置",
+                    "這張單的上游是 MYL-97，做完才動得了"):
+            with self.subTest(bad=bad):
+                self.assertFalse(self.line(bad))
+                with mock.patch.object(foundry_lint, "UPSTREAM_LINE_RE", loose):
+                    self.assertTrue(self.line(bad))
 
 
 class RefScopeSharedTest(unittest.TestCase):

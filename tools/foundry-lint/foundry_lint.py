@@ -2560,6 +2560,23 @@ PM_ROLE_ID = "product-manager"
 #: 要跟著往後推；推之前先逐張確認中間那幾張確實不在射程內，不要只為了轉綠而推。
 ISSUE_RULES_SINCE = "MYL-125"
 
+#: `I2` 上游欄的欄位名。它**不是**單一個平台欄位，是「依賴欄非空 **或** 描述裡有
+#: 那一行」的合成判準（見 `PmIssueFields.upstream`），所以取一個不叫 `blocked_by`
+#: 的名字——叫 `blocked_by` 會讓下一個人以為它只讀那一格。
+UPSTREAM_FIELD = "upstream"
+
+#: 上游欄的第二條路（使用者於卡 `2ed8d122` q1 選 B）：`blockedBy` 空著時，描述裡
+#: 要有一行固定形狀寫出前置單編號。**為什麼要有第二條路**：實查 agent 開的 47 張
+#: 無上游單，27 張的前置在開單當下就已經 `done`（填進去是一個開出來就已解除的
+#: blocker，零阻擋），14 張的上游就是母單（填進去做出醒不來的單，正是
+#: `PM_FORBIDDEN_FIELDS` 那一格擋的事）——它們**答得出來源，只是寫不進那一欄**。
+#: ⚠️ 這一半是散文正則，兩個弱點要講在明處：措辭一改就靜默失效（體例同
+#: `AC_SECTION_RE`），而且寫空話它擋不住——「那一行的內容是否成立」是【自律】。
+#: 形狀因此收得窄：行首粗體「上游」＋冒號，且**同一行內要有單號**（`<前綴>-<數字>`）
+#: ——只允許寫「無上游」之類的空話會讓這一格退化成打勾。
+UPSTREAM_LINE_RE = re.compile(
+    r"^\s*\*\*上游\*\*[：:][^\n]*[A-Za-z][A-Za-z0-9]*-\d+", re.M)
+
 #: `I2` 的必備欄位：`(欄位, 報訊息時的稱呼)`。順序＝條文列舉的順序。
 #: **原本是五欄，「下游被擋」拿掉了**（使用者於卡 `117b822a` q2 選 B）：那一欄
 #: 開單者**填不動**——`issue_relations` 只有 `blocks` 一種關係型別，`blockedBy`
@@ -2570,7 +2587,7 @@ ISSUE_RULES_SINCE = "MYL-125"
 PM_REQUIRED_FIELDS = (
     ("assignee", "指派對象"),
     ("parent", "上位單"),
-    ("blocked_by", "上游依賴（擋住本單的單）"),
+    (UPSTREAM_FIELD, "上游依賴（擋住本單的單）"),
     ("has_ac", "驗收標準"),
 )
 
@@ -2604,8 +2621,10 @@ class AuthoredIssue:
 
 @dataclass(frozen=True)
 class PmIssueFields:
-    """`I2` 要看的幾格。上游依賴欄存的是**條數**，零＝那一欄空著。
+    """`I2` 要看的幾格。`blocked_by` 存的是依賴**條數**，零＝那一欄空著。
 
+    上游欄的判準是 `upstream`（合成的，見下）而不是 `blocked_by` 本身：兩條路
+    都算交代，raw 的那兩格分開存才驗得出「是哪一條路過的」。
     `parent_is_blocker` 不是「有沒有填」而是「填錯了沒有」，判在
     `PM_FORBIDDEN_FIELDS` 那一族。
     """
@@ -2614,8 +2633,18 @@ class PmIssueFields:
     assignee: str = ""
     parent: str = ""
     blocked_by: int = 0
+    upstream_line: bool = False
     has_ac: bool = False
     parent_is_blocker: bool = False
+
+    @property
+    def upstream(self) -> bool:
+        """上游欄過不過：依賴欄非空，**或**描述裡有 `UPSTREAM_LINE_RE` 那一行。
+
+        `parentId` 刻意**不算**第三條路：它已經是必備欄位裡的「上位單」，拿它
+        來抵上游欄，那個「或」就永遠成立、抓漏力歸零（同一個病因報兩次而已）。
+        """
+        return bool(self.blocked_by) or self.upstream_line
 
 
 def audit_issue_authors(issues: list, allowed: dict, names: dict, since: str) -> list:
@@ -2657,15 +2686,23 @@ def audit_pm_issue_fields(issues: list) -> list:
     """
     failures = []
     for it in issues:
-        missing = [label for attr, label in PM_REQUIRED_FIELDS if not getattr(it, attr)]
+        missing = [(attr, label) for attr, label in PM_REQUIRED_FIELDS
+                   if not getattr(it, attr)]
         wrong = [label for attr, label in PM_FORBIDDEN_FIELDS if getattr(it, attr)]
         if not missing and not wrong:
             continue
         parts = []
         if missing:
             parts.append(
-                f"缺了：{'、'.join(missing)}——每缺一欄，接單者開工後就要多問一次，"
+                f"缺了：{'、'.join(label for _, label in missing)}"
+                "——每缺一欄，接單者開工後就要多問一次，"
                 "那正是這條規則要收掉的來回（MYL-96 裁定 #6）"
+            )
+        if any(attr == UPSTREAM_FIELD for attr, _ in missing):
+            parts.append(
+                "上游欄有第二條路：前置在開單當下已經結案、或上游就是母單而填不得時，"
+                "在描述裡寫一行 `**上游**：前置 MYL-97 已結案，本單可獨立開工`"
+                "（要寫得出單號）就算交代"
             )
         if wrong:
             parts.append(
@@ -2758,7 +2795,8 @@ def fetch_pm_issue_fields(base: str, token: str, issue_id: str, ref: str):
 
     **必須逐張打單筆端點**，不能沿用清單端點的欄位：清單回的每一筆**沒有**依賴
     關係（`blockedBy` 這一鍵缺席），描述欄還可能被截斷（`descriptionTruncated`）
-    ——拿清單那份去判，上游欄會恆為空、AC 會因為被截掉而誤報成漏寫。
+    ——拿清單那份去判，依賴欄會恆為空，而 AC 與上游那一行都在描述裡，被截掉就
+    會誤報成漏寫（上游欄兩條路同時失真，等於整格恆紅）。
     代價是每張 PM 開的單多一次呼叫，而射程只有 PM 開的單，量級不成問題。
 
     `parent_is_blocker` 比對的是 **`blockedBy[].id` 與 `parentId`**（都是 uuid），
@@ -2773,12 +2811,14 @@ def fetch_pm_issue_fields(base: str, token: str, issue_id: str, ref: str):
     parent = it.get("parentId") or ""
     blocked_by = it.get("blockedBy") or []
     blocker_ids = {b.get("id") for b in blocked_by if isinstance(b, dict)}
+    description = it.get("description") or ""
     return PmIssueFields(
         ref=ref,
         assignee=it.get("assigneeAgentId") or it.get("assigneeUserId") or "",
         parent=parent,
         blocked_by=len(blocked_by),
-        has_ac=bool(AC_SECTION_RE.search(it.get("description") or "")),
+        upstream_line=bool(UPSTREAM_LINE_RE.search(description)),
+        has_ac=bool(AC_SECTION_RE.search(description)),
         parent_is_blocker=bool(parent) and parent in blocker_ids,
     ), ""
 
