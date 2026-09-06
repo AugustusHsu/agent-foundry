@@ -162,6 +162,16 @@
 
 - `X1` **commit 落到別人的分支。** 兩個 run 併行時 checkout 會互相干擾（MYL-23 的 commit 曾落到 MYL-27 的分支）。
   → **commit 前先驗 `git symbolic-ref --short HEAD`**，不要假設分支還是你切的那條。
+  → **但驗過不等於安全：驗完到 commit 落地之間還有一段時間窗，HEAD 一樣會被搶走。** 2026-09-05 MYL-86 實測——commit 前驗到的是 `feat/MYL-86-init-copy-list`，commit 落地時 HEAD 已被併行的 MYL-77 run 換成 `feat/MYL-77-provision-team`，commit 就落在對方分支上。**上一條止血擋不住這一格**：它只證明「按下 enter 的前一刻」是對的，不保證落地那一刻還是。
+  → **落錯之後的復原：三步全是純 ref 操作，不碰任何人的工作區檔案。**（`<本單分支>`／`<基底>` 換成當時的值；MYL-86 當時分別是 `feat/MYL-86-init-copy-list` 與 `d6781de`）
+    1. `git branch -f <本單分支> <落錯的 commit>` — 把 commit 收回自己的分支；
+    2. `git reset --soft <基底>` — HEAD 留在對方分支上，只把**對方的** branch ref 退回基底；index 不動；
+    3. `git checkout <基底> -- <本單改到的檔案>` — **逐檔列出**自己改的那幾個，只還原它們。
+    ⚠️ **絕不用 `git reset --hard`。** 共用 workspace 的工作區裡有別人**尚未 commit** 的修改，`--hard` 會連同吃掉，而那些改動沒有任何副本、救不回來。第 3 步要逐檔列出是同一個理由：不要用會波及整個工作區的寫法。
+  → **迴避法（已驗證，優先於事後復原）：`git clone --shared` 開隔離 clone，在裡面改／測／commit，再 `git push origin <非 HEAD 分支>` 送回。** 隔離 clone 有自己的 HEAD，併行 run 換不動它，**連 commit 這一步都不必冒 `X1`**；物件庫共用，push 回來不必複製歷史。推的分支不能是共用 repo 當下的 HEAD（非 bare repo 會拒收）——而那正好是安全的那一邊，你要推的本來就是自己的分支。**同一張 MYL-86 兩種做法都試過**：實作那一輪沒用隔離 clone，就是上面撞上時間窗的那一輪；改用之後從第一輪覆審到合併連續六輪（三輪覆審／兩輪修正／一次合併）全走這條，期間共用 workspace 一直被 MYL-77 佔著，再沒撞上 `X1`。
+  → 這一招同時解掉**「共用 workspace 被別人佔住時要怎麼動手」**：不必等、也不必搶 HEAD。（`X8` 的 linked worktree 是另一條路，差別是 worktree 會換掉 hook 的環境，見 `X6`。）
+  → ⚠️ **在隔離 clone 裡，`origin` 是共用 workspace，不是 GitHub。** MYL-86 的 CR 報告寫「已推 origin」，被讀成推上了 GitHub，實際對 GitHub `git ls-remote` 查是空的——該分支從來只存在於共用 workspace。**寫報告時要指名推去哪個 origin**，否則 `P1` 的「刪已合併的遠端分支」會被誤判成有對象。
+  → 連帶的環境差異：隔離 clone 預設**沒有 GitHub remote**，`mirror-recon` 在裡面是 ⏭ 不是 ✅。那是環境所致、不是缺陷，但也代表**在隔離 clone 跑 `make check` 驗不到鏡像對帳**——要驗那一項得另外把真的 GitHub remote 接上去。
 - `X2` **發佈互蓋。** MYL-25 收尾 run 以較舊的來源樹在 MYL-32 之後 push，蓋掉了 02／03 章的新內容。
   → **發佈後要驗遠端實際內容，不能只看腳本回報成功**；發現被蓋掉就以最新 main 重跑。
 - `X3` **手冊錨點與 mkdocs slug 不符。** 中文標題的錨點不是中文字面，是 mkdocs 產生的 slug（`#1`、`#3-hitl`…）。手寫中文錨點會變成點了不跳轉的死連結（MYL-25 踩過）。
