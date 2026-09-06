@@ -601,7 +601,8 @@ class SelfcheckTest(unittest.TestCase):
                          {"entry-sync", "nav-sync", "anchors", "rule-ids",
                           "rule-marks", "big-files", "internal-links",
                           "version-shape", "table-shape", "org-sync",
-                          "handbook-stamp", "init-copy-list", "mirror-recon"})
+                          "handbook-stamp", "init-copy-list", "selfcheck-names",
+                          "mirror-recon"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()
@@ -715,6 +716,135 @@ class SelfcheckTest(unittest.TestCase):
                 "\t@python3 -m unittest discover tools/publish-docs\n", ""),
             encoding="utf-8")
         self.assertTrue(self._named("init-copy-list").passed)
+
+    # ── selfcheck-names（MYL-89）────────────────────────────────────────
+    #
+    # 反例都改副本的四個抄寫點，因為漂移的實際方向就是那個：新增一項檢查、
+    # 四處忘了改。⚠️ **本檢查上線當天四處就是同步的**，所以「跑起來綠」證明不了
+    # 它擋得住任何東西——能證明的只有下面這幾個反例。
+
+    #: 四處各自的分隔符不同（`Makefile` 與入口檔是「、」，hook 名是「／」）。
+    NAME_SITES = (
+        ("Makefile", "、init 複製清單"),
+        (".pre-commit-config.yaml", "／init 複製清單"),
+        ("CLAUDE.md", "、init 複製清單"),
+        ("AGENTS.md", "、init 複製清單"),
+    )
+
+    def _mutate_site(self, rel, old, new):
+        p = self.root / rel
+        text = p.read_text(encoding="utf-8")
+        self.assertEqual(text.count(old), 1,
+                         f"{rel} 裡「{old}」不是剛好一處，反例的假設變了，測試要跟著改")
+        p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+    def test_四處任一漏抄一項檢查名都被擋下(self):
+        """AC1：訊息要點名是哪個檔案漏了哪一項，不能只說「對不上」。"""
+        for rel, listed in self.NAME_SITES:
+            with self.subTest(site=rel):
+                p = self.root / rel
+                original = p.read_text(encoding="utf-8")
+                self._mutate_site(rel, listed, "")
+                res = self._named("selfcheck-names")
+                p.write_text(original, encoding="utf-8")  # 一次只讓一處是壞的
+                self.assertFalse(res.passed)
+                self.assertTrue(
+                    any(rel in f and "init-copy-list" in f and "init 複製清單" in f
+                        for f in res.failures), res.failures)
+
+    def test_四處多寫一項對不到的檢查名被擋下(self):
+        """多寫的那一項會讓人去找一個不存在的檢查。"""
+        self._mutate_site("Makefile", "、init 複製清單", "、init 複製清單、幻覺檢查")
+        res = self._named("selfcheck-names")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("Makefile" in f and "幻覺檢查" in f for f in res.failures),
+                        res.failures)
+
+    def test_錯字同時報成漏一項與多一項(self):
+        """錯字是漂移最常見的形狀，而它在集合比對下必然兩邊都響。"""
+        self._mutate_site("AGENTS.md", "、鏡像對帳", "、鏡像對賬")
+        res = self._named("selfcheck-names")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("mirror-recon" in f and "漏了" in f for f in res.failures),
+                        res.failures)
+        self.assertTrue(any("鏡像對賬" in f and "多了" in f for f in res.failures),
+                        res.failures)
+
+    def test_抄寫點的錨點漂掉時報錯而不是放行(self):
+        """找不到那一行就等於沒比對——這種時候印 ✅ 比印 ❌ 危險得多。"""
+        self._mutate_site("Makefile", "selfcheck: ## repo 規範自檢：",
+                          "selfcheck: ## 本 repo 的規範自檢：")
+        res = self._named("selfcheck-names")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("Makefile" in f and "錨點漂了" in f for f in res.failures),
+                        res.failures)
+
+    def test_抄寫點整份不見時報錯而不是放行(self):
+        """跳過判準只看 `is_rule_repo()`：規則本體少了一處抄寫點照樣紅。
+
+        若把判準寫成「那一行在不在」，這裡會從 ❌ 變成 ⏭——那是把閘門放鬆。
+        """
+        (self.root / ".pre-commit-config.yaml").unlink()
+        res = self._named("selfcheck-names")
+        self.assertFalse(res.passed)
+        self.assertFalse(res.skipped, "規則本體缺抄寫點時被跳過")
+        self.assertTrue(any(".pre-commit-config.yaml" in f and "不存在" in f
+                            for f in res.failures), res.failures)
+
+    def test_登記表少一項時擋下(self):
+        """把登記表自己綁死在 `SELFCHECKS` 上——少了這條它就只是第五份手抄。"""
+        labels = {k: v for k, v in foundry_lint.SELFCHECK_LABELS.items()
+                  if k != "mirror-recon"}
+        with mock.patch.object(foundry_lint, "SELFCHECK_LABELS", labels):
+            res = self._named("selfcheck-names")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("mirror-recon" in f and "SELFCHECK_LABELS` 沒有它" in f
+                            for f in res.failures), res.failures)
+
+    def test_登記表多一項時擋下(self):
+        """`staged-handbook-sync` 不在 `SELFCHECKS`（只在 pre-commit 跑）。
+
+        列進登記表就會逼四處寫上一項 `--selfcheck` 根本不跑的東西。
+        """
+        labels = dict(foundry_lint.SELFCHECK_LABELS)
+        labels["staged-handbook-sync"] = "層 0 觸發器"
+        with mock.patch.object(foundry_lint, "SELFCHECK_LABELS", labels):
+            res = self._named("selfcheck-names")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("staged-handbook-sync" in f and "沒有註冊它" in f
+                            for f in res.failures), res.failures)
+
+    def test_標籤互為子字串時擋下(self):
+        """護欄：比對走包含關係，標籤互相包含會讓漏抄**靜默通過**。
+
+        現行 14 項互不包含，所以這個反例得自己造一個——未來新增一項標籤叫
+        「手冊」時，四處只要寫了「手冊戳記」就會把它餵飽，而漏抄看不出來。
+        """
+        labels = dict(foundry_lint.SELFCHECK_LABELS)
+        labels["handbook-stamp"] = "手冊"
+        with mock.patch.object(foundry_lint, "SELFCHECK_LABELS", labels):
+            res = self._named("selfcheck-names")
+        self.assertFalse(res.passed)
+        self.assertTrue(any("子字串" in f and "靜默通過" in f for f in res.failures),
+                        res.failures)
+
+    def test_靜態取名與實際跑出來的名稱一致(self):
+        """取名走原始碼字面量而不是把 13 項跑一遍，所以要有人釘住兩者相等。
+
+        任何一個 check 函式改成非字面量建 `SelfcheckResult`，這裡會先紅。
+        """
+        static = [name for _, name in foundry_lint.selfcheck_registered_names()]
+        actual = [r.name for r in foundry_lint.run_selfcheck(self.root)]
+        self.assertEqual(static, actual)
+        self.assertEqual(list(foundry_lint.SELFCHECK_LABELS), actual,
+                         "登記表的順序也照 `SELFCHECKS`，四處才好照抄")
+
+    def test_本檢查自己也列在四處(self):
+        """AC5：新增自檢本身要同步進那四處，本單是自己的第一個使用者。"""
+        for rel, _ in self.NAME_SITES:
+            with self.subTest(site=rel):
+                self.assertIn("自檢名稱清單",
+                              (self.root / rel).read_text(encoding="utf-8"))
 
 
 class MakefileToolsDirsTest(unittest.TestCase):
@@ -1662,7 +1792,7 @@ class TargetProjectSkipTest(RepoCopyTestCase):
     # ── 判準②：跳過看得出來是跳過，且不擋 commit ──────────────────────
     def test_目標專案四項印跳過而不是失敗(self):
         self._make_target_project()
-        for name in self.HANDBOOK_CHECKS + ("init-copy-list",):
+        for name in self.HANDBOOK_CHECKS + ("init-copy-list", "selfcheck-names"):
             with self.subTest(check=name):
                 res = self._named(name)
                 self.assertTrue(res.passed, res.failures)

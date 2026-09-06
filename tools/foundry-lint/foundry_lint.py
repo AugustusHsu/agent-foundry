@@ -7,6 +7,7 @@ exit code：0＝通過、1＝不通過、2＝執行／使用錯誤。
 """
 
 import argparse
+import inspect
 import json
 import os
 import re
@@ -1956,10 +1957,187 @@ def check_init_copy_list(root: Path) -> SelfcheckResult:
     return res
 
 
+# ── `selfcheck-names`：四處手抄的自檢名稱清單 ↔ `SELFCHECKS`（MYL-89）──
+#: 從原始碼靜態取檢查名，而不是把 `SELFCHECKS` 跑一遍再問 `res.name`：
+#: `mirror-recon` 會連線、`big-files` 會掃整個 repo，光為了問名字不值得。
+#: 每個 check 函式都以字面量建 `SelfcheckResult("<機器名>", …)`，取不到就報錯
+#: 不放行——靜默略過一項，等於那一項的四處抄寫從此沒人管。
+SELFCHECK_NAME_RE = re.compile(r'SelfcheckResult\(\s*"([a-z0-9-]+)"')
+#: 機器名 → 四處抄寫點共用的標籤。
+#:
+#: 四處寫的是中文散文標籤而不是機器名，**而且措辭互不相同**：`entry-sync` 在
+#: `Makefile` 是「雙入口同步」、在 hook 名是「雙入口」；`nav-sync` 在入口檔多了
+#: 「一致性」、`rule-ids` 多了「引用」。所以本表一律取**最短形**，比對走包含關係
+#: （`"雙入口" in "雙入口同步"`），三種措辭都涵蓋得到。統一四處措辭也是一種解法，
+#: 但那是替四處各挑一次用詞，改不動的那天本檢查就得跟著鬆——最短形不必談判。
+#:
+#: ⚠️ 本表自己就是第五份手抄——**唯一讓它不腐爛的是「鍵必須與 `SELFCHECKS` 完全
+#: 相等」那一條**（缺／多／錯字都紅）。要改本表的內容之前先確認那條還在。
+#: `staged-handbook-sync` 刻意不在這裡：它不在 `SELFCHECKS`（只在 pre-commit 跑），
+#: 列進來會逼四處寫上一項 `--selfcheck` 根本不跑的東西。
+SELFCHECK_LABELS = {
+    "entry-sync": "雙入口",
+    "nav-sync": "手冊 nav",
+    "anchors": "錨點",
+    "rule-ids": "規則 ID",
+    "rule-marks": "規則標記",
+    "big-files": "大檔清單",
+    "internal-links": "相對連結",
+    "version-shape": "版本號形狀",
+    "table-shape": "表格連續性",
+    "org-sync": "組織宣告",
+    "handbook-stamp": "手冊戳記",
+    "init-copy-list": "init 複製清單",
+    "selfcheck-names": "自檢名稱清單",
+    "mirror-recon": "鏡像對帳",
+}
+#: 四個抄寫點：`(檔案, 那一行是什麼, 抓出列舉內容的錨點)`。
+#: 錨點只吃**那一行**、不吃整份檔案——整份 `CLAUDE.md` 本來就到處提到「錨點」
+#: 「大檔清單」，拿整份做包含比對會讓漏抄靜默通過。
+#: 錨點漂掉時報錯不放行（同 `init_copy_list_block()` 的姿態）：找不到清單就等於
+#: 沒比對，這種時候印 ✅ 比印 ❌ 危險得多。
+SELFCHECK_COPY_SITES = (
+    ("Makefile", "`selfcheck` target 的 `##` 說明",
+     re.compile(r"^selfcheck:\s*##\s*repo 規範自檢：(.+)$", re.M)),
+    (".pre-commit-config.yaml", "`foundry-selfcheck` hook 的 `name`",
+     re.compile(r"^\s*name:\s*foundry-lint --selfcheck（(.+)）\s*$", re.M)),
+    ("CLAUDE.md", "§6 指令速查的自檢註解行",
+     re.compile(r"^# repo 規範自檢（(.+)）$", re.M)),
+    ("AGENTS.md", "§6 指令速查的自檢註解行",
+     re.compile(r"^# repo 規範自檢（(.+)）$", re.M)),
+)
+#: 四處用的分隔符不一致（`Makefile` 與入口檔是「、」，hook 名是「／」）。
+SELFCHECK_LABEL_SEP_RE = re.compile(r"[、／/，,]")
+
+
+def selfcheck_registered_names() -> tuple:
+    """`SELFCHECKS` 每個成員的檢查名，回傳 `((函式名, 檢查名), …)`；取不到的回空字串。"""
+    out = []
+    for fn in SELFCHECKS:
+        m = SELFCHECK_NAME_RE.search(inspect.getsource(fn))
+        out.append((fn.__name__, m.group(1) if m else ""))
+    return tuple(out)
+
+
+def check_selfcheck_names(root: Path) -> SelfcheckResult:
+    """四個抄寫點列到的檢查名，要與 `SELFCHECKS` 註冊的那組對得上（MYL-89）。
+
+    `--selfcheck` 有哪幾項，被手抄在四個地方：`Makefile` 的 `selfcheck` target
+    說明、`.pre-commit-config.yaml` 的 `foundry-selfcheck` hook 名，以及兩份入口檔
+    §6 的自檢註解行。四處與 `SELFCHECKS` 之間原本零機械對應——MYL-86 新增
+    `init-copy-list` 時得手改四處，漏改沒有任何東西擋得住，而讀到舊清單的人會以為
+    某項檢查不存在（於是不去修它該擋的漂移），或以為某項存在（於是不另外把關）。
+    這與 `init-copy-list` 是同一型漂移，只是換了對象。
+
+    **管得到的只有這一組對應關係**：四處列到的名稱集合 ↔ `SELFCHECKS` 註冊的名稱
+    集合。不管順序、不管措辭、也不管四處以外任何提到檢查名的散文——`--selfcheck`
+    的 argparse `--help` 刻意不列舉就是為了不成為第五個抄寫點（見那段註解）。
+    想擴大成「所有反引號路徑都要驗存在」是另一回事（MYL-41 判例，要做另開單）。
+
+    **四處一律維持列舉、不得改成計數**：換成「共 N 項」會讓本檢查無事可做，而那個
+    N 一定會過期（MYL-41）。
+
+    **目標專案跳過本項**（判準同 `init-copy-list`）：`Makefile` 與
+    `.pre-commit-config.yaml` 是整份複製過去的、對得上，但兩份入口檔是照
+    `templates/entry-file.md` 產的，該模板的 §6 明寫「列出這個專案實際會用到的
+    指令」＝自由格式，沒有本檢查要的那一行。對照端在目標專案依規格就不存在。
+    """
+    res = SelfcheckResult("selfcheck-names",
+                          "四處手抄的自檢名稱清單與 `SELFCHECKS` 一致")
+    if not is_rule_repo(root):
+        res.skipped = (
+            f"本專案不是 Foundry 規則本體（沒有 `{RULE_REPO_MARKER_REL}/`），"
+            "兩份入口檔的 §6 依 `templates/entry-file.md` 是自由格式，"
+            "本檢查的對照端在目標專案依規格就不存在"
+        )
+        return res
+
+    unnamed = [fn for fn, name in selfcheck_registered_names() if not name]
+    if unnamed:
+        res.failures.append(
+            f"讀不出 {'、'.join(unnamed)} 的檢查名——本檢查靠原始碼裡的 "
+            '`SelfcheckResult("<名稱>"` 字面量取名，那個函式改了寫法就等於'
+            "從此沒人管它的四處抄寫。把名稱寫回建構子的第一個位置引數，"
+            "或改 `SELFCHECK_NAME_RE`"
+        )
+        return res
+    registered = [name for _, name in selfcheck_registered_names()]
+
+    # 護欄：包含關係要能判定，標籤就不能互相包含。
+    # 少了這一條，未來新增一項標籤叫「手冊」時，四處只要寫了「手冊戳記」就會把
+    # 它餵飽——漏抄「手冊」也照樣綠。失效方向是**靜默綠**，不是看得見的紅。
+    for name, label in SELFCHECK_LABELS.items():
+        for other, other_label in SELFCHECK_LABELS.items():
+            if name != other and label in other_label:
+                res.failures.append(
+                    f"`{name}` 的標籤「{label}」是 `{other}` 的標籤「{other_label}」"
+                    "的子字串——四處是散文，比對只能用包含關係，這種情形下前者會被"
+                    "後者的字樣餵飽而**靜默通過**（漏抄看不出來）。"
+                    "把其中一個標籤改長到互不包含，四處也跟著改"
+                )
+    if res.failures:
+        return res
+
+    # 把登記表綁死在 `SELFCHECKS` 上：少了這一段，登記表就只是第五份手抄。
+    for name in registered:
+        if name not in SELFCHECK_LABELS:
+            res.failures.append(
+                f"`SELFCHECKS` 註冊了 `{name}`，但 `SELFCHECK_LABELS` 沒有它——"
+                "登記表是本檢查唯一的名稱來源，缺一項就等於那一項的四處抄寫沒人管。"
+                f'把 `"{name}": "<四處用的標籤>"` 補進 `SELFCHECK_LABELS`（位置照 '
+                "`SELFCHECKS` 的順序），四處也各補一項"
+            )
+    for name in SELFCHECK_LABELS:
+        if name not in registered:
+            res.failures.append(
+                f"`SELFCHECK_LABELS` 列了 `{name}`，但 `SELFCHECKS` 沒有註冊它——"
+                "四處會被逼著寫上一項 `--selfcheck` 根本不跑的東西"
+                "（`staged-handbook-sync` 正是這種：它只在 pre-commit 跑）。"
+                "把它從登記表與四處一起刪掉，或把它加回 `SELFCHECKS`"
+            )
+    if res.failures:
+        return res
+
+    for rel, where, anchor in SELFCHECK_COPY_SITES:
+        path = root / rel
+        if not path.exists():
+            res.failures.append(
+                f"{rel} 不存在——本檢查的四個抄寫點少了一個，那一處的漂移從此沒人管。"
+                f"把檔案補回來，或把它從 `SELFCHECK_COPY_SITES` 移除"
+            )
+            continue
+        m = anchor.search(read_text(path))
+        if not m:
+            res.failures.append(
+                f"{rel}：找不到{where}那一行——錨點漂了，本檢查無從比對這一處。"
+                "那一行換了寫法就要一起改 `SELFCHECK_COPY_SITES` 的錨點"
+            )
+            continue
+        listed = [s.strip() for s in SELFCHECK_LABEL_SEP_RE.split(m.group(1))]
+        listed = [s for s in listed if s]
+        for name, label in SELFCHECK_LABELS.items():
+            if not any(label in frag for frag in listed):
+                res.failures.append(
+                    f"{rel} 的{where}漏了 `{name}`（標籤「{label}」）——"
+                    "讀到那一行的人會以為 `--selfcheck` 不查這一項，於是另外去補一套"
+                    f"把關，或乾脆不管。把「{label}」補進那一行（順序照 `SELFCHECKS`）"
+                )
+        for frag in listed:
+            if not any(label in frag for label in SELFCHECK_LABELS.values()):
+                res.failures.append(
+                    f"{rel} 的{where}多了一項「{frag}」，對不到任何一項 `SELFCHECKS`"
+                    "——多寫或寫錯字的那一項，會讓人去找一個不存在的檢查。"
+                    "改成 `SELFCHECK_LABELS` 裡的標籤，或從那一行刪掉"
+                )
+    res.summary += f"（{len(SELFCHECK_LABELS)} 項 × {len(SELFCHECK_COPY_SITES)} 處）"
+    return res
+
+
 SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
               check_rule_marks, check_big_files, check_internal_links,
               check_version_shape, check_table_shape, check_org_sync,
-              check_handbook_stamp, check_init_copy_list, check_mirror_recon)
+              check_handbook_stamp, check_init_copy_list, check_selfcheck_names,
+              check_mirror_recon)
 
 
 def run_selfcheck(root: Path) -> list:
@@ -2015,8 +2193,12 @@ def parse_args(argv):
     parser.add_argument(
         "--selfcheck",
         action="store_true",
-        help="跑 repo 規範自檢（雙入口同步、手冊 nav、錨點、規則 ID、規則標記、"
-             "大檔清單、相對連結、手冊戳記、鏡像對帳），不需 --type／file",
+        # ⚠️ 這裡刻意**不列舉**有哪幾項（MYL-89）。原本列的是一份節錄，四項一過期
+        # 就成了另一個沒人管的抄寫點——而 `selfcheck-names` 管的是 `Makefile`／
+        # `.pre-commit-config.yaml`／兩份入口檔那四處，不含本行。跑一次就印得出
+        # 逐項名稱，這行沒有再抄一遍的價值。要在這裡列，就得先把本行加進
+        # `SELFCHECK_COPY_SITES`。
+        help="跑 repo 規範自檢（逐項名稱見輸出的 `[名稱]`），不需 --type／file",
     )
     parser.add_argument(
         "--staged-handbook-sync",
