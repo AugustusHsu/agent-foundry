@@ -8,6 +8,10 @@ profile。供應商到 Paperclip adapterType 的登記表唯一來源是
 ``--apply`` 的稽核落點二選一，兩者都是 ``M6`` 第 1 級的義務落實：
 ``--issue MYL-nnn`` 把報告貼回既有工單，``--create-issue --parent MYL-nnn``
 另開一張切換執行單（描述由 ``templates/switch-execution-issue.md`` 產生）。
+
+``--smoke``（MYL-136）是 opt-in 的當場驗證：拿實際寫進去的
+``(provider, model, effort)`` 打一次那家 CLI。它與 ``--check`` 的分工見
+``SMOKE_BOUNDARY``——兩者互補、互不取代。
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -61,6 +66,10 @@ CONFIGURE_AGENTS_ERROR = "本動詞需要 configure_agents，全公司只有 CEO
 EXIT_OK = 0
 EXIT_DRIFT = 1
 EXIT_UNVERIFIABLE = 3
+#: `--smoke` 有任一組被供應商拒收（MYL-136）。**與 1 分開是有用的**：`--apply --smoke`
+#: 之下 exit 1 多半代表「套用失敗、平台大致沒被動到」，而 4 代表「平台已經改完了，但
+#: 供應商不收這些值」——後者要立刻回退，前者只要修完重跑。混成同一個碼就分不出來。
+EXIT_SMOKE_FAILED = 4
 
 #: 讀不到 `adapterConfig` 時要印的成因與替代路徑。
 #:
@@ -513,6 +522,251 @@ def print_verification(role, actual, target, emit=print):
     return mismatches
 
 
+# ── `--smoke`（MYL-136）：套用後當場問供應商收不收 ──────────────────────────
+# `--apply` 寫完到被改動的 agent 真正跑起來之間，錯的值是**沉默**的；心跳關掉或排程
+# 稀疏的 agent，這個時間差可以是好幾天。smoke 把那段時間差壓成零。
+
+#: smoke 與 `--check` 的分工。這句話同時出現在 `--help`、`command_smoke` 的 docstring
+#: 與報告裡，因為「把邊界講得比實際大」正是這種當場驗證最容易犯的錯。
+SMOKE_BOUNDARY = (
+    "`--smoke` 驗的是「供應商收不收這些值」——值域、model 代號、額度三種失敗都在射程內。"
+    "但**「不收」看不看得見逐家不同，不是一句話能一概而論的**："
+    "有的供應商把不收的值直接炸掉（exit 非零），有的印一行警告、沿用預設值、照樣 exit 0"
+    "（claude 對未知 `--effort` 就是後者，見 `L33`）——後者只能靠比對輸出樣態抓，"
+    "而樣態是會隨版本改的字串，字樣一改比對就會靜默失效、那組又變回假綠燈。"
+    "所以每一組後面都標了自己的偵測強度，**請讀那一行，不要把整體讀成「都看得到」**。"
+    "另外它**不驗**平台把 config 寫對了沒有：smoke 打的是本機 CLI、不回讀平台，"
+    "所以 MYL-129 那種「寫進了 adapter 根本不消費的鍵」原理上看不見。"
+    "回讀平台是 `--check` 的職責；兩者互補、互不取代。"
+)
+
+#: 逐組印出的偵測強度。**由登記表機械推導，不另寫一份**——寫死的第二份會與登記表漂開，
+#: 而漂開的那份正好是拿來判斷「這個 ✅ 有多可信」的那份。
+#: 這一句只掛在 ✅ 後面——它回答的是「這個綠勾有多可信」。❌ 那一行不掛，因為失敗訊息
+#: 自己已經說出是哪一種拒收（`exit 4` vs 「命中樣態…」），比這句更具體。
+SMOKE_DETECTION_STRONG = "偵測強度：exit code——不收就炸，不依賴輸出字樣"
+SMOKE_DETECTION_TEXT_DEPENDENT = (
+    "偵測強度：exit code ＋輸出樣態比對——這家對某些值是「警告＋沿用預設＋exit 0」，"
+    "只能比對會隨版本改的字樣；字樣一改比對就靜默失效，屆時這一組會變回假綠燈（`L33`）"
+)
+
+#: 為什麼不做成 `--apply` 的預設。
+SMOKE_OPT_IN_NOTE = (
+    "（本次未跑 smoke。它是 opt-in：每組都要花一次供應商額度，而使用者授權的是換模型、"
+    "不是順便替他打幾次供應商 API——`H3`。）"
+)
+
+#: 跑了 smoke 時、第一則稽核留言裡的佔位說明。第一則刻意在 smoke **開跑前**就貼出去
+#: （理由見 `command_apply`），所以它必須說清楚結果還沒到、要去哪裡看。
+SMOKE_RUNNING_NOTE = (
+    "（本次有跑 smoke。這一則是**套用完當下**就貼的：平台已經改完了，稽核證據不該等到"
+    "十幾分鐘的 smoke 跑完才落地——中途被中斷就會一則都不剩。smoke 結果**另貼一則**。）"
+)
+
+#: 探針的提示詞。愈短愈好：這一趟的目的是「請求有沒有被受理」，不是拿它做事。
+SMOKE_PROMPT = "只回覆 ok 兩個字，不要使用任何工具。"
+
+#: 單組的等待上限。逾時算失敗——問不出結果就是沒驗到，不能當成綠燈。
+SMOKE_TIMEOUT_SECONDS = 180
+
+#: 失敗時供應商原文的印出上限。太長會把報告淹掉，但截斷要說出來（見 `_clip`）。
+SMOKE_OUTPUT_LIMIT = 2000
+
+
+def _provider_row(provider_id):
+    for provider in providers.PROVIDERS:
+        if provider["id"] == provider_id:
+            return provider
+    raise ValueError(f"需人工確認：供應商 {provider_id!r} 不在 probe_providers 登記表，無法 smoke")
+
+
+def smoke_silent_reject_for(provider_id):
+    """這家「exit 0 但值其實沒被收下」的輸出樣態；`()` 代表實證過沒有這回事。
+
+    `None`（未實證）與 `()`（實證過、沒有）是**兩件事**，不能混：前者停下等人工確認，
+    後者才是「exit code 就夠了」。少了這個區別，新加一家供應商時只要漏填這一欄，
+    它就會自動繼承 codex 那種最強的宣稱——而那正是本輪被退回的那個錯誤。
+    """
+    markers = _provider_row(provider_id).get("smoke_silent_reject")
+    if markers is None:
+        raise ValueError(
+            f"需人工確認：登記表沒有實證供應商 {provider_id} 「exit 0 但值沒被收下」的輸出樣態，"
+            "不猜、不跑（在 probe_providers.PROVIDERS 補上 smoke_silent_reject 才繼續）。"
+            "留空要填 `()` 並寫明是實證過沒有，不是漏填"
+        )
+    return tuple(markers)
+
+
+def smoke_detection_note(provider_id):
+    """這一組的 ✅／❌ 有多可信，一句話。由登記表推導（見 `SMOKE_DETECTION_*`）。"""
+    if smoke_silent_reject_for(provider_id):
+        return SMOKE_DETECTION_TEXT_DEPENDENT
+    return SMOKE_DETECTION_STRONG
+
+
+def smoke_argv_for(provider_id, model, effort_value, prompt=SMOKE_PROMPT):
+    """三元組 → 那家 CLI 的完整 argv。登記表沒實證形狀的一律停下，**不猜**（`L5`）。
+
+    形狀本身一律從 `probe_providers.PROVIDERS` 取，本檔不留第二份拷貝——理由同
+    `effort_key_for`：兩份會漂移，而漂移的那一份不會有人回來改。
+
+    ⚠️ 這裡**一併**要求 `smoke_silent_reject` 已登記：只有指令形狀、不知道這家怎麼表達
+    「我沒收這個值」，跑出來的 ✅ 讀不出可信度——半套登記在這裡停下，不要跑完才發現。
+    """
+    provider = _provider_row(provider_id)
+    template = provider.get("smoke_argv")
+    if not template:
+        raise ValueError(
+            f"需人工確認：登記表沒有實證供應商 {provider_id} 的 smoke 指令形狀，"
+            "不猜、不跑（在 probe_providers.PROVIDERS 補上 smoke_argv 才繼續）"
+        )
+    smoke_silent_reject_for(provider_id)
+    return [part.format(model=model, effort=effort_value, prompt=prompt)
+            for part in template]
+
+
+def _clip(text):
+    if len(text) <= SMOKE_OUTPUT_LIMIT:
+        return text
+    return text[:SMOKE_OUTPUT_LIMIT] + f"\n…（原文共 {len(text)} 字，已截斷）"
+
+
+def default_run_smoke(argv, timeout=SMOKE_TIMEOUT_SECONDS):
+    """實際跑一次供應商 CLI，回 `(exit code, 原文)`。測試一律注入替身取代它。
+
+    這裡**只負責跑完並把 stdout／stderr 一起交出去**，收不收由 `smoke_verdict` 判——
+    因為有的供應商是 exit 0 也不代表收下（`L33`），輸出得留給判準看。
+    CLI 不在 PATH 與逾時都算失敗——問不出結果不等於通過。
+    """
+    try:
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except FileNotFoundError:
+        return 127, f"`{argv[0]}` 不在 PATH 上（先跑 `make providers` 盤點）"
+    except subprocess.TimeoutExpired:
+        return 124, f"逾時：{timeout} 秒內沒有回應"
+    except OSError as error:
+        return 126, f"啟動 `{argv[0]}` 失敗：{error}"
+    return done.returncode, ((done.stdout or "") + (done.stderr or "")).strip()
+
+
+def smoke_verdict(provider_id, code, output):
+    """這一趟算不算「供應商收下了」。回 `(收下了嗎, 沒收下的話是哪一種)`。
+
+    兩種沒收下：
+
+    1. **exit 非零**——最直白的那種，codex 的非法 effort 由伺服器回 400 就走這條。
+    2. **exit 0，但輸出自己說了「這個值我沒收、改用預設」**——claude 對未知 `--effort`
+       正是這樣（`L33`）。只看 exit code 的話這種必然亮綠燈，而它恰好是本工具最該抓到
+       的那一種失敗：值域錯了、平台照樣跑、跑的是別的 effort，沒有人會知道。
+    """
+    if code != 0:
+        return False, f"exit {code}"
+    for marker in smoke_silent_reject_for(provider_id):
+        if marker in (output or ""):
+            return False, (
+                f"exit 0，但供應商回報沒有採用送進去的值（命中樣態 {marker!r}）"
+                "——這種靠 exit code 看不出來，見 `L33`"
+            )
+    return True, None
+
+
+def smoke_triples(targets):
+    """本次**實際寫入**的相異 `(provider, model, effort)`，保持出現順序。
+
+    刻意不是整張 `MODEL_TARGETS`（那會驗到這次根本沒寫進去的格），也不是角色數
+    （八名共用兩組值時，打八次只是把同一件事付八次錢）。
+    """
+    seen, triples = set(), []
+    for target in targets:
+        triple = (target["provider"], target["model"], target["effort_value"])
+        if triple not in seen:
+            seen.add(triple)
+            triples.append(triple)
+    return triples
+
+
+def smoke_label(triple):
+    return ":".join(triple)
+
+
+def smoke_command(triples):
+    """可原樣複製執行的 `--smoke` 指令。
+
+    帶的是**這次實際寫進去的值**，不是回頭從 profile 重推——重推出來的是「應該寫進去
+    的值」，而那正是出事時最不能拿來當證據的東西。
+    """
+    flags = " ".join(f"--target {smoke_label(triple)}" for triple in triples)
+    return f"python3 tools/model-routing/apply_profile.py --smoke {flags}"
+
+
+def run_smoke_triples(triples, run_smoke=default_run_smoke, emit=print):
+    """逐組打一次供應商 CLI，回傳失敗的那幾組。
+
+    兩個刻意的順序決定：
+
+    1. **argv 全部先組完再開跑**。組不出來（登記表沒實證那家的形狀）就在一毛額度都還
+       沒花的時候停下；邊組邊跑的話，第 3 組組不出來時前 2 組的錢已經花掉了。
+    2. **失敗不中止**，跑完全部再彙總。第一組就中止會遮住後面壞掉的組，於是修完一個
+       又撞一個，每一輪都要再花一次額度。
+
+    每一組**連同偵測強度一起印**（`smoke_detection_note`）：這幾家「不收」的表達方式
+    強弱不同，一個沒有註記的 ✅ 會被讀成比它實際有的保證更強。
+    """
+    planned = [(triple, smoke_argv_for(*triple)) for triple in triples]
+    failures = []
+    for triple, argv in planned:
+        provider_id = triple[0]
+        code, output = run_smoke(argv)
+        accepted, reason = smoke_verdict(provider_id, code, output)
+        if accepted:
+            emit(f"- ✅ `{smoke_label(triple)}`（{smoke_detection_note(provider_id)}）")
+            continue
+        failures.append((triple, code, output))
+        emit(f"- ❌ `{smoke_label(triple)}` → {reason}；供應商原文：")
+        emit("```")
+        emit(_clip(output) if output else "（供應商沒有輸出）")
+        emit("```")
+    return failures
+
+
+def report_smoke(triples, run_smoke=default_run_smoke, emit=print):
+    """跑 smoke 並把過程寫進報告；回傳失敗清單（空的代表全數收下）。"""
+    emit("")
+    emit("## smoke：供應商收不收這些值")
+    emit(SMOKE_BOUNDARY)
+    emit(f"本次相異三元組 {len(triples)} 組（不是角色數，也不是 `MODEL_TARGETS` 的格數）：")
+    failures = run_smoke_triples(triples, run_smoke=run_smoke, emit=emit)
+    if failures:
+        emit(
+            "❌ smoke 有 "
+            f"{len(failures)} 組被拒："
+            + "、".join(f"`{smoke_label(triple)}`" for triple, _, _ in failures)
+        )
+    else:
+        emit("✅ 全部三元組供應商都收下了")
+    return failures
+
+
+def command_smoke(triples, run_smoke=default_run_smoke):
+    """單獨跑 smoke：零平台讀寫、零設定寫入，只打供應商 CLI。
+
+    邊界一字不差寫在 `SMOKE_BOUNDARY`——同一份字串進 `--help`、進報告、也印在這條
+    路徑的輸出裡，本檔不留第二份拷貝（第二份會過期，而過期的那份沒有人會回來改）。
+    """
+    failures = report_smoke(triples, run_smoke=run_smoke)
+    return EXIT_SMOKE_FAILED if failures else EXIT_OK
+
+
+def parse_target(spec):
+    """`provider:model:effort` → 三元組。形狀不對就報錯，不猜。"""
+    parts = [part.strip() for part in spec.split(":")]
+    if len(parts) != 3 or not all(parts):
+        raise ValueError(
+            f"--target 的形狀是 provider:model:effort（三段、以冒號分隔），讀不出來：{spec!r}"
+        )
+    return tuple(parts)
+
+
 class Report:
     """執行報告：一邊印給執行者看，一邊留一份好貼回工單／放進新單描述。
 
@@ -734,7 +988,8 @@ def switch_issue_values(*, profile_name, previous_active, profile, executor, tar
 
 def command_apply(client, profile_name, config_path, profiles, org, issue=None,
                   probe_all=providers.probe_all, create_issue=False, parent=None,
-                  template_path=SWITCH_ISSUE_TEMPLATE, now=None):
+                  template_path=SWITCH_ISSUE_TEMPLATE, now=None, smoke=False,
+                  run_smoke=default_run_smoke):
     if profile_name not in profiles:
         raise ValueError(f"未登記的 profile：{profile_name}")
     me = client.get("/api/agents/me")
@@ -781,8 +1036,37 @@ def command_apply(client, profile_name, config_path, profiles, org, issue=None,
     report.emit("")
     report.emit("✅ 全部角色已套用、逐格回查，並已更新 model_routing.active")
 
+    # 那行可貼上的指令**不論有沒有跑 smoke 都印**：opt-in 若沒有這一行就等於沒有人會
+    # 用它，而印出來的成本是零。
+    triples = smoke_triples(targets)
+    report.emit("")
+    report.emit("## smoke：供應商收不收這些值")
+    report.emit(SMOKE_RUNNING_NOTE if smoke else SMOKE_OPT_IN_NOTE)
+    report.emit(
+        "當場驗這次實際寫入的值（可原樣複製執行）："
+        f"`{smoke_command(triples)}`"
+    )
+
+    # ⚠️ 稽核落點在 smoke **之前**（MYL-136 第 2 輪調整）。平台此刻已經改完了，而 smoke
+    # 每組最多 `SMOKE_TIMEOUT_SECONDS`、六組可以跑掉十幾分鐘：擺在後面的話，中途被
+    # Ctrl-C 或外層逾時砍掉就是「改了平台卻一則證據都沒有」——正是 `M6` 第 1 級不准
+    # 發生的事。smoke 的結果另貼一則（見下），所以先貼不會少掉任何東西。
     if issue:
         post_report_comment(client, issue, report.text())
+
+    smoke_failures = []
+    if smoke:
+        # 兩個去處：`report` 給 `--create-issue` 的描述（那張單要看得到完整一份），
+        # `smoke_lines` 給第二則留言。`report.emit` 自己會印到終端，不重複印。
+        smoke_lines = []
+
+        def tee(line=""):
+            report.emit(line)
+            smoke_lines.append(line)
+
+        smoke_failures = report_smoke(triples, run_smoke=run_smoke, emit=tee)
+        if issue:
+            post_report_comment(client, issue, "\n".join(smoke_lines).strip() + "\n")
     if create_issue:
         values = switch_issue_values(
             profile_name=profile_name, previous_active=previous_active,
@@ -794,7 +1078,7 @@ def command_apply(client, profile_name, config_path, profiles, org, issue=None,
             template_path, values, parent_issue=parent_issue, assignee_agent_id=me["id"],
         )
         create_switch_issue(client, payload)
-    return 0
+    return EXIT_SMOKE_FAILED if smoke_failures else EXIT_OK
 
 
 def command_create_issue_dry_run(client, profile_name, config, profiles, org, parent,
@@ -856,11 +1140,30 @@ def command_create_issue_dry_run(client, profile_name, config, profiles, org, pa
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="套用或對帳已核可的模型供應商 profile")
-    action = parser.add_mutually_exclusive_group(required=True)
+    # 這一組互斥但**不再是 required**：`--smoke` 可以單獨成立（帶 `--target`），也可以
+    # 掛在 `--apply` 後面當修飾旗標。「一個動詞都沒給」改由下面手動擋，仍走 parser.error
+    # ⇒ 用法錯誤的 exit code 維持 argparse 的 2，不會混進 1（不一致）那一格。
+    action = parser.add_mutually_exclusive_group()
     action.add_argument("--list", action="store_true")
     action.add_argument("--check", action="store_true")
     action.add_argument("--dry-run", action="store_true")
     action.add_argument("--apply", action="store_true")
+    parser.add_argument(
+        "--smoke", action="store_true",
+        help=(
+            "套用後（或單獨）拿實際的 provider／model／effort 打一次那家 CLI。"
+            + SMOKE_BOUNDARY
+            + " 每組都花一次供應商額度，所以是 opt-in：`--apply` 不會自己跑它（`H3`）。"
+            "單獨使用時至少要帶一個 --target。"
+        ),
+    )
+    parser.add_argument(
+        "--target", action="append", metavar="provider:model:effort",
+        help=(
+            "--smoke 單獨使用時要驗的三元組，可重複。"
+            "`--apply --smoke` 不吃這個參數——那條路徑的對象由這次實際寫入的值決定。"
+        ),
+    )
     parser.add_argument("--profile")
     parser.add_argument("--issue", help="--apply 的稽核報告貼回哪一張既有工單，例如 MYL-129")
     parser.add_argument(
@@ -871,10 +1174,38 @@ def parse_args(argv):
     parser.add_argument("--config", default=".foundry/config.yml", help=argparse.SUPPRESS)
     parser.add_argument("--org-config", default=".foundry/org.yml", help=argparse.SUPPRESS)
     parser.add_argument("--template", default=SWITCH_ISSUE_TEMPLATE, help=argparse.SUPPRESS)
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if not (args.list or args.check or args.dry_run or args.apply or args.smoke):
+        parser.error(
+            "必須指定 --list、--check、--dry-run、--apply 其中之一，"
+            "或單獨的 --smoke --target provider:model:effort"
+        )
+    return args
 
 
-def run(args, client=None, probe_all=providers.probe_all, now=None):
+def run(args, client=None, probe_all=providers.probe_all, now=None,
+        run_smoke=default_run_smoke):
+    # 單獨的 `--smoke` 先收掉，而且**在讀 config、建 client 之前**：這條路徑不讀設定、
+    # 不碰平台，硬要它有 `PAPERCLIP_*` 三個環境變數才跑得起來，只會讓「照著 `--apply`
+    # 印出來那行貼上執行」在別台機器上失敗。
+    if args.target and not args.smoke:
+        raise ValueError("--target 只搭配 --smoke 使用")
+    if args.smoke:
+        if args.list or args.check or args.dry_run:
+            raise ValueError("--smoke 只搭配 --apply，或單獨帶 --target 使用")
+        if args.apply and args.target:
+            raise ValueError(
+                "--apply --smoke 的 smoke 對象是這次實際寫入的值，不吃 --target；"
+                "要指定三元組請單獨跑 --smoke"
+            )
+        if not args.apply:
+            if not args.target:
+                raise ValueError(
+                    "單獨使用 --smoke 至少要帶一個 --target provider:model:effort"
+                )
+            return command_smoke(
+                [parse_target(spec) for spec in args.target], run_smoke=run_smoke)
+
     config = load_yaml(args.config)
     org = load_yaml(args.org_config)
     if args.list:
@@ -906,7 +1237,7 @@ def run(args, client=None, probe_all=providers.probe_all, now=None):
     return command_apply(
         client, args.profile, args.config, profiles, org, args.issue, probe_all=probe_all,
         create_issue=args.create_issue, parent=args.parent, template_path=args.template,
-        now=now,
+        now=now, smoke=args.smoke, run_smoke=run_smoke,
     )
 
 
