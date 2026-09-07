@@ -56,6 +56,20 @@ from pathlib import Path
 # 東西；`--skip-git-repo-check` 則是讓它在非 repo 的目錄也跑得起來。
 # 其餘各家沒有實證來源 ⇒ 填 `None`，`--smoke` 停在「需人工確認」，不猜（`L5`）。
 #
+# `smoke_silent_reject` 是這家 CLI **「收下了呼叫，但沒有採用我送進去的值」時的輸出樣態**
+# ——即「exit code 是 0，可是值其實沒被收下」。有這種樣態的供應商，光看 exit code 會把
+# 拒收讀成通過，所以 `--smoke` 對它們必須另外比對輸出（MYL-136 第 2 輪；事實見 `L33`）：
+#   - `claude` ⇒ **有**。未知的 `--effort` 值不是錯誤：CLI 印一行 `Warning: Unknown
+#     --effort value '…' — ignoring it and using the default effort.` 到 stderr，
+#     **沿用預設 effort 照常跑完、exit 0**（2026-09-08 實測，取樣時搭配非法 model
+#     以免真的送出請求）。
+#   - `codex` ⇒ **沒有**（空 tuple，不是「沒查」）。非法 effort 由**伺服器**回 400、
+#     exit 非零，會炸不會靜默降級（`L31`；2026-09-08 覆驗仍成立）。
+# ⚠️ 這一欄與 `effort_key`／`smoke_argv` 有一點不同：它是**會隨版本改的字串**。警告字樣
+# 一改，比對就會靜默失效、那組又變回假綠燈——所以工具不會把它宣稱成和 exit code 同強度，
+# 逐組印出的偵測強度就是在講這件事。
+# 其餘各家沒有實證來源 ⇒ 填 `None`（區別於 codex 的 `()`），`--smoke` 停在「需人工確認」。
+#
 # 新增一家供應商：在此加一列即可，其餘程式碼不動。
 PROVIDERS = (
     {
@@ -69,6 +83,9 @@ PROVIDERS = (
         "smoke_argv": (
             "claude", "-p", "--model", "{model}", "--effort", "{effort}", "{prompt}",
         ),
+        # 未知 effort ⇒ 警告＋沿用預設＋exit 0。只比對到「這個值我沒收」為止，
+        # 不含被單引號括起來的值本身，那部分每次都不一樣。
+        "smoke_silent_reject": ("Unknown --effort value",),
     },
     {
         "id": "codex",
@@ -82,6 +99,8 @@ PROVIDERS = (
             "codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check",
             "-c", "model={model}", "-c", "model_reasoning_effort={effort}", "{prompt}",
         ),
+        # 空 tuple ＝ 實證過「沒有靜默降級這回事」，不是「還沒查」（那要填 None）。
+        "smoke_silent_reject": (),
     },
     {
         "id": "gemini",
@@ -92,6 +111,7 @@ PROVIDERS = (
         "adapter_type": "gemini_local",
         "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
         "smoke_argv": None,  # 未實證，--smoke 停下等人工確認（同上）
+        "smoke_silent_reject": None,  # 未實證，同上（None ≠ 空 tuple）
     },
     {
         "id": "cursor",
@@ -102,6 +122,7 @@ PROVIDERS = (
         "adapter_type": "cursor_cloud",
         "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
         "smoke_argv": None,  # 未實證，--smoke 停下等人工確認（同上）
+        "smoke_silent_reject": None,  # 未實證，同上（None ≠ 空 tuple）
     },
     {
         "id": "opencode",
@@ -112,6 +133,7 @@ PROVIDERS = (
         "adapter_type": "opencode_local",
         "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
         "smoke_argv": None,  # 未實證，--smoke 停下等人工確認（同上）
+        "smoke_silent_reject": None,  # 未實證，同上（None ≠ 空 tuple）
     },
     {
         "id": "grok",
@@ -122,6 +144,7 @@ PROVIDERS = (
         "adapter_type": "grok_local",
         "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
         "smoke_argv": None,  # 未實證，--smoke 停下等人工確認（同上）
+        "smoke_silent_reject": None,  # 未實證，同上（None ≠ 空 tuple）
     },
     {
         "id": "kimi",
@@ -132,6 +155,7 @@ PROVIDERS = (
         "adapter_type": "kimi_local",
         "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
         "smoke_argv": None,  # 未實證，--smoke 停下等人工確認（同上）
+        "smoke_silent_reject": None,  # 未實證，同上（None ≠ 空 tuple）
     },
 )
 
