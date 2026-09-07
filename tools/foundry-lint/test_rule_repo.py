@@ -472,7 +472,7 @@ class SelfcheckTest(unittest.TestCase):
                           "version-shape", "table-shape", "config-schema",
                           "org-sync", "handbook-stamp", "init-copy-list",
                           "selfcheck-names", "mirror-recon",
-                          "issue-authors", "pm-issue-fields"})
+                          "issue-authors", "pm-issue-fields", "issue-parent"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()

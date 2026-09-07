@@ -2581,6 +2581,24 @@ ISSUE_AUTHOR_CLEARED_RE = re.compile(r"^I1-覆核完成[：:]\s*\S", re.M)
 #: 那一位，兩處各寫一次的話，角色 id 哪天改了會有一處被漏掉。
 ISSUE_AUTHOR_REVIEWER_ROLE_IDS = (PM_ROLE_ID,)
 
+#: `I3` 的頂層單宣告：agent 開的單刻意不掛上位單時，描述裡要有這一行。
+#: 形狀與 `UPSTREAM_LINE_RE` 同族（行首粗體＋冒號＋同一行要有內容），但**這裡
+#: 要的是理由、不是單號**——正是「掛不到任何一張單底下」才走這一條。
+#:
+#: ⚠️ **這一條與 `I1` 的覆核完成標記不是同一種東西，不要照它的樣子讀。**
+#: `I1` 非有出口不可，是因為 `createdByAgentId` 沒有任何更新路徑（known-drift
+#: `L28`）⇒ 違規單修不掉、紅字永久擋住所有人的 commit。`I3` **沒有這個問題**：
+#: `parentId` 改得動（2026-09-07 實測，一次補掛 29 張），所以絕大多數違規的正解
+#: 是**把上位單補上**，不是宣告。宣告留給真正掛不上去的那種單。
+#:
+#: 為什麼還是留一條：不留的話，一張真的無所歸屬的單只剩兩條路——掛到一個不相干
+#: 的父單底下（為了轉綠而弄髒樹，而樹正是這條規則要保護的東西），或把整項關掉。
+#: 留一條看得見、要寫理由的出口，比這兩條都好。
+#: 為什麼收得窄：2026-09-07 全專案實查，agent 開的 **97 張單沒有一張是頂層單**
+#: （97/97 都掛得到樹上，含 CEO 開的 60 張）。這一條因此是**預期為空的例外**——
+#: 用到它就該被看見、被問一句，不是常態出口。
+ISSUE_TOPLEVEL_RE = re.compile(r"^\s*\*\*頂層單\*\*[：:]\s*\S", re.M)
+
 #: `I2` 上游欄的欄位名。它**不是**單一個平台欄位，是「依賴欄非空 **或** 描述裡有
 #: 那一行」的合成判準（見 `PmIssueFields.upstream`），所以取一個不叫 `blocked_by`
 #: 的名字——叫 `blocked_by` 會讓下一個人以為它只讀那一格。
@@ -2638,14 +2656,22 @@ class AuthoredIssue:
     **兩個欄位皆空＝平台自建**（例如生產力審查單），`I1` 明文收容——那不是任何
     角色的動作，收不進白名單，也修不掉。
 
-    `issue_id` 是平台的 uuid（`ref` 是看得懂的那個編號）。留著它是因為兩件事都得
-    拿 uuid 去打端點：`I1` 違規時要翻該單的留言找覆核完成標記，`I2` 要逐張撈欄位。
+    `issue_id` 是平台的 uuid（`ref` 是看得懂的那個編號）。留著它是因為三件事都得
+    拿 uuid 去打端點：`I1` 違規時要翻該單的留言找覆核完成標記，`I2` 要逐張撈欄位，
+    `I3` 要對沒有上位單的那幾張翻描述找頂層單宣告。
+
+    `parent` 是 `I3` 用的上位單 uuid，**清單端點就給得出來**，所以判「有沒有掛到
+    樹上」不必多打任何一次 API。真正要多打的只有頂層單宣告那一格（見
+    `ISSUE_TOPLEVEL_RE`）：宣告住在描述裡，而清單端點的 `description` **截在
+    1200 字**（2026-09-07 實測：MYL-124 清單 1200／單筆 3046），拿清單那份找宣告
+    會把寫在後半的宣告讀成不存在＝假紅。
     """
 
     ref: str
     author_agent: str = ""
     author_user: str = ""
     issue_id: str = ""
+    parent: str = ""
 
 
 @dataclass(frozen=True)
@@ -2731,6 +2757,93 @@ def audit_issue_authors(issues: list, allowed: dict, names: dict, since: str,
             "路徑**，不要改起算點、不要把單藏起來"
         )
     return failures
+
+
+def issue_parent_violations(issues: list, since: str) -> list:
+    """純函式：挑出射程內、agent 開的、沒有上位單的單（還沒看頂層單宣告）。
+
+    與組訊息那支拆開的理由同 `issue_author_violations()`：頂層單宣告住在描述裡，
+    要再打一次單筆端點才讀得到未截斷的全文（清單端點截在 1200 字），而**絕大多數
+    單都有上位單**，只對這幾張翻才不會每次 `make check` 多打 N 次 API。
+
+    三道排除各自的依據不同，**不要合併成一句「開單者不是 agent 就跳過」**：
+    - `author_user`：**裁定 B1**——使用者自建的單不在射程內。這與 `I1` 那支
+      「使用者是白名單第一位」不是同一個理由：那裡說的是「他開單合法」，這裡
+      說的是「他的單我們一張都不動」（MYL-96 核可卡 `10db376e`）。使用者是從
+      系統外面開單的，他的單就是這棵樹的根，要求它們掛到別的單底下沒有意義。
+    - `author_agent` 空：平台自建（生產力審查單那一型），同 `I1` 明文收容——
+      不是任何角色的動作，收不進規則、也沒有人修得動。
+    - `parent` 非空：已經掛在樹上，本項不管它掛得對不對（掛錯父單是內容問題，
+      機械判不了；本項只判「有沒有掛」）。
+    """
+    out = []
+    for it in issues:
+        if not ref_at_or_after(it.ref, since):
+            continue
+        if it.author_user:
+            continue                        # 裁定 B1：使用者自建的單不在射程內
+        if not it.author_agent:
+            continue                        # 平台自建，同 `I1` 明文收容
+        if it.parent:
+            continue                        # 已經掛在樹上
+        out.append(it)
+    return out
+
+
+def audit_issue_parents(issues: list, since: str, declared=None) -> list:
+    """純函式：`I3` 上位單對帳，回傳 failure 訊息清單。
+
+    `declared(it) -> bool` 是可選的「這張的頂層單宣告在不在」查詢，**只會對違規
+    的那幾張呼叫**（見 `issue_parent_violations()`）。不傳＝不查，一律當作沒有：
+    純函式測試因此不必假造描述，連線那條路才把它接上去。姿態與 `cleared` 同。
+
+    訊息刻意把「補上位單」擺在「宣告」前面：兩條路都收斂得掉紅字，但預設答案是
+    補掛（`parentId` 改得動），宣告是例外。順序寫反了，讀紅字的人會先去寫宣告。
+    """
+    failures = []
+    for it in issue_parent_violations(issues, since):
+        if declared is not None and declared(it):
+            continue
+        failures.append(
+            f"{it.ref} 是 agent 開的單，卻沒有上位單（`I3`）"
+            "——每一張 agent 開的單都要掛得到樹上，否則它不屬於任何一條工作線，"
+            "看板上找不到、結案時也沒有人會回頭看它。"
+            "處置**優先是把上位單補上**：`parentId` 改得動（`PATCH /api/issues/{id}`），"
+            "依據就寫在該單描述裡——它多半是某張單的審查、溢出或衍生。"
+            "真的掛不到任何一張單底下（整條工作線的起點）才走例外："
+            "在描述裡加一行 `**頂層單**：<為什麼它不屬於任何現有工作線>`，"
+            "本項讀到就不再報它。**不要為了轉綠把它掛到不相干的父單底下**"
+            "——那是把樹弄髒來換一個綠燈，而樹正是這一條要保護的東西"
+        )
+    return failures
+
+
+def has_toplevel_declaration(description: str) -> bool:
+    """描述裡有沒有一則成立的頂層單宣告（`I3` 的例外出口）。
+
+    只看形狀（`ISSUE_TOPLEVEL_RE`），**不看誰寫的**——這一點與 `I1` 的覆核完成
+    標記刻意不同：那裡聲明的是「**另一個人**覆核過了」，所以非限作者不可（不限
+    的話違規者自己補一行就自我特赦）；這裡聲明的是「這張單的位置在哪」，那是
+    開單者本來就該回答的事，誰寫的都一樣可查、也一樣可被推翻。
+    ⚠️ 弱點同 `UPSTREAM_LINE_RE`：形狀寫死、措辭一改就靜默失效，而**內容是否
+    成立機械驗不了**（寫「因為我不想掛」它也擋不住）——那一半靠自律與審查。
+    """
+    return bool(ISSUE_TOPLEVEL_RE.search(description or ""))
+
+
+def fetch_toplevel_declaration(base: str, token: str, issue_id: str) -> bool:
+    """單筆端點撈該單描述、判頂層單宣告在不在。
+
+    **非得走單筆端點不可**：清單端點的 `description` 截在 1200 字（2026-09-07
+    實測 MYL-124：清單 1200／單筆 3046），宣告若寫在後半，拿清單那份會讀成
+    不存在＝假紅，而且是**愈長的單愈容易誤判**——那正是最需要宣告的那種單。
+    讀不到時回 `False`（＝照樣報出來）：漏報看不見，誤報看得見。
+    """
+    data, _ = api_get(base, f"/api/issues/{issue_id}", token)
+    if data is None:
+        return False
+    issue = data.get("issue", data) if isinstance(data, dict) else {}
+    return has_toplevel_declaration(issue.get("description") or "")
 
 
 def has_author_review_mark(comments: list, reviewer_ids) -> bool:
@@ -2892,7 +3005,8 @@ def fetch_authored_issues(base: str, token: str, company_id: str, project_id: st
         out.append(AuthoredIssue(ref=ref,
                                  author_agent=it.get("createdByAgentId") or "",
                                  author_user=it.get("createdByUserId") or "",
-                                 issue_id=it.get("id") or ""))
+                                 issue_id=it.get("id") or "",
+                                 parent=it.get("parentId") or ""))
     return out, ""
 
 
@@ -3026,6 +3140,42 @@ def check_pm_issue_fields(root: Path) -> SelfcheckResult:
     res.failures.extend(audit_pm_issue_fields(fields))
     res.failures.extend(unreadable)
     res.summary += f"（{ISSUE_RULES_SINCE} 起 PM 開了 {len(fields) + len(unreadable)} 張）"
+    return res
+
+
+def check_issue_parent(root: Path) -> SelfcheckResult:
+    """agent 開的單都要掛得到樹上（`I3`，MYL-117，依 MYL-96 裁定 #18／核可卡 B1）。
+
+    與 `I2` 的「上位單」那一格**射程不同、不會互相誤殺**：`I2` 只看 Product
+    Manager 開的單、四欄一起判；本項看**所有 agent 開的單**、只判上位單這一格。
+    重疊處（PM 開的、沒有上位單的單）兩項都會報，這是刻意的——同一張單缺同一格，
+    兩條紅字講的是同一件事、也指向同一個處置（把上位單補上），不會一綠一紅。
+
+    起算點同 `I1`／`I2`（`ISSUE_RULES_SINCE`）：規則生效前開的單不回溯。回溯那
+    一半是**一次性的資料補掛**，已於 2026-09-07 做完（29 張），清單與逐張依據見
+    `docs/standards/issue-parent-backfill.md`。
+    """
+    res = SelfcheckResult("issue-parent", "agent 開的單掛得到樹上（`I3`）")
+    endpoint, why = issue_rules_precondition(root)
+    if endpoint is None:
+        res.skipped = why
+        return res
+    base, token, company_id, project_id = endpoint
+
+    issues, why = fetch_authored_issues(base, token, company_id, project_id)
+    if issues is None:
+        res.skipped = f"讀不到來源端：{why}"
+        return res
+
+    res.failures.extend(audit_issue_parents(
+        issues, ISSUE_RULES_SINCE,
+        declared=lambda it: bool(it.issue_id) and fetch_toplevel_declaration(
+            base, token, it.issue_id)))
+    in_scope = [i for i in issues
+                if ref_at_or_after(i.ref, ISSUE_RULES_SINCE)
+                and i.author_agent and not i.author_user]
+    res.summary += (f"（{ISSUE_RULES_SINCE} 起 agent 開了 {len(in_scope)} 張，"
+                    f"全部 {len(issues)} 張）")
     return res
 
 
@@ -3178,6 +3328,7 @@ SELFCHECK_LABELS = {
     "mirror-recon": "鏡像對帳",
     "issue-authors": "開單者白名單",
     "pm-issue-fields": "開單必備欄位",
+    "issue-parent": "上位單",
 }
 #: 四個抄寫點：`(檔案, 那一行是什麼, 抓出列舉內容的錨點)`。
 #: 錨點只吃**那一行**、不吃整份檔案——整份 `CLAUDE.md` 本來就到處提到「錨點」
@@ -3326,7 +3477,8 @@ SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_ru
               check_version_shape, check_table_shape, check_config_schema,
               check_org_sync, check_handbook_stamp, check_init_copy_list,
               check_selfcheck_names, check_mirror_recon,
-              check_issue_authors, check_pm_issue_fields)
+              check_issue_authors, check_pm_issue_fields,
+              check_issue_parent)
 
 
 def run_selfcheck(root: Path) -> list:
