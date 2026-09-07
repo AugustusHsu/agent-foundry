@@ -44,9 +44,9 @@ title: 模型 profile 切換：{{previous_active}} → {{profile}}（{{applied_d
 
 **驗收標準**
 
-1. 跑 `python3 tools/model-routing/apply_profile.py --check`，exit 0（平台實況與 active profile 逐格一致）。有任何一格不符它會印出差異表並非零 exit。
+1. 跑 `python3 tools/model-routing/apply_profile.py --check`，exit 0（平台實況與 active profile 逐格一致）。有任何一格不符它會印出差異表並 exit 1；exit 3 是第三態「讀不到平台實況」，那代表這條 AC **還沒被驗過**，不是驗過了不合格——換 CEO 或使用者的 board 金鑰重跑。
 2. `git show HEAD:.foundry/config.yml` 裡 `model_routing.active` 的值為 `{{profile}}`。
-3. 本單描述「## 逐角色回查」底下共 {{role_count}} 個 `### 回查：<角色>` 小節，每節三列（`adapterType`、`adapterConfig.model`、`adapterConfig.modelReasoningEffort`）的「結果」欄全為 ✅。任一列是 ❌ 時工具會停在那個角色、不續套下一個，所以出現 ❌ 就代表這次切換沒跑完。
+3. 本單描述「## 逐角色回查」底下共 {{role_count}} 個 `### 回查：<角色>` 小節，每節三列（`adapterType`、`adapterConfig.model`、以及該 adapter 真正消費的 effort 鍵——`claude_local` 是 `adapterConfig.effort`、`codex_local` 是 `adapterConfig.modelReasoningEffort`，權威在 `probe_providers.PROVIDERS` 的 `effort_key`）的「結果」欄全為 ✅。任一列是 ❌ 時工具會停在那個角色、不續套下一個，所以出現 ❌ 就代表這次切換沒跑完。
 4. 把「## 回退」段那一行指令原樣執行後，`--check` 會再度 exit 0；本次的回退指令是 `{{rollback}}`。
 5. 跑 `python3 tools/foundry-lint/foundry_lint.py --selfcheck`，`model-routing-sync` 那一項為 ✅（active 指標指到已登記 profile、角色名在 `.foundry/org.yml` 值域內、供應商在登記表內）。⚠️ 這一項**只驗 repo 內宣告的自洽性**，它綠不代表平台對得上——平台那一半歸第 1 條。
 

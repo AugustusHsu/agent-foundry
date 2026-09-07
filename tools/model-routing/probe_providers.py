@@ -37,6 +37,14 @@ from pathlib import Path
 # `adapter_type` 是 Paperclip `PATCH /api/agents/{id}` 的 adapterType 值
 # （MYL-36 自 openapi.json 讀出）。其他執行層平台沒有這個欄位，見 skill §4。
 #
+# `effort_key` 是**該 adapter 真正消費**的 reasoning effort 鍵名——每家不一樣，
+# 而平台對 adapterConfig 不做 schema 驗證（`L5`），寫錯鍵不會報錯、只會靜默不生效。
+# 所以這一欄是實證出來的，不是照 openapi 抄的：
+#   - `claude_local` ⇒ `effort`（`claude-local/src/server/execute.ts:332` 讀、`:455` 推
+#     `--effort`；全 claude-local 原始碼沒有 `modelReasoningEffort` 這個字串）
+#   - `codex_local` ⇒ `modelReasoningEffort`（`codex-local/src/server/execute.ts`）
+# 其餘各家沒有實證來源 ⇒ 填 `None`，取鍵時停在「需人工確認」，**不猜**（`L5`）。
+#
 # 新增一家供應商：在此加一列即可，其餘程式碼不動。
 PROVIDERS = (
     {
@@ -46,6 +54,7 @@ PROVIDERS = (
         "cred_paths": ("~/.claude/.credentials.json",),
         "cred_source": "實測",
         "adapter_type": "claude_local",
+        "effort_key": "effort",
     },
     {
         "id": "codex",
@@ -54,6 +63,7 @@ PROVIDERS = (
         "cred_paths": ("~/.codex/auth.json",),
         "cred_source": "實測",
         "adapter_type": "codex_local",
+        "effort_key": "modelReasoningEffort",
     },
     {
         "id": "gemini",
@@ -62,6 +72,7 @@ PROVIDERS = (
         "cred_paths": ("~/.gemini/oauth_creds.json",),
         "cred_source": "推定",
         "adapter_type": "gemini_local",
+        "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
     },
     {
         "id": "cursor",
@@ -70,6 +81,7 @@ PROVIDERS = (
         "cred_paths": ("~/.cursor/cli-config.json",),
         "cred_source": "推定",
         "adapter_type": "cursor_cloud",
+        "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
     },
     {
         "id": "opencode",
@@ -78,6 +90,7 @@ PROVIDERS = (
         "cred_paths": ("~/.local/share/opencode/auth.json",),
         "cred_source": "推定",
         "adapter_type": "opencode_local",
+        "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
     },
     {
         "id": "grok",
@@ -86,6 +99,7 @@ PROVIDERS = (
         "cred_paths": (),
         "cred_source": "未知",
         "adapter_type": "grok_local",
+        "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
     },
     {
         "id": "kimi",
@@ -94,6 +108,7 @@ PROVIDERS = (
         "cred_paths": (),
         "cred_source": "未知",
         "adapter_type": "kimi_local",
+        "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
     },
 )
 

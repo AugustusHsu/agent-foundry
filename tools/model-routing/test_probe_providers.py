@@ -142,7 +142,8 @@ class RegistryTest(unittest.TestCase):
 
     def test_required_fields_present(self):
         for p in pp.PROVIDERS:
-            for field in ("id", "name", "cli", "cred_paths", "cred_source", "adapter_type"):
+            for field in ("id", "name", "cli", "cred_paths", "cred_source", "adapter_type",
+                          "effort_key"):
                 self.assertIn(field, p, f"{p.get('id')} 缺欄位 {field}")
             self.assertIn(p["cred_source"], ("實測", "推定", "未知"), p["id"])
 
