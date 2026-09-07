@@ -2634,8 +2634,11 @@ class IssueRuleCrossCheckTest(unittest.TestCase):
     def test_I2xI3_只違反_I3(self):
         """非 PM 的 agent（CEO）開、沒有上位單 ⇒ 只有 `I3` 該紅。
 
-        守的是**射程差**：`I2` 只拘束 PM 開的單，`I3` 拘束所有 agent 開的單。
-        兩項的射程若哪天被合併成同一份，這一列會變 `(True, True)`。
+        守的是**射程差的結果**：`I2` 只拘束 PM 開的單，`I3` 拘束所有 agent 開的單。
+        但射程差本身是 `i2_i3()` 寫在自己身上的（`if agent == self.PM else []`），
+        不是問 `check_pm_issue_fields()` 問來的——**真正的射程過濾器被改寬時，
+        這一列不會紅**（MYL-117 CR 第 2 輪實測：整個 class 一列都沒紅）。守著那個
+        過濾器的是 `test_pm_以外的人開的單不進_I2_射程`，別拿這一列當它的替身。
         """
         self.assertEqual(self.i2_i3("MYL-136", agent="ceo-id"), (False, True))
 
