@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""套用、檢查及列出已核可的模型供應商 profile（MYL-129）。
+"""套用、檢查及列出已核可的模型供應商 profile（MYL-129），並留下切換執行單（MYL-131）。
 
 這支工具只讀取 ``.foundry/config.yml`` 既有的 profile；它不建立或修改
 profile。供應商到 Paperclip adapterType 的登記表唯一來源是
 ``probe_providers.PROVIDERS``。
+
+``--apply`` 的稽核落點二選一，兩者都是 ``M6`` 第 1 級的義務落實：
+``--issue MYL-nnn`` 把報告貼回既有工單，``--create-issue --parent MYL-nnn``
+另開一張切換執行單（描述由 ``templates/switch-execution-issue.md`` 產生）。
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -44,6 +49,52 @@ M5_GUIDANCE = (
 )
 CONFIGURE_AGENTS_ERROR = "本動詞需要 configure_agents，全公司只有 CEO 持有"
 
+# ── C4（MYL-131）：切換執行單 ────────────────────────────────────────────────
+# M6 第 1 級的常設授權不是白給的，義務是「留下執行單與逐角色回查證據」。以下這一段
+# 就是那份義務的機械落點：報告貼回既有工單（--issue），或另開一張切換執行單（--create-issue）。
+
+#: 切換執行單的描述長什麼樣，只寫在模板裡；本檔不留第二份拷貝。
+SWITCH_ISSUE_TEMPLATE = "templates/switch-execution-issue.md"
+
+#: 模板裡「以下才是工單描述」的分界。體例同 repo 雙入口檔的 `FOUNDRY:SHARED-BODY`。
+ISSUE_BODY_MARKER = "<!-- FOUNDRY:ISSUE-BODY -->"
+
+PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
+TEMPLATE_TITLE_RE = re.compile(r"(?m)^title:\s*(\S[^\n]*)$")
+
+#: 開單者白名單（protocol 第 1 節 `I1`）。比對的是 `.foundry/org.yml` 的角色 id，
+#: **不是**平台的 `role` 欄位——平台那一欄是粗粒度 enum，Product Manager、Product
+#: Analyst 與 Scrum Master 同為 `pm`，拿它判等於把白名單放寬給另外兩個角色。
+ISSUE_AUTHOR_ROLES = ("ceo", "product-manager")
+ISSUE_AUTHOR_ERROR = (
+    "開單者白名單見 `I1`：--create-issue 只有 CEO 與 Product Manager 的金鑰送得出建單"
+    "請求。本次金鑰解析到的角色是 {role}；要留下這張執行單，把報告交給 Product Manager 開。"
+)
+
+#: `--parent` 必填。不給就停在這裡，**不自行宣告頂層單**：那一行寫在描述裡、開單者
+#: 本人改得動（可自我特赦），而 protocol 第 1 節的上位單條款（MYL-117 起的 I3）明文
+#: 寫著例外不是違規的預設出路。掛不到樹上的正解是把上位單補上，不是替自己開後門。
+PARENT_REQUIRED_ERROR = (
+    "--create-issue 必須搭配 --parent MYL-nnn：agent 開的每一張單都要掛得到樹上"
+    "（protocol 第 1 節上位單條款 I3）。本工具不會自行寫 `**頂層單**：` 宣告替自己"
+    "開後門——I3 明文寫著例外不是違規的預設出路，且那行宣告開單者本人改得動、是可"
+    "自我特赦的。正解是把上位單補上：切換總是由某一張單觸發的，把那張單填進 --parent。"
+)
+
+#: 建單／貼留言之後的鏡像義務。工具刻意不代做，理由寫在訊息裡。
+MIRROR_STEPS = """\
+## 接下來的鏡像三步（`skills/foundry-platform/adapters/github.md` 時機 1＋時機 3）
+
+本工具刻意不代做：它沒有 `gh` 這條路徑，也不該替執行者判斷內容適不適合公開。
+**漏做會讓 `--selfcheck` 的 `mirror-recon` 轉紅、擋住全隊的 commit。**
+
+1. 組鏡像 body：首行 `Foundry-Source: paperclip/{identifier}` → 空行 → 上面那份描述全文
+   → 末行唯讀聲明；然後 `gh issue create --title "<標題>" --body-file <檔> --label "<type_label>"`。
+2. `gh project item-add <PROJECT> --owner <OWNER> --url <上一步輸出的 issue URL>`。
+3. 本單開出來就是 `done`，所以時機 3 的兩件事都要做：project Status 設 `Done` **且**
+   `gh issue close <N>`（只做一件 `mirror-recon` 照樣紅）。最後回本單留一則 `Mirrored-to: github#<N>`。
+"""
+
 
 class ApiError(RuntimeError):
     pass
@@ -60,7 +111,7 @@ class PaperclipClient:
         if not (self.base_url and self.api_key and self.company_id):
             raise ApiError("缺少 PAPERCLIP_API_URL、PAPERCLIP_API_KEY 或 PAPERCLIP_COMPANY_ID")
 
-    def _request(self, method, path, body=None):
+    def _request(self, method, path, body=None, headers=None):
         data = None if body is None else json.dumps(body).encode("utf-8")
         request = urllib.request.Request(
             self.base_url + path,
@@ -69,6 +120,7 @@ class PaperclipClient:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
+                **(headers or {}),
             },
         )
         try:
@@ -85,6 +137,18 @@ class PaperclipClient:
 
     def patch(self, path, body):
         return self._request("PATCH", path, body)
+
+    def post(self, path, body, headers=None):
+        return self._request("POST", path, body, headers=headers)
+
+
+def _now_local():
+    """報告與單標題的時間戳。測試一律注入固定值，不讓斷言跟著時鐘漂。
+
+    用**本地時間＋明寫時區位移**，不用 UTC：標題那個日期會被拿去跟 commit、審查報告
+    對照，而那些都是本地日期——寫 UTC 會在跨日的那幾個小時裡差一天。
+    """
+    return datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %z")
 
 
 def load_yaml(path):
@@ -157,14 +221,26 @@ def list_agents(client):
     return result.get("agents", []) if isinstance(result, dict) else result
 
 
+def role_id_for_name(name, org):
+    """Paperclip 的顯示名 → Foundry 角色 id；對不上回 None。
+
+    只認 `.foundry/org.yml` 的 `id` 與 `title`。**不看平台的 `role` 欄位**：那一欄是
+    粗粒度 enum（Product Manager／Product Analyst／Scrum Master 同為 `pm`），拿它當鍵
+    會把三個角色混成一個。
+    """
+    for role_id, role in role_definitions(org).items():
+        if name in {role_id, role.get("title")}:
+            return role_id
+    return None
+
+
 def agents_by_role(client, org):
     """Use org.yml titles to map Paperclip display names back to Foundry role IDs."""
-    declared = role_definitions(org)
     indexed = {}
     for agent in list_agents(client):
-        for role_id, role in declared.items():
-            if agent.get("name") in {role_id, role.get("title")}:
-                indexed[role_id] = agent
+        role_id = role_id_for_name(agent.get("name"), org)
+        if role_id:
+            indexed[role_id] = agent
     return indexed
 
 
@@ -215,12 +291,12 @@ def markdown_value(value):
     return str(value).replace("|", "\\|")
 
 
-def print_waiver(profile_name, profile):
+def print_waiver(profile_name, profile, emit=print):
     if profile.get("waives_m4"):
-        print(f"- active profile：`{profile_name}`；M4 waiver：`true`")
-        print(f"- waiver_reason：{profile.get('waiver_reason', '')}")
+        emit(f"- active profile：`{profile_name}`；M4 waiver：`true`")
+        emit(f"- waiver_reason：{profile.get('waiver_reason', '')}")
     else:
-        print(f"- active profile：`{profile_name}`；M4 waiver：`false`")
+        emit(f"- active profile：`{profile_name}`；M4 waiver：`false`")
 
 
 def command_list(config):
@@ -303,27 +379,27 @@ def update_active_config(path, profile_name):
     config_path.write_text(text[: matched.start(1)] + rewritten + text[matched.end(1) :], encoding="utf-8")
 
 
-def print_transition(targets, current_agents):
-    print("## 逐角色現值 → 目標值")
-    print("| 角色 | 欄位 | 現值 | 目標值 |")
-    print("| --- | --- | --- | --- |")
+def print_transition(targets, current_agents, emit=print):
+    emit("## 逐角色現值 → 目標值")
+    emit("| 角色 | 欄位 | 現值 | 目標值 |")
+    emit("| --- | --- | --- | --- |")
     for target in targets:
         current = current_agents[target["role"]]
         for field, target_value, current_value in differs(current, target):
-            print(
+            emit(
                 f"| {target['role']} | {field} | `{markdown_value(current_value)}` "
                 f"| `{markdown_value(target_value)}` |"
             )
 
 
-def print_verification(role, actual, target):
-    print(f"### 回查：{role}")
-    print("| 欄位 | 目標值 | 回查值 | 結果 |")
-    print("| --- | --- | --- | --- |")
+def print_verification(role, actual, target, emit=print):
+    emit(f"### 回查：{role}")
+    emit("| 欄位 | 目標值 | 回查值 | 結果 |")
+    emit("| --- | --- | --- | --- |")
     mismatches = []
     for field, expected, live in differs(actual, target):
         ok = expected == live
-        print(
+        emit(
             f"| {field} | `{markdown_value(expected)}` | `{markdown_value(live)}` "
             f"| {'✅' if ok else '❌'} |"
         )
@@ -332,12 +408,239 @@ def print_verification(role, actual, target):
     return mismatches
 
 
-def command_apply(client, profile_name, config_path, profiles, org, issue, probe_all=providers.probe_all):
+class Report:
+    """執行報告：一邊印給執行者看，一邊留一份好貼回工單／放進新單描述。
+
+    `echo=False` 是給 `--dry-run --create-issue` 用的——那條路徑要印的是**整份描述**，
+    報告已經在描述裡了，再印一次等於同一份東西輸出兩遍。
+    """
+
+    def __init__(self, echo=True):
+        self.echo = echo
+        self.lines = []
+
+    def emit(self, text=""):
+        if self.echo:
+            print(text)
+        self.lines.append(text)
+
+    def text(self):
+        return "\n".join(self.lines).strip() + "\n"
+
+
+def rollback_command(previous_active, issue=None, parent=None):
+    """`M5`(d)：臨時改派要寫明怎麼改回來，所以回退指令要能原樣複製執行。
+
+    兩條路徑的回退指令不一樣——貼回既有工單的那條回退時仍貼回同一張單；開執行單的那條
+    回退時要再開一張（回退本身也是一次切換，也要留下自己的稽核紀錄）。
+    """
+    tail = f"--issue {issue}" if issue else f"--create-issue --parent {parent}"
+    return (
+        "python3 tools/model-routing/apply_profile.py "
+        f"--profile {previous_active} --apply {tail}"
+    )
+
+
+def emit_report_head(report, *, previous_active, profile_name, profile, probe_results,
+                     targets, current_agents, rollback, issue=None, parent=None):
+    """報告的前半段：兩條路徑（貼留言／開新單）與預演都共用同一份形狀。"""
+    report.emit("# 模型 profile 套用執行報告")
+    if issue:
+        report.emit(f"- 工單：{issue}")
+    else:
+        report.emit(f"- 上位單：{parent}（本份報告放進新開的切換執行單）")
+    report.emit("- 授權：M6 第 1 級；依 MYL-125 計畫修訂 2 的已核可 profile 切換")
+    report.emit(f"- active：`{previous_active}` → `{profile_name}`")
+    print_waiver(profile_name, profile, emit=report.emit)
+    report.emit("## 供應商盤點（原始輸出）")
+    report.emit(providers.render_text(probe_results))
+    print_transition(targets, current_agents, emit=report.emit)
+    report.emit("## 回退")
+    report.emit(f"回退指令：{rollback}")
+
+
+def open_questions(profile_name, profile):
+    """第 1 節四段骨架的第四段：沒有就明確寫「無」，不留空。
+
+    waiver **不是**未決事項：它是已經拍過板的取捨，改回條件寫在報告的 waiver 段。
+    寫成未決事項會讓這張單一開出來就違反「有未解未決事項不得進入實作」。
+    """
+    if profile.get("waives_m4"):
+        return (
+            f"無。（`{profile_name}` 掛有 `M4` waiver，改回條件寫在下方報告的 waiver 段"
+            "——那是常設追蹤事項，不是本單的未決問題。）"
+        )
+    return "無"
+
+
+def load_switch_template(path):
+    """模板 → `(標題模板, 描述模板)`。形狀壞掉一律報錯，不猜。"""
+    text = Path(path).read_text(encoding="utf-8")
+    occurrences = text.count(ISSUE_BODY_MARKER)
+    if occurrences == 0:
+        raise ValueError(f"{path} 找不到 {ISSUE_BODY_MARKER}，讀不出工單描述從哪一行開始")
+    # 出現兩次是**靜默**的壞法：切在第一次，說明段的後半會跟著進工單描述，而產出的單
+    # 看起來只是「開頭多了幾句說明」。所以這裡報錯，不猜哪一個才是真的分界。
+    if occurrences > 1:
+        raise ValueError(
+            f"{path} 出現 {occurrences} 次 {ISSUE_BODY_MARKER}；分界只能有一個，"
+            "說明段要提到它請不要寫出完整標記"
+        )
+    head, body = text.split(ISSUE_BODY_MARKER, 1)
+    matched = TEMPLATE_TITLE_RE.search(head)
+    if not matched:
+        raise ValueError(f"{path} 的 frontmatter 缺少 `title:` 那一行")
+    return matched.group(1).strip(), body.strip() + "\n"
+
+
+def render_template(template, values):
+    def substitute(match):
+        key = match.group(1)
+        if key not in values:
+            raise ValueError(f"模板佔位符 {{{{{key}}}}} 沒有對應值，拒絕送出半成品")
+        return str(values[key])
+
+    rendered = PLACEHOLDER_RE.sub(substitute, template)
+    # 漏填是報錯不是照送：`{{…}}` 出現在平台上的單裡，讀的人分不出那是沒填還是原文。
+    if "{{" in rendered:
+        raise ValueError("模板填完仍留有 `{{` 佔位符，拒絕送出半成品")
+    return rendered
+
+
+def assert_issue_author(me, org):
+    """`I1` 開單者白名單。在第一筆寫入之前跑——套完才發現留不下紀錄，等於改了平台卻沒有稽核證據。"""
+    role_id = role_id_for_name(me.get("name"), org)
+    if role_id not in ISSUE_AUTHOR_ROLES:
+        raise ValueError(ISSUE_AUTHOR_ERROR.format(role=role_id or me.get("name")))
+    return role_id
+
+
+def fetch_parent_issue(client, parent):
+    """`--parent` 是必填，且要真的讀得到——UUID 是掛上位單唯一吃得下的形狀。"""
+    if not parent:
+        raise ValueError(PARENT_REQUIRED_ERROR)
+    issue = client.get(f"/api/issues/{parent}")
+    if not issue.get("id"):
+        raise ValueError(f"--parent {parent} 讀不到 UUID，無法掛上位單")
+    return issue
+
+
+def build_switch_issue_payload(template_path, values, *, parent_issue, assignee_agent_id):
+    """組建單 payload。`I2` 的四欄在這裡一次備齊，反向那一格在下面被守住。"""
+    title_template, body_template = load_switch_template(template_path)
+    payload = {
+        "title": render_template(title_template, values),
+        "description": render_template(body_template, values),
+        # `I2` 上位單那一欄。用 `POST /companies/{id}/issues` 而不是 `/children` 捷徑，
+        # 是因為 `createChildIssueSchema` 把 `parentId` omit 掉了（zod 對未宣告鍵是
+        # strip 不是報錯）——走那條路 parentId 只存在於 URL，payload 上斷言不到。
+        "parentId": parent_issue["id"],
+        # `I2` 指派對象那一欄。指給執行者自己：切換已經做完，這張單的擁有者就是做的人。
+        "assigneeAgentId": assignee_agent_id,
+        # 一開出來就是 `done`：套用與回查在開單之前跑完，描述裡每一條 AC 當下都已成立。
+        # 開成 `todo` 會多喚醒一個 agent 去做一件做完的事。
+        "status": "done",
+        "priority": "low",
+        "workMode": "standard",
+    }
+    if parent_issue.get("projectId"):
+        payload["projectId"] = parent_issue["projectId"]
+    assert_parent_not_blocker(payload)
+    return payload
+
+
+def assert_parent_not_blocker(payload):
+    """`I2` 反向那一格：上位單不得同時被填進上游依賴。
+
+    平台不擋這件事（它的守衛只看不得自我阻擋、必須同公司、依賴圖不得成環），但母單多半
+    要等子單做完才結 ⇒ 把母單掛成自己的 blocker 就是做出一張再也不會被叫醒的單。
+    """
+    parent = payload.get("parentId")
+    if parent and parent in (payload.get("blockedByIssueIds") or []):
+        raise ValueError("上位單被填進 blockedByIssueIds，會做出一張醒不來的單，拒絕建單")
+
+
+def run_id_headers():
+    """`X-Paperclip-Run-Id` 讓寫入歸屬到當次 run；環境沒給就不硬塞空值。"""
+    run_id = os.environ.get("PAPERCLIP_RUN_ID")
+    return {"X-Paperclip-Run-Id": run_id} if run_id else {}
+
+
+def post_report_comment(client, issue, body):
+    """把報告貼回既有工單，並回讀查證未被截斷。
+
+    ⚠️ `GET /api/issues/<ID>/comments` 回的陣列是**新到舊**（index 0 才是最新），
+    2026-09-07 實測。所以這裡優先按 POST 回傳的 id 單筆回讀，位置只是退路。
+    """
+    created = client.post(f"/api/issues/{issue}/comments", {"body": body}, headers=run_id_headers())
+    comment_id = (created or {}).get("id")
+    if comment_id:
+        fetched = client.get(f"/api/issues/{issue}/comments/{comment_id}")
+    else:
+        comments = client.get(f"/api/issues/{issue}/comments") or []
+        fetched = comments[0] if comments else {}
+    if (fetched or {}).get("body") != body:
+        raise ValueError(
+            f"回讀 {issue} 的留言與送出的內容不一致（可能被截斷）："
+            f"送出 {len(body)} 字，讀回 {len((fetched or {}).get('body') or '')} 字"
+        )
+    print(f"\n✅ 執行報告已貼回 {issue}（留言 {comment_id or '（無 id，按位置回讀）'}），回讀未截斷")
+    return fetched
+
+
+def create_switch_issue(client, payload):
+    """建切換執行單並回讀查證四欄與描述完整性。"""
+    created = client.post(f"/api/companies/{client.company_id}/issues", payload)
+    identifier = (created or {}).get("identifier")
+    if not identifier:
+        raise ValueError(f"建單回應沒有 identifier，無法查證：{created}")
+    fetched = client.get(f"/api/issues/{identifier}")
+    for field in ("parentId", "assigneeAgentId"):
+        if fetched.get(field) != payload[field]:
+            raise ValueError(
+                f"{identifier} 回讀 {field} 不符：送出 {payload[field]!r}、讀回 {fetched.get(field)!r}"
+            )
+    if fetched.get("description") != payload["description"]:
+        raise ValueError(
+            f"{identifier} 回讀描述與送出的不一致（可能被截斷）："
+            f"送出 {len(payload['description'])} 字，讀回 {len(fetched.get('description') or '')} 字"
+        )
+    print(f"\n✅ 切換執行單已建立：{identifier}（parentId、assigneeAgentId、描述皆回讀相符）")
+    print(MIRROR_STEPS.format(identifier=identifier))
+    return created
+
+
+def switch_issue_values(*, profile_name, previous_active, profile, executor, targets,
+                        rollback, parent, report_text, applied_at):
+    return {
+        "profile": profile_name,
+        "previous_active": previous_active,
+        "applied_at": applied_at,
+        "applied_date": applied_at[:10],
+        "executor": executor.get("title") or executor.get("name") or "（未知）",
+        "executor_agent_id": executor.get("id") or "（未知）",
+        "parent": parent,
+        "role_count": len(targets),
+        "rollback": rollback,
+        "open_questions": open_questions(profile_name, profile),
+        "report": report_text,
+    }
+
+
+def command_apply(client, profile_name, config_path, profiles, org, issue=None,
+                  probe_all=providers.probe_all, create_issue=False, parent=None,
+                  template_path=SWITCH_ISSUE_TEMPLATE, now=None):
     if profile_name not in profiles:
         raise ValueError(f"未登記的 profile：{profile_name}")
     me = client.get("/api/agents/me")
     if not is_ceo(me):
         raise ValueError(CONFIGURE_AGENTS_ERROR)
+    parent_issue = None
+    if create_issue:
+        # 白名單與 --parent 都在第一筆 PATCH 之前收掉。順序有意義：套完 8 個角色才發現
+        # 建不了單，就是「平台改了、稽核證據沒有」——M6 第 1 級的義務正好落空。
+        assert_issue_author(me, org)
+        parent_issue = fetch_parent_issue(client, parent)
     previous_active = active_profile(load_yaml(config_path))[0]
     targets = targets_for_profile(profiles[profile_name], org)
     probe_results = ensure_ready(targets, probe_all=probe_all)
@@ -346,28 +649,21 @@ def command_apply(client, profile_name, config_path, profiles, org, issue, probe
     current_agents = assert_registered_current_adapters(client, targets, agents)
 
     # 在第一筆 PATCH 前印出：後續任一寫入或回查失敗時，仍有可貼回工單的回退方式。
-    rollback = (
-        "python3 tools/model-routing/apply_profile.py "
-        f"--profile {previous_active} --apply --issue {issue}"
+    rollback = rollback_command(previous_active, issue=issue, parent=parent)
+    report = Report()
+    emit_report_head(
+        report, previous_active=previous_active, profile_name=profile_name,
+        profile=profiles[profile_name], probe_results=probe_results, targets=targets,
+        current_agents=current_agents, rollback=rollback, issue=issue, parent=parent,
     )
-    print("# 模型 profile 套用執行報告")
-    print(f"- 工單：{issue}")
-    print("- 授權：M6 第 1 級；依 MYL-125 計畫修訂 2 的已核可 profile 切換")
-    print(f"- active：`{previous_active}` → `{profile_name}`")
-    print_waiver(profile_name, profiles[profile_name])
-    print("## 供應商盤點（原始輸出）")
-    print(providers.render_text(probe_results))
-    print_transition(targets, current_agents)
-    print("## 回退")
-    print(f"回退指令：{rollback}")
-    print("## 逐角色回查")
+    report.emit("## 逐角色回查")
 
     for target in targets:
         agent = agents[target["role"]]
         client.patch(f"/api/agents/{agent['id']}", patch_body(target))
         actual = client.get(f"/api/agents/{agent['id']}")
         readable_adapter_config(actual, target["role"])
-        mismatches = print_verification(target["role"], actual, target)
+        mismatches = print_verification(target["role"], actual, target, emit=report.emit)
         if mismatches:
             field, declared, live = mismatches[0]
             raise ValueError(
@@ -375,7 +671,79 @@ def command_apply(client, profile_name, config_path, profiles, org, issue, probe
             )
 
     update_active_config(config_path, profile_name)
-    print("\n✅ 全部角色已套用、逐格回查，並已更新 model_routing.active")
+    report.emit("")
+    report.emit("✅ 全部角色已套用、逐格回查，並已更新 model_routing.active")
+
+    if issue:
+        post_report_comment(client, issue, report.text())
+    if create_issue:
+        values = switch_issue_values(
+            profile_name=profile_name, previous_active=previous_active,
+            profile=profiles[profile_name], executor=me, targets=targets,
+            rollback=rollback, parent=parent, report_text=report.text(),
+            applied_at=now or _now_local(),
+        )
+        payload = build_switch_issue_payload(
+            template_path, values, parent_issue=parent_issue, assignee_agent_id=me["id"],
+        )
+        create_switch_issue(client, payload)
+    return 0
+
+
+def command_create_issue_dry_run(client, profile_name, config, profiles, org, parent,
+                                 template_path=SWITCH_ISSUE_TEMPLATE,
+                                 probe_all=providers.probe_all, now=None):
+    """印出將建的單的標題與完整描述，**零寫入**。
+
+    刻意不擋非白名單金鑰：預演只讀不寫，任何人都該看得到這張單會長什麼樣；但會警告
+    真的建單會被 `I1` 擋下，免得預演綠了才在寫入那一步撞牆。
+    """
+    if profile_name not in profiles:
+        raise ValueError(f"未登記的 profile：{profile_name}")
+    me = client.get("/api/agents/me")
+    parent_issue = fetch_parent_issue(client, parent)
+    previous_active = active_profile(config)[0]
+    targets = targets_for_profile(profiles[profile_name], org)
+    probe_results = ensure_ready(targets, probe_all=probe_all)
+    agents = agents_by_role(client, org)
+    current_agents = assert_registered_current_adapters(client, targets, agents)
+
+    rollback = rollback_command(previous_active, parent=parent)
+    report = Report(echo=False)
+    emit_report_head(
+        report, previous_active=previous_active, profile_name=profile_name,
+        profile=profiles[profile_name], probe_results=probe_results, targets=targets,
+        current_agents=current_agents, rollback=rollback, parent=parent,
+    )
+    report.emit("## 逐角色回查")
+    report.emit("⚠️ `--dry-run` 預演：一筆 PATCH 都還沒送出，所以還沒有回查證據。")
+    report.emit(
+        f"實際套用時這一段會有 {len(targets)} 個 `### 回查：<角色>` 小節，"
+        "逐格列出目標值、回查值與結果。"
+    )
+
+    values = switch_issue_values(
+        profile_name=profile_name, previous_active=previous_active,
+        profile=profiles[profile_name], executor=me, targets=targets,
+        rollback=rollback, parent=parent, report_text=report.text(),
+        applied_at=now or _now_local(),
+    )
+    payload = build_switch_issue_payload(
+        template_path, values, parent_issue=parent_issue, assignee_agent_id=me.get("id"),
+    )
+
+    print("## --create-issue --dry-run 預演（零寫入）")
+    role_id = role_id_for_name(me.get("name"), org)
+    if role_id not in ISSUE_AUTHOR_ROLES:
+        print(f"⚠️ {ISSUE_AUTHOR_ERROR.format(role=role_id or me.get('name'))}")
+    print(f"標題：{payload['title']}")
+    print(
+        f"status：{payload['status']}｜assigneeAgentId：{payload['assigneeAgentId']}"
+        f"｜parentId：{payload['parentId']}｜blockedByIssueIds：（不填，見 I2 反向那一格）"
+    )
+    print("描述：")
+    print(payload["description"])
+    print(MIRROR_STEPS.format(identifier="<新單編號>"))
     return 0
 
 
@@ -387,13 +755,19 @@ def parse_args(argv):
     action.add_argument("--dry-run", action="store_true")
     action.add_argument("--apply", action="store_true")
     parser.add_argument("--profile")
-    parser.add_argument("--issue", help="--apply 的稽核報告所屬工單，例如 MYL-129")
+    parser.add_argument("--issue", help="--apply 的稽核報告貼回哪一張既有工單，例如 MYL-129")
+    parser.add_argument(
+        "--create-issue", action="store_true",
+        help="另開一張切換執行單放執行報告（M6 第 1 級的稽核義務）；必須搭配 --parent",
+    )
+    parser.add_argument("--parent", help="--create-issue 的上位單，例如 MYL-125（必填）")
     parser.add_argument("--config", default=".foundry/config.yml", help=argparse.SUPPRESS)
     parser.add_argument("--org-config", default=".foundry/org.yml", help=argparse.SUPPRESS)
+    parser.add_argument("--template", default=SWITCH_ISSUE_TEMPLATE, help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
-def run(args, client=None, probe_all=providers.probe_all):
+def run(args, client=None, probe_all=providers.probe_all, now=None):
     config = load_yaml(args.config)
     org = load_yaml(args.org_config)
     if args.list:
@@ -401,16 +775,31 @@ def run(args, client=None, probe_all=providers.probe_all):
     if args.dry_run or args.apply:
         if not args.profile:
             raise ValueError("--dry-run／--apply 必須搭配 --profile <名>")
-    if args.apply and not args.issue:
-        raise ValueError("--apply 必須搭配 --issue MYL-nnn，供執行報告與回退指令稽核")
+    if args.create_issue:
+        if not (args.dry_run or args.apply):
+            raise ValueError("--create-issue 只搭配 --apply 或 --dry-run 使用")
+        if not args.parent:
+            raise ValueError(PARENT_REQUIRED_ERROR)
+    if args.apply and not (args.issue or args.create_issue):
+        raise ValueError(
+            "--apply 必須搭配 --issue MYL-nnn（貼回既有工單）或 "
+            "--create-issue --parent MYL-nnn（另開執行單），供執行報告與回退指令稽核"
+        )
     _, _, profiles = active_profile(config)
     client = client or PaperclipClient()
     if args.check:
         return command_check(client, config, org)
     if args.dry_run:
+        if args.create_issue:
+            return command_create_issue_dry_run(
+                client, args.profile, config, profiles, org, args.parent,
+                template_path=args.template, probe_all=probe_all, now=now,
+            )
         return command_dry_run(client, args.profile, profiles, org)
     return command_apply(
-        client, args.profile, args.config, profiles, org, args.issue, probe_all=probe_all
+        client, args.profile, args.config, profiles, org, args.issue, probe_all=probe_all,
+        create_issue=args.create_issue, parent=args.parent, template_path=args.template,
+        now=now,
     )
 
 
