@@ -2647,6 +2647,280 @@ class UpstreamLineTest(unittest.TestCase):
                     self.assertTrue(self.line(bad))
 
 
+class BlockScalarParseTest(unittest.TestCase):
+    """`parse_config` 讀區塊純量（MYL-130）。
+
+    這三個案例對應本檢查在補這段之前**實際踩到**的三個靜默錯誤，不是為了
+    覆蓋率而列的寫法組合：`>-` 被讀成字面值 `">-"`（一個非空字串，於是
+    「掛了 waiver 卻沒寫理由」永遠擋不住）、續行裡的冒號憑空生出一個同層的鍵、
+    以及空 body 與有 body 分不出來。
+    """
+
+    def test_折疊區塊併成一行且不留指示符(self):
+        got = foundry_lint.parse_config(
+            "a:\n  reason: >-\n    第一行\n    第二行\n  next: x\n"
+        )
+        self.assertEqual(got["a"]["reason"], "第一行 第二行")
+        self.assertEqual(got["a"]["next"], "x")
+
+    def test_空的區塊本體讀成空字串而不是指示符(self):
+        got = foundry_lint.parse_config("a:\n  reason: >-\n  next: x\n")
+        self.assertEqual(got["a"]["reason"], "")
+        self.assertEqual(got["a"]["next"], "x")
+
+    def test_區塊本體裡的冒號不會變成鍵(self):
+        got = foundry_lint.parse_config(
+            "a:\n  reason: >-\n    見留言 2026-09-07 14:41 的裁定\n"
+        )
+        self.assertEqual(list(got["a"]), ["reason"])
+        self.assertIn("14:41", got["a"]["reason"])
+
+    def test_保行區塊保留換行(self):
+        got = foundry_lint.parse_config("a:\n  text: |\n    甲\n    乙\n")
+        self.assertEqual(got["a"]["text"], "甲\n乙")
+
+
+class ProviderIdsTest(unittest.TestCase):
+    """供應商 id 的值域取自 `probe_providers.py` 的 `PROVIDERS`，用 `ast` 靜態取。"""
+
+    def test_取出登記表的_id(self):
+        src = 'PROVIDERS = (\n    {"id": "claude"},\n    {"id": "codex", "cli": "codex"},\n)\n'
+        self.assertEqual(foundry_lint.provider_ids(src), ["claude", "codex"])
+
+    def test_別處的_id_不會被撈進值域(self):
+        """值域一變大，(c) 那個反例就開始放行它本來該擋的東西。"""
+        src = ('OTHER = ({"id": "banana"},)\n'
+               'PROVIDERS = (\n    {"id": "claude"},\n)\n'
+               '# {"id": "durian"}\n')
+        self.assertEqual(foundry_lint.provider_ids(src), ["claude"])
+
+    def test_符號不在時回空_由呼叫端報錯(self):
+        self.assertEqual(foundry_lint.provider_ids("X = 1\n"), [])
+
+
+class ModelRoutingSyncTest(RepoCopyTestCase):
+    """`model-routing-sync` 的四個反例（MYL-130，MYL-125 計畫 A4）。
+
+    **每個反例都配一個反向案例**：把被驗的那一格改回合法值後轉綠。少了反向那半，
+    「擋下來了」只證明有東西紅了，不證明紅的是那一格——一個把整段當非法的實作
+    會讓四個反例全過，而它擋不住任何真實的錯誤。
+
+    fixture 自己寫 `org.yml` 與供應商登記表，**不讀本 repo 那兩份的值**：
+    本檔是可攜的那一半，會被複製到每個目標專案（見檔首）。
+    """
+
+    ORG = ("foundry_org: 1\n"
+           "roles:\n"
+           "  - id: developer\n"
+           "    title: Developer\n"
+           "  - id: code-reviewer\n"
+           "    title: Code Reviewer\n")
+    PROVIDERS = ('PROVIDERS = (\n    {"id": "claude"},\n    {"id": "codex"},\n)\n')
+    #: 合法的起點：實作 claude、審查 codex ⇒ 異廠，`M4` 成立，不需要 waiver。
+    #: 四個反例各自只動這份裡的**一格**。
+    BASE = {
+        "default_provider": "claude",
+        "roles": {"developer": "claude", "code-reviewer": "codex"},
+    }
+    WAIVER = {"emergency": "true", "waives_m4": "true",
+              "waiver_reason": "額度耗盡期間的臨時配置；額度恢復後切回 normal-mixed。"}
+
+    def render(self, active="normal-mixed", profiles=None):
+        profiles = profiles if profiles is not None else {"normal-mixed": self.BASE}
+        lines = ["model_routing:", f"  active: {active}", "  profiles:"]
+        for name, profile in profiles.items():
+            lines.append(f"    {name}:")
+            for key, value in profile.items():
+                if key == "roles":
+                    lines.append("      roles:")
+                    lines.extend(f"        {r}: {p}" for r, p in value.items())
+                elif key == "waiver_reason":
+                    # 刻意用區塊純量：真實設定檔就是這樣寫的，理由欄一定會換行。
+                    lines.append("      waiver_reason: >-")
+                    if value:
+                        lines.append(f"        {value}")
+                else:
+                    lines.append(f"      {key}: {value}")
+        return "\n".join(lines) + "\n"
+
+    def _run(self, active="normal-mixed", profiles=None, org=None, providers=None):
+        self.write(".foundry/org.yml", org if org is not None else self.ORG)
+        self.write("tools/model-routing/probe_providers.py",
+                   providers if providers is not None else self.PROVIDERS)
+        self.write(".foundry/config.yml",
+                   "foundry: 2\n" + self.render(active, profiles))
+        return foundry_lint.check_model_routing_sync(self.root)
+
+    def assertBlocked(self, needle, **kwargs):
+        res = self._run(**kwargs)
+        self.assertFalse(res.passed, f"應該擋下卻放行了：{res.summary}")
+        self.assertTrue(any(needle in f for f in res.failures),
+                        f"擋是擋下了，但理由不是那一格：{res.failures}")
+        return res
+
+    def assertGreen(self, **kwargs):
+        res = self._run(**kwargs)
+        self.assertTrue(res.passed, res.failures)
+        return res
+
+    def test_起點是綠的(self):
+        """反向案例的地基：四個反例都從這份合法設定各改一格而來。"""
+        self.assertGreen()
+
+    # ── 反例 (a)：`active` 指到不存在的 profile ───────────────────────────
+    def test_a_active_指到不存在的_profile_擋下(self):
+        self.assertBlocked("`model_routing.active` 是 `typo-mixed`", active="typo-mixed")
+
+    def test_a_反向_active_指回存在的_profile_轉綠(self):
+        self.assertGreen(active="normal-mixed")
+
+    def _active_block(self, block):
+        """`active` 底下掛一個區塊——`render` 只寫得出純量，這裡直接組設定檔。"""
+        self.write(".foundry/org.yml", self.ORG)
+        self.write("tools/model-routing/probe_providers.py", self.PROVIDERS)
+        self.write(".foundry/config.yml",
+                   "foundry: 2\nmodel_routing:\n" + block + "  profiles:\n"
+                   "    normal-mixed:\n"
+                   "      default_provider: claude\n"
+                   "      roles:\n"
+                   "        developer: claude\n"
+                   "        code-reviewer: codex\n")
+        return foundry_lint.check_model_routing_sync(self.root)
+
+    def test_a_active_寫成區塊時回一條可讀_failure_而不是拋例外(self):
+        """守衛缺席時這裡拋 `TypeError`（`dict in dict`），而 `run_selfcheck`
+        沒有逐項例外隔離 ⇒ 整份 `--selfcheck` 以 traceback 中止，排在本項後面
+        的自檢一項都不跑。設定寫錯一格不該讓所有閘門一起失效（MYL-130 CR #1）。
+        """
+        res = self._active_block("  active:\n    normal-mixed: true\n")
+        self.assertFalse(res.passed, "應該擋下卻放行了")
+        self.assertTrue(any("`model_routing.active` 是一個區塊" in f for f in res.failures),
+                        f"擋是擋下了，但理由不是那一格：{res.failures}")
+
+    def test_a_反向_active_改回純量後轉綠(self):
+        """證明紅的是「寫成區塊」那一格，不是這條路徑上任何設定都會紅。"""
+        res = self._active_block("  active: normal-mixed\n")
+        self.assertTrue(res.passed, res.failures)
+
+    # ── 反例 (b)：`roles` 的鍵不在 `org.yml` ─────────────────────────────
+    def test_b_角色名不在_org_yml_擋下(self):
+        bad = dict(self.BASE, roles={"develper": "claude", "code-reviewer": "codex"})
+        self.assertBlocked("指到 `develper`", profiles={"normal-mixed": bad})
+
+    def test_b_反向_角色名改回_org_yml_有的_轉綠(self):
+        self.assertGreen(profiles={"normal-mixed": self.BASE})
+
+    def test_b_突變證_角色從_org_yml_拿掉時本來綠的那份轉紅(self):
+        """證明比對的是 `org.yml` 的內容，不是程式裡另養的一份角色名。"""
+        org = "foundry_org: 1\nroles:\n  - id: code-reviewer\n    title: Code Reviewer\n"
+        self.assertBlocked("指到 `developer`", org=org)
+
+    # ── 反例 (c)：供應商 id 不在登記表 ───────────────────────────────────
+    def test_c_供應商不在登記表_擋下(self):
+        bad = dict(self.BASE, roles={"developer": "banana", "code-reviewer": "codex"})
+        self.assertBlocked("把 `developer` 指到 `banana`", profiles={"normal-mixed": bad})
+
+    def test_c_反向_供應商改回登記表裡的_轉綠(self):
+        self.assertGreen(profiles={"normal-mixed": self.BASE})
+
+    def test_c_default_provider_也驗值域(self):
+        bad = dict(self.BASE, default_provider="banana")
+        self.assertBlocked("`default_provider` 是 `banana`", profiles={"normal-mixed": bad})
+
+    def test_c_突變證_把_codex_從登記表拿掉時本來綠的那份轉紅(self):
+        """證明值域真的取自 `probe_providers.py`，不是寫死在檢查裡。"""
+        self.assertBlocked("指到 `codex`", providers='PROVIDERS = ({"id": "claude"},)\n')
+
+    # ── 反例 (d)：`M4` 衝突且無 waiver ──────────────────────────────────
+    def test_d_實作與審查同廠且無_waiver_擋下(self):
+        bad = dict(self.BASE, roles={"developer": "codex", "code-reviewer": "codex"})
+        self.assertBlocked("與 `M4` 自相矛盾", profiles={"normal-mixed": bad})
+
+    def test_d_反向_換一家後轉綠(self):
+        self.assertGreen(profiles={"normal-mixed": self.BASE})
+
+    def test_d_反向_補上完整_waiver_後放行(self):
+        """AC4 第三條：有合法 waiver 時 (d) 這個反例要放行，不是照樣紅。"""
+        waived = dict(self.BASE, roles={"developer": "codex", "code-reviewer": "codex"},
+                      **self.WAIVER)
+        self.assertGreen(profiles={"codex-emergency": waived}, active="codex-emergency")
+
+    def test_d_沒寫_roles_時同廠也算_吃的是_default_provider(self):
+        """兩個角色都沒覆寫 ⇒ 都落在 `default_provider` ⇒ 同廠。"""
+        bare = {"default_provider": "claude"}
+        self.assertBlocked("與 `M4` 自相矛盾", profiles={"normal-mixed": bare})
+
+    def test_d_review_provider_distinct_設_false_時不強制(self):
+        loose = {"default_provider": "claude", "review_provider_distinct": "false"}
+        self.assertGreen(profiles={"normal-mixed": loose})
+
+    # ── `waives_m4` 的三條相依規則 ──────────────────────────────────────
+    def test_waiver_理由空白時擋下(self):
+        bad = dict(self.BASE, roles={"developer": "codex", "code-reviewer": "codex"},
+                   emergency="true", waives_m4="true", waiver_reason="")
+        self.assertBlocked("沒有非空的 `waiver_reason`",
+                           profiles={"codex-emergency": bad}, active="codex-emergency")
+
+    def test_反向_理由填上後轉綠(self):
+        ok = dict(self.BASE, roles={"developer": "codex", "code-reviewer": "codex"},
+                  **self.WAIVER)
+        self.assertGreen(profiles={"codex-emergency": ok}, active="codex-emergency")
+
+    def test_waiver_掛在非_emergency_的_profile_上擋下(self):
+        bad = dict(self.BASE, roles={"developer": "codex", "code-reviewer": "codex"},
+                   waives_m4="true",
+                   waiver_reason="額度耗盡期間的臨時配置；額度恢復後切回。")
+        self.assertBlocked("沒有 `emergency: true`", profiles={"normal-mixed": bad})
+
+    def test_反向_補上_emergency_後轉綠(self):
+        ok = dict(self.BASE, roles={"developer": "codex", "code-reviewer": "codex"},
+                  **self.WAIVER)
+        self.assertGreen(profiles={"codex-emergency": ok}, active="codex-emergency")
+
+    # ── 界線與其餘合法性 ────────────────────────────────────────────────
+    def test_非_active_的_profile_一樣要通過(self):
+        """它存在的理由就是「隨時可以切過去」，等切過去才發現非法就太遲了。"""
+        self.assertBlocked(
+            "profile `spare`",
+            profiles={"normal-mixed": self.BASE,
+                      "spare": dict(self.BASE, default_provider="banana")},
+        )
+
+    def test_缺_default_provider_擋下(self):
+        self.assertBlocked("缺必填欄位 `default_provider`",
+                           profiles={"normal-mixed": {"roles": {"developer": "claude"}}})
+
+    def test_布林欄位打錯字不靜默當成_false(self):
+        """猜錯的方向永遠是「當成 false」，也就是靜靜把一項豁免取消掉。"""
+        bad = dict(self.BASE, roles={"developer": "codex", "code-reviewer": "codex"},
+                   emergency="true", waives_m4="ture",
+                   waiver_reason="額度耗盡期間的臨時配置；額度恢復後切回。")
+        self.assertBlocked("`waives_m4` 是 `ture`",
+                           profiles={"codex-emergency": bad}, active="codex-emergency")
+
+    def test_理由欄打錯字被當成不認得的欄位擋下(self):
+        bad = dict(self.BASE, roles={"developer": "codex", "code-reviewer": "codex"},
+                   emergency="true", waives_m4="true", waiver_resaon="打錯字的理由")
+        self.assertBlocked("不認得的欄位 `waiver_resaon`",
+                           profiles={"codex-emergency": bad}, active="codex-emergency")
+
+    def test_整段缺席就是路由未啟用_印綠並說明(self):
+        self.write(".foundry/config.yml", "foundry: 2\ndevtools_platform: local-md\n")
+        res = foundry_lint.check_model_routing_sync(self.root)
+        self.assertTrue(res.passed, res.failures)
+        self.assertIn("未啟用", res.summary)
+
+    def test_登記表取不到時停下報錯而不是退回寫死的值域(self):
+        self.assertBlocked("取不到 `PROVIDERS` 登記表", providers="X = 1\n")
+
+    def test_摘要寫明本項不含平台對帳(self):
+        """AC5：本項綠不代表平台對得上，別把 ✅ 讀成 adapter 都已經切過去了。"""
+        res = self.assertGreen()
+        self.assertIn("apply_profile.py --check", res.summary)
+        self.assertIn("不含平台對帳", res.summary)
+        self.assertIn("平台對帳", foundry_lint.check_model_routing_sync.__doc__)
+
+
 class RefScopeSharedTest(unittest.TestCase):
     """`ref_at_or_after` 是 `mirror_since` 與 `ISSUE_RULES_SINCE` 共用的那支。"""
 

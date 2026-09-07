@@ -86,6 +86,33 @@ class RealConfigTest(unittest.TestCase):
         self.assertEqual(cfg.get("devtools_platform"), "paperclip")
 
 
+class RealModelRoutingTest(unittest.TestCase):
+    """本 repo 的 `model_routing` 段在 `model-routing-sync` 底下是綠的（MYL-130 AC6）。
+
+    分工同 `RealOrgTest`：四個反例與反向案例都是可攜的，守在 `ModelRoutingSyncTest`；
+    這裡守的是「**本 repo** 現在寫的那三個 profile 真的合法」——包含
+    `claude-only` 與 `codex-emergency` 那兩份「同廠 ＋ 明文 waiver」的配置。
+    它們是本檢查最容易被寫錯的方向（把 waiver 當成一般選項、或反過來連合法的
+    waiver 也一起擋），拿真檔守一道比再造一個 fixture 誠實。
+    """
+
+    def test_真實設定檔的三個_profile_都合法(self):
+        res = foundry_lint.check_model_routing_sync(REPO_ROOT)
+        self.assertTrue(res.passed, res.failures)
+
+    def test_理由欄讀得到區塊純量的本體(self):
+        """`waiver_reason: >-` 曾被讀成字面值 `">-"`，於是空理由也算非空。"""
+        cfg = foundry_lint.read_config(REPO_ROOT)
+        for name, profile in cfg["model_routing"]["profiles"].items():
+            if profile.get("waives_m4") != "true":
+                continue
+            with self.subTest(profile=name):
+                reason = profile["waiver_reason"]
+                self.assertNotIn(">-", reason)
+                self.assertIn("改回", reason,
+                              "waiver 的理由必須寫明改回的條件（`M5`(d)）")
+
+
 class RealOrgTest(unittest.TestCase):
     """`.foundry/org.yml` 的內容——斷言的是 agent-foundry 自己那份的宣告。
 
@@ -470,7 +497,8 @@ class SelfcheckTest(unittest.TestCase):
                          {"entry-sync", "nav-sync", "anchors", "rule-ids",
                           "rule-marks", "big-files", "internal-links",
                           "version-shape", "table-shape", "config-schema",
-                          "org-sync", "handbook-stamp", "init-copy-list",
+                          "org-sync", "model-routing-sync",
+                          "handbook-stamp", "init-copy-list",
                           "selfcheck-names", "mirror-recon",
                           "issue-authors", "pm-issue-fields"})
 
