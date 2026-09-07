@@ -471,7 +471,8 @@ class SelfcheckTest(unittest.TestCase):
                           "rule-marks", "big-files", "internal-links",
                           "version-shape", "table-shape", "config-schema",
                           "org-sync", "handbook-stamp", "init-copy-list",
-                          "selfcheck-names", "mirror-recon"})
+                          "selfcheck-names", "mirror-recon",
+                          "issue-authors", "pm-issue-fields"})
 
     def test_selfcheck_不需要_type_與_file(self):
         proc = self._run()

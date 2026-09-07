@@ -87,6 +87,10 @@ curl -s -X POST "${AUTH[@]}" -d "$(jq -n \
 - `type_label` 與其他 label 於開單後用 `set_labels` 掛上（開單 API 不吃 label 名稱，只吃 `labelIds`）。
 - `milestone`／`assignee` 有給時，開單後分別用 `set_milestone` 與 `PATCH … {"assigneeAgentId":"<agent UUID>"}` 設定。
 - 子單另有捷徑：`POST /api/issues/<父單ID>/children` 開單即帶 `parentId`，省一次 `link_issues`。
+- **開單者**（protocol `I1` 的比對對象）落在 `createdByAgentId`／`createdByUserId` 兩欄：agent 開的填前者、使用者開的填後者，**平台自己開的單兩欄皆為 `null`**。開單者**開出來就定了**，改不動（見下方「平台限制」）。
+- **`I1` 的覆核完成標記**讀的是 `GET /api/issues/<ID>/comments`：留言 body 有 `I1-覆核完成：…` 那一行、**且**該則留言是覆核者留的才算數。判作者只能看 `authorAgentId`（＝Product Manager 的 agent id）與 `authorUserId`／`authorType: "user"`（＝使用者）。⚠️ **不要拿 `onBehalfOfUserId` 判「使用者留的」**——agent 留的留言那一格也有值（2026-09-07 實測本單全部留言皆是），拿它判等於任何 agent 都能把自己的違規標記成已覆核。已刪除的留言（`deletedAt` 有值）仍會回在陣列裡，要跳過。
+- **`I2` 的四欄在本平台的承載欄位**：指派對象＝`assigneeAgentId`（或 `assigneeUserId`）、上位單＝`parentId`、上游依賴＝`blockedBy` **或** `description` 裡 `**上游**：…MYL-97…` 那一行（條文的第二條路，正則見 `foundry_lint.py` 的 `UPSTREAM_LINE_RE`）、驗收標準＝`description` 裡的四段骨架第三段。反向那一格判的是 **`parentId` 有沒有出現在 `blockedBy[].id` 裡**（比 uuid，不要拿 `identifier` 比）。⚠️ **`blockedBy`／`blocks` 只有單筆端點 `GET /api/issues/<ID>` 回得出來**，`list_issues` 那份沒有這兩鍵，且 `description` 可能被截斷（`descriptionTruncated`）——拿清單那份判 `I2`，上游欄的兩條路會同時失真（依賴欄恆空、描述那一行可能被截掉），整格恆紅。
+- **`blocks`（下游被擋）在本平台沒有寫入路徑**，所以它不在 `I2` 的必備欄位裡：依賴只有一種關係型別、一條邊，`blockedBy` 與 `blocks` 是同一張表的兩個讀取方向，可寫的只有下游那張單自己的 `blockedByIssueIds`（見下方「平台限制」`L29`）。
 - **查證**：回傳的 `identifier` 即新 issue_ref；`list_issues` 查得到。
 
 ### update_status
@@ -319,6 +323,7 @@ curl -s -X PATCH "${AUTH[@]}" \
 | 公司層 skill 的匯入／更新，agent 呼叫一律 403 `skill_actor_restricted` | 屬 protocol 第 4 節 HITL 閘門第 6 條：發卡請使用者執行，不空轉重試（Pilot 卡點 #5） |
 | agent 的 `terminate`／`delete`／`pause` 為 board-only（403） | 同上，發卡請使用者執行 |
 | `labelIds`／`blockedByIssueIds` 為全量替換 | 一律 read-modify-write（見上方「全量替換欄位」） |
+| 開單權沒有對應的 `permissionKey`（21 把裡沒有 `issues:*`），且 `createdByAgentId` 沒有更新路徑 | protocol `I1` 因此是**事後檢查不是閘門**：違規的單擋不住、開出來也改不了作者，處置是交回 Product Manager 覆核（`D1`～`D4`）。細節與實測見 `docs/standards/known-drift.md` `L28` |
 | 已結案工單的一般留言／PATCH 為惰性 | 需要重啟後續工作時帶 `"resume": true`；狀態退回帶 `"reopen": true` |
 | 互動卡（`ask_user_questions`／`suggest_tasks`／`request_confirmation`）非本介面 8 動詞 | 屬 protocol 第 4 節關卡與閘門的執行手段，走 `POST /api/issues/<ID>/interactions`；本 adapter 不重複定義 |
 | `PATCH /api/agents/<AID>/permissions` 名為 PATCH，`canCreateAgents`／`canAssignTasks` 卻是必填 | read-modify-write（同 `labelIds`）。見「provision_team」步驟 2 |

@@ -99,6 +99,7 @@ agent-foundry/
 | `docs/pilot/pilot-log.md` | 歷史紀錄，除非要查典故否則不必讀 |
 | `docs/handbook/07-workflows.md` | 八條固定 workflow 的索引。要查某條流程「什麼時候啟動、規則本體在哪」時讀該條那一節即可 |
 | `skills/foundry-init/SKILL.md` | 只在導入全新專案時讀 |
+| `docs/handbook/06-org-structure.md` | 組織形狀的**說明層**（規則本體在 protocol 第 9 節、開單規則在第 1 節）。查「現在誰向誰匯報」讀組織圖那一節，查「誰能開單」讀 PM 那一節即可 |
 | `skills/foundry-platform/adapters/github.md` | 兩種用途各佔一半：`devtools_platform: github` 的動詞對照，與「鏡像模式」規格。要哪一個讀哪一節 |
 | `skills/foundry-platform/adapters/gitlab.md` | 同樣兩種用途：`devtools_platform: gitlab` 的動詞對照，與 `publish_docs` 的兩個投影面（wiki／Pages）。**先讀開頭的「版本分岔」**——Free 與 Premium 有四個動詞走法不同，判錯了不會報錯 |
 | `skills/foundry-platform/SKILL.md` | 介面定義。只讀你要用的那個動詞那一節：軸 B 九動詞在 §3、軸 A 的 `provision_team` 在 §8；§5 的「全覆蓋」裁定只在新增平台或新增目標面時才需要 |
@@ -132,7 +133,7 @@ agent-foundry/
 # 文件是否符合模板必備章節（type: brd|prd|hld|lld|review-report|test-plan）
 python3 tools/foundry-lint/foundry_lint.py --type prd docs/features/<模組>/PRD.md
 
-# repo 規範自檢（雙入口同步、手冊 nav 一致性、錨點、規則 ID 引用、規則標記、大檔清單、相對連結、版本號形狀、表格形狀、設定欄位、組織宣告、手冊戳記、init 複製清單、自檢名稱清單、鏡像對帳）
+# repo 規範自檢（雙入口同步、手冊 nav 一致性、錨點、規則 ID 引用、規則標記、大檔清單、相對連結、版本號形狀、表格形狀、設定欄位、組織宣告、手冊戳記、init 複製清單、自檢名稱清單、鏡像對帳、開單者白名單、開單必備欄位）
 python3 tools/foundry-lint/foundry_lint.py --selfcheck
 
 # 測試
