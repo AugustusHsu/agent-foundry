@@ -63,8 +63,28 @@ push:
 #    selfcheck 只驗 repo 內宣告的自洽性，平台對帳要 API 金鑰、進不了 pre-commit。
 #    第一次真的跑往返切換與對帳是 MYL-125 計畫的 C5，不是本段寫入的當下。
 model_routing:
-  active: codex-emergency
+  # 2026-09-07 14:41 使用者於 MYL-125 留言指示：codex 額度耗盡，全隊先回 claude，
+  # 並要求 CEO 破例直接改（含 M6 第 2 級的 profile 增修）。授權原文在該單留言
+  # 27125d26-904f-4965-9374-11de4a489346；本段三處改動（新增 claude-only、active 換手、
+  # normal-mixed 換角色）全部依那一則。
+  active: claude-only
   profiles:
+    # 用在「codex 額度耗盡、只剩 claude 一家可用」的期間：不做任何 roles 覆寫，
+    # 全隊一律 default_provider。⚠️ 這代表 Developer 與 Code Reviewer 同廠，
+    # 所以本 profile 必須掛 waiver（emergency + waives_m4 + waiver_reason 三件缺一非法）。
+    claude-only:
+      default_provider: claude
+      review_provider_distinct: true
+      emergency: true
+      waives_m4: true
+      waiver_reason: >-
+        Codex 額度耗盡期間，使用者指定全隊回到單一供應商 claude（MYL-125 留言
+        27125d26，2026-09-07 14:41）。只剩一家可用時 M4 的第一個前提本來就不成立，
+        但 probe_providers 只驗 CLI 在不在、驗不到額度——它仍會回報「2 家可用」，
+        於是機械上 M4 看似成立。掛明文 waiver 是為了讓這個落差留下痕跡，
+        而不是靠讀設定的人自己想起來。改回條件：Codex 額度恢復、且該供應商實跑
+        一輪不再撞額度牆之後，依 M6 第 1 級切回 normal-mixed（Code Reviewer 與
+        QA Engineer 回 codex，M4 自然成立），本 waiver 隨 active 換手即失效。
     # 名字的意思是「把角色收容到 Codex 的應急配置」，不是「全隊都在 Codex」——
     # 收容範圍就是下面 roles 列到的那兩個角色，其餘仍在 default_provider。
     codex-emergency:
@@ -80,14 +100,20 @@ model_routing:
         Claude 額度耗盡期間，使用者指定把 Developer 與 Code Reviewer 同置於 codex
         （MYL-125 計畫修訂 2 的 D2 採用 (b)：以明文 waiver 收容現況，而不是用一條剛寫好的
         規則去推翻三小時前的決定）。改回條件：Claude 額度恢復、且 probe_providers 判
-        claude 為「✅ 可用」之後，依 M6 第 1 級切回 normal-mixed（Code Reviewer 回 claude，
-        M4 自然成立），本 waiver 隨 active 換手即失效。
-    # 常態配置：實作 codex、審查 claude，異廠 ⇒ M4 成立，不需要也不得掛 waiver。
+        claude 為「✅ 可用」之後，依 M6 第 1 級切回 normal-mixed（Developer 回 claude、
+        審查側留在 codex，M4 自然成立），本 waiver 隨 active 換手即失效。
+    # 常態配置：實作 claude、審查 codex，異廠 ⇒ M4 成立，不需要也不得掛 waiver。
+    # ⚠️ 2026-09-07 依使用者留言 27125d26 換過角色：Developer 由 codex 改 claude、
+    #    QA Engineer 改 codex。code-reviewer 那一列使用者沒有點名，但它是**被推導出來的**：
+    #    Developer 一旦落在 claude，Code Reviewer 只要也留在 claude 就同廠，而常態
+    #    profile 不是 emergency、掛不上 waives_m4 ⇒ 整檔非法。codex 是唯一能同時滿足
+    #    「Developer 用 claude」與 M4 的值。要改成別的，得先處理 M4。
     normal-mixed:
       default_provider: claude
       roles:
-        developer: codex
-        code-reviewer: claude
+        developer: claude       # 使用者指定（原 codex）
+        code-reviewer: codex    # 推導值，理由見上方 ⚠️
+        qa-engineer: codex      # 使用者指定（原本沒列 ⇒ 跟隨 default_provider claude）
       review_provider_distinct: true
 
 # 三層文檔投影（MYL-39 計畫 v5 §2「D-3」，使用者於確認卡 7598a79e 整包核可；本段值即該節寫定的值）。
