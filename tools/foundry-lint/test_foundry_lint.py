@@ -2429,6 +2429,56 @@ class IssueParentAuditTest(unittest.TestCase):
                               declared=lambda it: True)
         self.assertEqual(declared, [])
 
+    def test_走例外的那張單被分進另一堆而不是被丟掉(self):
+        """CR 第 1 輪瑕疵 #1：例外**放行**與例外**留得下痕跡**是兩件事。
+
+        `audit_issue_parents()` 那一側只看得到「不報」，所以在這裡直接問分堆
+        那一支：宣告成立的單要出現在 `exempt` 裡。少了這一條，把 `exempt`
+        改回丟棄（`continue`）照樣全綠——那正是上一輪的瑕疵本身。
+        """
+        it = _authored("MYL-130", agent="tl-id", issue_id="u1")
+        missing, exempt = foundry_lint.partition_issue_parents(
+            [it], self.SINCE, declared=lambda x: True)
+        self.assertEqual(missing, [])
+        self.assertEqual([i.ref for i in exempt], ["MYL-130"])
+
+    def test_例外查詢每張只問一次(self):
+        """`declared` 在連線那條路是一次單筆端點呼叫，問兩次等於 API 翻倍。"""
+        asked = []
+        foundry_lint.partition_issue_parents(
+            [_authored("MYL-130", agent="tl-id", issue_id="u1"),
+             _authored("MYL-131", agent="tl-id", issue_id="u2")],
+            self.SINCE, declared=lambda it: asked.append(it.ref) or False)
+        self.assertEqual(asked, ["MYL-130", "MYL-131"])
+
+    def test_沒人用例外時_summary_不多印東西(self):
+        """預期為空的那一條：常態下這句話不該出現，否則它就成了背景雜訊。"""
+        self.assertEqual(foundry_lint.toplevel_exception_note([]), "")
+
+    def test_例外的張數與單號都印得出來(self):
+        """「被看見」＝知道有幾張**而且**知道是哪幾張——要去覆核的正是那幾張。
+
+        只印張數的話，讀的人得自己翻 123 張單的描述才找得到它們。
+        """
+        note = foundry_lint.toplevel_exception_note(
+            [_authored("MYL-130"), _authored("MYL-131")])
+        self.assertIn("2 張", note)
+        self.assertIn("MYL-130", note)
+        self.assertIn("MYL-131", note)
+
+    def test_讀不到描述時訊息要說出來而不是叫人去補一行宣告(self):
+        """CR 第 1 輪次要建議 #1：判準不變（讀不到照樣報），分岔的是**訊息**。
+
+        兩段一起驗：加註的那句要在，而**基準那則不能有**——只驗「有加註」的話，
+        把它寫成無條件附加也會綠，於是每一則紅字都掛著一句不適用的但書。
+        """
+        it = _authored("MYL-130", agent="tl-id", issue_id="u1")
+        with_why = foundry_lint.issue_parent_failure(it, unreadable="HTTP 503")
+        self.assertIn("讀不到這張單的描述", with_why)
+        self.assertIn("HTTP 503", with_why)      # 原因原樣帶出來：瞬斷 ≠ 403
+        self.assertNotIn("讀不到這張單的描述",
+                         foundry_lint.issue_parent_failure(it))
+
     def test_沒有宣告查詢時一律當作沒有(self):
         """`declared=None` ＝純函式測試不必假造描述，姿態同 `cleared`。"""
         self.assertTrue(self.audit([_authored("MYL-130", agent="tl-id")]))
@@ -2492,15 +2542,24 @@ class ToplevelDeclarationTest(unittest.TestCase):
 class IssueRuleCrossCheckTest(unittest.TestCase):
     """`I1`／`I2`／`I3` 三項並存不互相誤殺（MYL-117 AC4）。
 
-    三列比對：**只違反 `I1`**（開單者不在白名單、但有上位單）、**只違反 `I3`**
-    （開單者合法、但沒有上位單）、**兩者皆違反**。每一列都問兩支判準函式，
-    驗的是「該報的報、不該報的不報」——只驗總數會讓「A 少報一則、B 多報一則」
-    這種互相抵銷的錯誤靜默通過（同 MYL-106 的計數陷阱）。
+    **兩個交互面各四列**，每一列都問兩支判準函式，驗「該報的報、不該報的不報」
+    ——只驗總數會讓「A 少報一則、B 多報一則」這種互相抵銷的錯誤靜默通過
+    （同 MYL-106 的計數陷阱）。第四列（兩者皆綠的基準）不是湊數：沒有它，
+    前三列**全紅**也照樣通過。
+
+    - `I1`×`I3`（`both()`）：判**不同欄位**（開單者 vs `parentId`），本來就難互
+      相誤殺，驗的是「難」不等於「不會」。
+    - `I2`×`I3`（`i2_i3()`）：判**同一格**（`PmIssueFields.parent` 與
+      `AuthoredIssue.parent` 都是 `parentId`），而 `I1` 白名單是 CEO ＋ PM
+      ⇒ 實務上多數 `I3` 射程內的單同時也在 `I2` 射程內。**這一對才是主要的交互
+      面**，也是 `check_issue_parent` docstring「重疊處兩項都會報、不會一綠一紅」
+      那句宣稱的證據（MYL-117 CR 第 1 輪瑕疵 #2）。
     """
 
     ALLOWED = {"ceo-id": "CEO", "pm-id": "Product Manager"}
     NAMES = {"ceo-id": "CEO", "pm-id": "Product Manager", "tl-id": "Tech Lead"}
     SINCE = "MYL-125"
+    PM = "pm-id"
 
     def both(self, issue):
         i1 = foundry_lint.audit_issue_authors([issue], self.ALLOWED, self.NAMES,
@@ -2508,25 +2567,44 @@ class IssueRuleCrossCheckTest(unittest.TestCase):
         i3 = foundry_lint.audit_issue_parents([issue], self.SINCE)
         return bool(i1), bool(i3)
 
-    def test_只違反_I1(self):
+    def i2_i3(self, ref, agent, parent="", has_ac=True):
+        """同一張單各造一份 dataclass 餵給兩支判準，回傳 `(I2 紅不紅, I3 紅不紅)`。
+
+        兩支吃的型別不同（`PmIssueFields` vs `AuthoredIssue`），但 `parent`
+        在這裡**只寫一次、同時餵進兩份**——兩邊各填各的話，「兩項判的是同一格」
+        這件事就被測試自己繞過去了。
+
+        `I2` 的射程（只拘束 Product Manager 開的單）住在
+        `check_pm_issue_fields()` 裡，純函式那一支拿到的已經是篩過的；這裡照樣
+        篩一次，否則「非 PM 開的單不歸 `I2` 管」會被誤讀成 `I2` 也該紅。
+        """
+        in_scope = [foundry_lint.PmIssueFields(
+            ref=ref, assignee="dev-id", parent=parent, blocked_by=1,
+            has_ac=has_ac)] if agent == self.PM else []
+        i2 = foundry_lint.audit_pm_issue_fields(in_scope)
+        i3 = foundry_lint.audit_issue_parents(
+            [_authored(ref, agent=agent, parent=parent)], self.SINCE)
+        return bool(i2), bool(i3)
+
+    def test_I1xI3_只違反_I1(self):
         """白名單外的 agent，但單掛在樹上 ⇒ 只有 `I1` 該紅。"""
         self.assertEqual(
             self.both(_authored("MYL-130", agent="tl-id", parent="p")),
             (True, False))
 
-    def test_只違反_I3(self):
+    def test_I1xI3_只違反_I3(self):
         """合法開單者（CEO），但沒掛上位單 ⇒ 只有 `I3` 該紅。"""
         self.assertEqual(
             self.both(_authored("MYL-131", agent="ceo-id")),
             (False, True))
 
-    def test_兩者皆違反(self):
+    def test_I1xI3_兩者皆違反(self):
         """白名單外＋沒上位單 ⇒ 兩項各報各的，兩條紅字講的是兩件事。"""
         self.assertEqual(
             self.both(_authored("MYL-132", agent="tl-id")),
             (True, True))
 
-    def test_兩者皆不違反(self):
+    def test_I1xI3_兩者皆不違反(self):
         """第四列：合法開單者＋有上位單 ⇒ 兩項都綠。
 
         沒有這一列，前三列全紅也照樣通過——「該報的報」證完還要證「基準是綠的」。
@@ -2534,6 +2612,52 @@ class IssueRuleCrossCheckTest(unittest.TestCase):
         self.assertEqual(
             self.both(_authored("MYL-133", agent="ceo-id", parent="p")),
             (False, False))
+
+    def test_I2xI3_兩者皆違反_判的是同一格(self):
+        """PM 開、沒有上位單 ⇒ 兩項都紅。
+
+        這是 `check_issue_parent` docstring 那句宣稱的正主：同一張單缺同一格
+        （`parentId`），兩條紅字指向同一個處置（把上位單補上），**不會一綠一紅**。
+        重疊是刻意的，不是誤殺。
+        """
+        self.assertEqual(self.i2_i3("MYL-134", agent=self.PM), (True, True))
+
+    def test_I2xI3_只違反_I2(self):
+        """PM 開、上位單有了、但缺驗收標準 ⇒ 只有 `I2` 該紅。
+
+        守的是「`I3` 不會被 `I2` 的其他欄位帶著一起紅」——它只判上位單那一格。
+        """
+        self.assertEqual(self.i2_i3("MYL-135", agent=self.PM, parent="p",
+                                    has_ac=False),
+                         (True, False))
+
+    def test_I2xI3_只違反_I3(self):
+        """非 PM 的 agent（CEO）開、沒有上位單 ⇒ 只有 `I3` 該紅。
+
+        守的是**射程差**：`I2` 只拘束 PM 開的單，`I3` 拘束所有 agent 開的單。
+        兩項的射程若哪天被合併成同一份，這一列會變 `(True, True)`。
+        """
+        self.assertEqual(self.i2_i3("MYL-136", agent="ceo-id"), (False, True))
+
+    def test_I2xI3_兩者皆不違反(self):
+        """第四列基準：PM 開、四欄齊備、有上位單 ⇒ 兩項都綠。"""
+        self.assertEqual(self.i2_i3("MYL-137", agent=self.PM, parent="p"),
+                         (False, False))
+
+    def test_I2xI3_同一格的紅字兩邊都指向上位單(self):
+        """兩者皆違反時不只要「都紅」，還要**紅在同一格**。
+
+        只斷言 `(True, True)` 的話，`I2` 因為別的欄位紅、`I3` 因為上位單紅，
+        照樣通過——那是兩件事湊出來的巧合，不是「判同一格」的證據。
+        """
+        ref, parent = "MYL-138", ""
+        i2 = foundry_lint.audit_pm_issue_fields([foundry_lint.PmIssueFields(
+            ref=ref, assignee="dev-id", parent=parent, blocked_by=1, has_ac=True)])
+        i3 = foundry_lint.audit_issue_parents(
+            [_authored(ref, agent=self.PM, parent=parent)], self.SINCE)
+        self.assertIn("上位單", i2[0])
+        self.assertIn("沒有上位單", i3[0])
+        self.assertNotIn("驗收標準", i2[0])      # 這一輪只有那一格是空的
 
     def test_使用者自建的單兩項都不報但理由不同(self):
         """重疊處：`I1` 因為他是白名單第一位，`I3` 因為裁定 B1 把他排除在射程外。
@@ -2596,7 +2720,8 @@ class IssueRulesCheckTest(unittest.TestCase):
     def test_非_paperclip_平台是跳過(self):
         self.write_config("devtools_platform: github\n")
         for check in (foundry_lint.check_issue_authors,
-                      foundry_lint.check_pm_issue_fields):
+                      foundry_lint.check_pm_issue_fields,
+                      foundry_lint.check_issue_parent):
             with self.subTest(check=check.__name__):
                 self.assertTrue(check(self.root).skipped)
 
@@ -2723,6 +2848,61 @@ class IssueRulesCheckTest(unittest.TestCase):
         self.assertIn("上位單", res.failures[0])          # 真紅字還在
         self.assertIn("MYL-131", res.failures[1])          # 撈不到的那張也看得見
         self.assertIn("PM 開了 2 張", res.summary)
+
+    def test_沒有上位單的單走完整條路會被抓到(self):
+        issues = [_authored("MYL-130", agent="ceo-id", issue_id="u1"),
+                  _authored("MYL-131", agent="ceo-id", parent="p", issue_id="u2")]
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(foundry_lint, "fetch_authored_issues",
+                                  return_value=(issues, "")), \
+                mock.patch.object(foundry_lint, "api_get",
+                                  return_value=({"description": "沒有宣告"}, "")):
+            res = foundry_lint.check_issue_parent(self.root)
+        self.assertFalse(res.passed)
+        self.assertEqual(len(res.failures), 1)
+        self.assertIn("MYL-130", res.failures[0])
+        self.assertIn("agent 開了 2 張", res.summary)
+
+    def test_走頂層單例外的單放行且出現在輸出裡(self):
+        """CR 第 1 輪瑕疵 #1 的驗收條件：例外**放行**，而且 `--selfcheck` 看得見。
+
+        兩段缺一不可。只驗放行的測試在上一輪的程式碼上照樣全綠——那正是瑕疵
+        本身；只驗看得見，又證不出它沒有被順手改成擋下（例外本來就該放行）。
+
+        第二列是守門的那半：**同一份輸入、只把描述裡那行宣告拿掉**，紅字要回來
+        且 summary 不再提例外。少了它，「例外生效了」與「這條路根本沒接上、
+        summary 那句話是無條件印的」兩種綠分不出來。
+        """
+        issues = [_authored("MYL-130", agent="ceo-id", issue_id="u1")]
+        for description, declared in (
+                ("**頂層單**：一整條新工作線的起點，不是任何單的衍生", True),
+                ("這張單是 MYL-96 的衍生", False)):
+            with self.subTest(declared=declared):
+                with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                        mock.patch.object(foundry_lint, "fetch_authored_issues",
+                                          return_value=(issues, "")), \
+                        mock.patch.object(
+                            foundry_lint, "api_get",
+                            return_value=({"description": description}, "")):
+                    res = foundry_lint.check_issue_parent(self.root)
+                self.assertEqual(res.passed, declared)      # 放行 / 照樣報
+                self.assertFalse(res.skipped)               # 綠是判過了不是跳過了
+                self.assertEqual("頂層單例外" in res.summary, declared)
+                self.assertEqual("MYL-130" in res.summary, declared)
+
+    def test_描述讀不到時紅字留著並說明本輪沒判成(self):
+        """失效方向安全（照樣報），但訊息得說出來——見 `issue_parent_failure()`。"""
+        with mock.patch.dict(os.environ, _ONLINE_ENV), \
+                mock.patch.object(
+                    foundry_lint, "fetch_authored_issues",
+                    return_value=([_authored("MYL-130", agent="ceo-id",
+                                             issue_id="u1")], "")), \
+                mock.patch.object(foundry_lint, "api_get",
+                                  return_value=(None, "連不上")):
+            res = foundry_lint.check_issue_parent(self.root)
+        self.assertFalse(res.passed)
+        self.assertIn("讀不到這張單的描述", res.failures[0])
+        self.assertIn("連不上", res.failures[0])
 
 
 class FetchPmIssueFieldsTest(unittest.TestCase):

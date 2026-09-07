@@ -2596,7 +2596,8 @@ ISSUE_AUTHOR_REVIEWER_ROLE_IDS = (PM_ROLE_ID,)
 #: 留一條看得見、要寫理由的出口，比這兩條都好。
 #: 為什麼收得窄：2026-09-07 全專案實查，agent 開的 **97 張單沒有一張是頂層單**
 #: （97/97 都掛得到樹上，含 CEO 開的 60 張）。這一條因此是**預期為空的例外**——
-#: 用到它就該被看見、被問一句，不是常態出口。
+#: 用到它就該被看見、被問一句，不是常態出口。「被看見」那半有機械兌現：走了這條
+#: 出口的單會連張數帶單號印在 `issue-parent` 的 summary 裡（`toplevel_exception_note()`）。
 ISSUE_TOPLEVEL_RE = re.compile(r"^\s*\*\*頂層單\*\*[：:]\s*\S", re.M)
 
 #: `I2` 上游欄的欄位名。它**不是**單一個平台欄位，是「依賴欄非空 **或** 描述裡有
@@ -2797,25 +2798,77 @@ def audit_issue_parents(issues: list, since: str, declared=None) -> list:
     的那幾張呼叫**（見 `issue_parent_violations()`）。不傳＝不查，一律當作沒有：
     純函式測試因此不必假造描述，連線那條路才把它接上去。姿態與 `cleared` 同。
 
+    只要 failure 那一半的呼叫端用這支；連線那條路走
+    `partition_issue_parents()`，因為它**還要把走例外的那幾張印出來**。
+    """
+    missing, _ = partition_issue_parents(issues, since, declared)
+    return [issue_parent_failure(it) for it in missing]
+
+
+def partition_issue_parents(issues: list, since: str, declared=None) -> tuple:
+    """純函式：射程內沒有上位單的單，分成 `(要報的, 走頂層單例外的)` 兩堆。
+
+    **分兩堆而不是把例外那堆丟掉**，是 MYL-117 CR 第 1 輪瑕疵 #1：protocol 的
+    `I3` 寫「用到這條例外的單應該被看見、被問一句」，而例外的出口寫在**描述**
+    裡——描述沒有作者欄、開單者本人 PATCH 得動（`allow_self`），所以它與 `I1`
+    的覆核標記相反，是**可自我特赦的**。直接 `continue` 掉等於那句話在機械層
+    是空頭支票：寫一行 `**頂層單**：因為我不想掛` 紅字就消失且無人得知。
+    放行照舊（例外本來就該放行），改的只是**它不再是靜默的**。
+
+    `declared` 每張**只呼叫一次**：連線那條路它是一次單筆端點呼叫，分兩次問
+    等於把 API 次數翻倍。
+    """
+    missing, exempt = [], []
+    for it in issue_parent_violations(issues, since):
+        (exempt if declared is not None and declared(it) else missing).append(it)
+    return missing, exempt
+
+
+def issue_parent_failure(it, unreadable: str = "") -> str:
+    """一張沒有上位單的單的紅字。
+
     訊息刻意把「補上位單」擺在「宣告」前面：兩條路都收斂得掉紅字，但預設答案是
     補掛（`parentId` 改得動），宣告是例外。順序寫反了，讀紅字的人會先去寫宣告。
+
+    `unreadable`＝這一輪根本沒讀到該單描述時的**原因**（CR 第 1 輪次要建議 #1）。
+    判準本身不變（讀不到就照樣報，漏報看不見、誤報看得見），但**訊息要跟著
+    分岔**：否則連線瞬斷時，一張宣告早就寫好的單會拿到一段叫它「去加一行宣告」
+    的紅字，讀的人照做完才發現本來就有。原因原樣帶出來而不是寫成一句籠統的
+    「讀不到」——連線瞬斷（重跑就好）與 404／403（要去查別的東西）是兩回事。
     """
-    failures = []
-    for it in issue_parent_violations(issues, since):
-        if declared is not None and declared(it):
-            continue
-        failures.append(
-            f"{it.ref} 是 agent 開的單，卻沒有上位單（`I3`）"
-            "——每一張 agent 開的單都要掛得到樹上，否則它不屬於任何一條工作線，"
-            "看板上找不到、結案時也沒有人會回頭看它。"
-            "處置**優先是把上位單補上**：`parentId` 改得動（`PATCH /api/issues/{id}`），"
-            "依據就寫在該單描述裡——它多半是某張單的審查、溢出或衍生。"
-            "真的掛不到任何一張單底下（整條工作線的起點）才走例外："
-            "在描述裡加一行 `**頂層單**：<為什麼它不屬於任何現有工作線>`，"
-            "本項讀到就不再報它。**不要為了轉綠把它掛到不相干的父單底下**"
-            "——那是把樹弄髒來換一個綠燈，而樹正是這一條要保護的東西"
-        )
-    return failures
+    msg = (
+        f"{it.ref} 是 agent 開的單，卻沒有上位單（`I3`）"
+        "——每一張 agent 開的單都要掛得到樹上，否則它不屬於任何一條工作線，"
+        "看板上找不到、結案時也沒有人會回頭看它。"
+        "處置**優先是把上位單補上**：`parentId` 改得動（`PATCH /api/issues/{id}`），"
+        "依據就寫在該單描述裡——它多半是某張單的審查、溢出或衍生。"
+        "真的掛不到任何一張單底下（整條工作線的起點）才走例外："
+        "在描述裡加一行 `**頂層單**：<為什麼它不屬於任何現有工作線>`，"
+        "本項讀到就不再報它。**不要為了轉綠把它掛到不相干的父單底下**"
+        "——那是把樹弄髒來換一個綠燈，而樹正是這一條要保護的東西"
+    )
+    if unreadable:
+        msg += (f"。⚠️ 本輪**讀不到這張單的描述**（{unreadable}），宣告在不在"
+                "其實沒判成——宣告若已經寫好，重跑一次這則就會消失，不必再加一行")
+    return msg
+
+
+def toplevel_exception_note(exempt: list) -> str:
+    """summary 尾巴那句「有幾張走了頂層單例外、是哪幾張」；沒人用時回空字串。
+
+    **這一條預期為空**（protocol `I3`：2026-09-07 實查，agent 開的 97 張沒有一張
+    是頂層單，原因是結構性的——agent 是在系統裡面對既有的單作反應）。所以印得
+    出東西來，本身就是那個「要被問一句」的訊號。
+
+    單號**全列不截斷**：截掉尾巴會讓「被看見」退化成「知道有人用了但不知道是
+    誰」，而要去覆核的正是那幾張。真的多到一行放不下，那件事本身就該被問。
+    """
+    if not exempt:
+        return ""
+    return (f"——其中 {len(exempt)} 張走頂層單例外："
+            + "、".join(it.ref for it in exempt)
+            + "。這一條預期為空，請覆核它們真的各自是一條工作線的起點"
+              "（宣告寫在描述裡、開單者自己改得動，機械只驗形狀不驗理由）")
 
 
 def has_toplevel_declaration(description: str) -> bool:
@@ -2831,19 +2884,23 @@ def has_toplevel_declaration(description: str) -> bool:
     return bool(ISSUE_TOPLEVEL_RE.search(description or ""))
 
 
-def fetch_toplevel_declaration(base: str, token: str, issue_id: str) -> bool:
-    """單筆端點撈該單描述、判頂層單宣告在不在。
+def fetch_toplevel_declaration(base: str, token: str, issue_id: str) -> tuple:
+    """單筆端點撈該單描述、判頂層單宣告在不在；回傳 `(宣告在不在, 讀不到的原因)`。
 
     **非得走單筆端點不可**：清單端點的 `description` 截在 1200 字（2026-09-07
     實測 MYL-124：清單 1200／單筆 3046），宣告若寫在後半，拿清單那份會讀成
     不存在＝假紅，而且是**愈長的單愈容易誤判**——那正是最需要宣告的那種單。
-    讀不到時回 `False`（＝照樣報出來）：漏報看不見，誤報看得見。
+    （清單端點另有 `descriptionTruncated` 旗標，`false` 時本來可以省下這一次
+    呼叫；只對違規單觸發、量小，先不用它，寫在這裡是為了下一個人不必再查一次。）
+
+    讀不到時回 `False`（＝照樣報出來）：漏報看不見，誤報看得見。第二格帶回
+    原因**只餵訊息不餵判準**——見 `issue_parent_failure()` 的 `unreadable`。
     """
-    data, _ = api_get(base, f"/api/issues/{issue_id}", token)
+    data, why = api_get(base, f"/api/issues/{issue_id}", token)
     if data is None:
-        return False
+        return False, why or "讀不到該單描述"
     issue = data.get("issue", data) if isinstance(data, dict) else {}
-    return has_toplevel_declaration(issue.get("description") or "")
+    return has_toplevel_declaration(issue.get("description") or ""), ""
 
 
 def has_author_review_mark(comments: list, reviewer_ids) -> bool:
@@ -3154,6 +3211,9 @@ def check_issue_parent(root: Path) -> SelfcheckResult:
     起算點同 `I1`／`I2`（`ISSUE_RULES_SINCE`）：規則生效前開的單不回溯。回溯那
     一半是**一次性的資料補掛**，已於 2026-09-07 做完（29 張），清單與逐張依據見
     `docs/standards/issue-parent-backfill.md`。
+
+    走了頂層單例外的單**放行但不靜默**：張數與單號印在 summary 尾巴（理由見
+    `partition_issue_parents()`／`toplevel_exception_note()`）。
     """
     res = SelfcheckResult("issue-parent", "agent 開的單掛得到樹上（`I3`）")
     endpoint, why = issue_rules_precondition(root)
@@ -3167,15 +3227,27 @@ def check_issue_parent(root: Path) -> SelfcheckResult:
         res.skipped = f"讀不到來源端：{why}"
         return res
 
-    res.failures.extend(audit_issue_parents(
-        issues, ISSUE_RULES_SINCE,
-        declared=lambda it: bool(it.issue_id) and fetch_toplevel_declaration(
-            base, token, it.issue_id)))
+    # 讀不到描述的那幾張記在旁邊（ref → 原因）：判準不吃它（讀不到照樣報），
+    # 只有訊息吃。收在這一層而不是塞進 `declared` 的回傳型別裡，是為了讓純函式
+    # 那一側的契約維持單純的 bool——測試才不必為了一句訊息去假造連線失敗。
+    unreadable = {}
+
+    def declared(it) -> bool:
+        if not it.issue_id:
+            return False
+        found, why = fetch_toplevel_declaration(base, token, it.issue_id)
+        if why:
+            unreadable[it.ref] = why
+        return found
+
+    missing, exempt = partition_issue_parents(issues, ISSUE_RULES_SINCE, declared)
+    res.failures.extend(issue_parent_failure(it, unreadable.get(it.ref, ""))
+                        for it in missing)
     in_scope = [i for i in issues
                 if ref_at_or_after(i.ref, ISSUE_RULES_SINCE)
                 and i.author_agent and not i.author_user]
     res.summary += (f"（{ISSUE_RULES_SINCE} 起 agent 開了 {len(in_scope)} 張，"
-                    f"全部 {len(issues)} 張）")
+                    f"全部 {len(issues)} 張）" + toplevel_exception_note(exempt))
     return res
 
 
