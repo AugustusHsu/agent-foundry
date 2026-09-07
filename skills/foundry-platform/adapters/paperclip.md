@@ -113,7 +113,9 @@ curl -s -X POST "${AUTH[@]}" -H "X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID" \
 
 - `X-Paperclip-Run-Id` 讓留言歸屬到當次 run，交接包／審查結論一律帶上。
 - 對**已結案**工單留言要生效（重啟後續工作）時，body 之外加 `"resume": true`；否則一般留言為惰性。
-- **查證**：`GET /api/issues/<ID>/comments | jq '.[-1].body'` 為剛發的內容，未截斷。
+- **查證**：`GET /api/issues/<ID>/comments | jq '.[0].body'` 為剛發的內容，未截斷。
+  ⚠️ **是 `.[0]` 不是 `.[-1]`——這份陣列是新到舊**（本文原先寫錯，2026-09-07 MYL-131 實測訂正；見下方「平台限制」`L30`）。
+  更穩的做法是不依賴排序：`POST` 回的就是那則留言本身（含 `id`），拿它打 `GET /api/issues/<ID>/comments/<commentId>` 單筆回讀。
 
 ### set_labels
 

@@ -93,6 +93,11 @@ python3 tools/model-routing/probe_providers.py --format json
 它列到的每一家在 2.1 的輸出裡都是 `✅ 可用`。第三項不成立時是**環境問題不是設定非法**，
 依 `M5` 停下發卡，不要改設定遷就環境。
 
+`devtools_platform: paperclip` 上這三項檢查連同下面的逐角色套用與回查都由
+`tools/model-routing/apply_profile.py` 機械執行（`--check` 先對帳、`--dry-run` 看將送出的
+每一筆、`--apply` 才寫）。**先跑 `--dry-run` 再跑 `--apply`**；下面這幾條講的是它在做什麼，
+以及在沒有這支工具的平台上要手動守住哪幾件事。
+
 然後依 §4 對應平台**逐角色**執行，且**每套用一個角色立刻回查**：
 
 - 回查看的是**查詢回來的值**，不是送出去的 payload，也不是指令回報成功。
@@ -111,6 +116,25 @@ python3 tools/model-routing/probe_providers.py --format json
 - **逐角色的回查結果**（每一格分別列出，不是一句「全部成功」）。
 - **回退指令**：切回原本那個 profile 的完整指令（`M5`(d)：臨時改派要寫得出怎麼改回來）。
 - 這次適用的是 `M6` 第 1 級、依據是哪一次核可（哪張卡／哪份計畫）。
+
+`devtools_platform: paperclip` 上這一步不必手抄——`apply_profile.py` 的 `--apply` 會把上面
+每一項組成一份報告，然後二選一放好：
+
+```bash
+# 貼回既有工單（那張單就是這次切換的稽核落點）
+python3 tools/model-routing/apply_profile.py --profile <名> --apply --issue MYL-nnn
+
+# 或另開一張切換執行單（描述由 templates/switch-execution-issue.md 產生）
+python3 tools/model-routing/apply_profile.py --profile <名> --apply --create-issue --parent MYL-nnn
+```
+
+三件先寫在明處的事：
+
+- **`--parent` 是必填**，工具不會替自己宣告頂層單：新開的單一律掛得到樹上（protocol
+  第 1 節上位單那一條）。`--create-issue` 另外只認 CEO 與 Product Manager 的金鑰（`I1`）。
+- 新單**一開出來就是 `done`**：套用與回查在開單之前就跑完了，它是紀錄不是待辦。
+- **鏡像要自己補**：工具建完單會把 `adapters/github.md` 時機 1＋時機 3 的步驟印出來，
+  漏做會讓 `mirror-recon` 轉紅、擋住全隊的 commit。
 
 ### 2.5 路徑 B：產生指派方案（套政策，不即興）
 
@@ -246,6 +270,8 @@ curl -s -X PATCH -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type:
 | --- | --- |
 | `SKILL.md`（本文） | 兩條路徑的分界與各自的步驟、路由政策、各平台落實方式 |
 | `tools/model-routing/probe_providers.py` | 步驟 2.1 的盤點腳本（供應商登記表也在這裡） |
+| `tools/model-routing/apply_profile.py` | 路徑 A 的工具：`--list`／`--check`／`--dry-run`／`--apply`／`--create-issue`（步驟 2.1～2.4） |
+| `templates/switch-execution-issue.md` | 步驟 2.4 那張切換執行單的描述模板（由 `--create-issue` 機械填寫，不手填） |
 | `skills/foundry-protocol/SKILL.md` 第 8 節 | 規則本體：`M4`／`M5`／`M6` ＋供應商切換權限分級表 |
 | `skills/foundry-platform/config-schema.md` | `model_routing` 段的欄位定義（profile 結構、`active`、waiver 三欄） |
 | `skills/foundry-ai-platform/SKILL.md` | **軸 A**（`ai_platform`）的權威：能力對照表、降級規則。§0 第二列指向它 |
