@@ -51,6 +51,45 @@ push:
   #   ⚠️ 這條例外是使用者對「本 repo」的個別裁定，**不隨 foundry-init／foundry-adopt 傳染**：
   #      導入 Foundry 的其他專案一律照本欄字面執行——main push 無例外，不得援引本 repo 前例放行。
 
+# 模型供應商路由（MYL-128 首次寫入，依 MYL-125 計畫修訂 2；規則本體＝protocol 第 8 節 M4~M6，
+# 欄位權威＝skills/foundry-platform/config-schema.md「model_routing」一節）。
+# ⚠️ 本段一存在就代表「路由已啟用」，M4 的第二個前提因此成立（見計畫第 6 節註 3）。
+#
+# 形狀是「命名 profile ＋ active 指標」：登記多套配置、任何時刻只有一套生效。
+# 只有 active 這一欄 agent 動得了（M6 第 1 級常設授權，義務是留執行單與逐角色回查證據）；
+# profile 的增修刪與內容一律使用者專屬（M6 第 2 級），agent 不得自行改。
+#
+# ⚠️ 本段宣告的是**應然**，與平台實況的對帳不歸 --selfcheck（同 org.yml 那條界線）：
+#    selfcheck 只驗 repo 內宣告的自洽性，平台對帳要 API 金鑰、進不了 pre-commit。
+#    第一次真的跑往返切換與對帳是 MYL-125 計畫的 C5，不是本段寫入的當下。
+model_routing:
+  active: codex-emergency
+  profiles:
+    # 名字的意思是「把角色收容到 Codex 的應急配置」，不是「全隊都在 Codex」——
+    # 收容範圍就是下面 roles 列到的那兩個角色，其餘仍在 default_provider。
+    codex-emergency:
+      default_provider: claude
+      roles:
+        developer: codex        # 2026-09-07 平台實況（MYL-125 計畫第 2 節實查表）
+        code-reviewer: codex    # 同上；與上一列同一家 ⇒ 靠下面的 waiver 收容
+      review_provider_distinct: true
+      emergency: true
+      waives_m4: true
+      # 改回的條件寫死在這裡，不寫在工單留言——留言會被淹掉，而這一行每次讀設定都看得到。
+      waiver_reason: >-
+        Claude 額度耗盡期間，使用者指定把 Developer 與 Code Reviewer 同置於 codex
+        （MYL-125 計畫修訂 2 的 D2 採用 (b)：以明文 waiver 收容現況，而不是用一條剛寫好的
+        規則去推翻三小時前的決定）。改回條件：Claude 額度恢復、且 probe_providers 判
+        claude 為「✅ 可用」之後，依 M6 第 1 級切回 normal-mixed（Code Reviewer 回 claude，
+        M4 自然成立），本 waiver 隨 active 換手即失效。
+    # 常態配置：實作 codex、審查 claude，異廠 ⇒ M4 成立，不需要也不得掛 waiver。
+    normal-mixed:
+      default_provider: claude
+      roles:
+        developer: codex
+        code-reviewer: claude
+      review_provider_distinct: true
+
 # 三層文檔投影（MYL-39 計畫 v5 §2「D-3」，使用者於確認卡 7598a79e 整包核可；本段值即該節寫定的值）。
 # 只有 source 這一層可以人手改；wiki 與精裝站都是機械投影，手改會被下次同步覆蓋。
 # 本段由 MYL-51 依上述核可寫入——依據是使用者核可的計畫，且只動 docs 段、未碰 gates／push

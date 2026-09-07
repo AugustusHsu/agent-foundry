@@ -51,12 +51,23 @@ push:
 # 模型供應商路由（選填，MYL-36）。整段註解掉＝未啟用＝全隊用執行環境預設供應商。
 # 規則本體：foundry-protocol 第 8 節 M4~M6；流程：skills/foundry-model-routing/SKILL.md
 # 先跑 `python3 tools/model-routing/probe_providers.py` 確認哪幾家真的可用再填。
+# 形狀是「命名 profile ＋ active 指標」（MYL-128）：登記多套配置，任何時刻只有一套生效。
+# 只有 active 這一欄 agent 動得了（M6 第 1 級常設授權）；profile 的內容一律使用者專屬。
 # model_routing:
-#   default_provider: claude
-#   roles:                    # 角色 → 供應商；未列的角色用 default_provider
-#     developer: codex        # 寫 code 與審 code 刻意分開兩家（M4），
-#     code-reviewer: claude   # 目的是觀點互補，不是省額度
-#   review_provider_distinct: true   # 強制 M4；設 false 需在工單記錄理由
+#   active: normal-mixed      # 必填，須是 profiles 的鍵之一
+#   profiles:
+#     normal-mixed:           # 名字要說得出「什麼情況下用它」，別叫 profile-1
+#       default_provider: claude
+#       roles:                # 角色 → 供應商；未列的角色用 default_provider
+#         developer: codex    # 寫 code 與審 code 刻意分開兩家（M4），
+#         code-reviewer: claude   # 目的是觀點互補，不是省額度
+#       review_provider_distinct: true   # 強制 M4；設 false 需在工單記錄理由
+#     codex-emergency:        # 應急收容：某一家額度耗盡時整批切過去
+#       default_provider: codex
+#       review_provider_distinct: true
+#       emergency: true       # 只有標了它的 profile 掛得上 waives_m4
+#       waives_m4: true       # 明文豁免 M4（允許實作與審查同一家）
+#       waiver_reason: "…；改回條件：… 恢復後切回 normal-mixed"  # 必須寫明改回的條件
 
 # 文檔投影（選填，MYL-39 D-3；欄位由 MYL-52 落實）。整段註解掉＝不投影：
 # 文件仍在版控內，只是沒有任何機械產生的閱讀面。這是預設狀態，不是設定缺漏。

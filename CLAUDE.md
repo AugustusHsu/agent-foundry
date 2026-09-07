@@ -96,6 +96,7 @@ agent-foundry/
 | `docs/standards/known-drift.md` | 動手前必讀，但依分類取用：L＝平台限制、S＝API 形狀、R＝反悔錄、X＝併發競態 |
 | `skills/foundry-adopt/SKILL.md` | 只在導入既有專案時讀，讀當前模組那一節即可 |
 | `skills/foundry-browser/SKILL.md` | 只在要驗畫面時讀；先 `make browser` 判級，再讀對應層級那一節 |
+| `skills/foundry-model-routing/SKILL.md` | 只在要換模型供應商時讀。**先判自己在哪一條路徑**（§2：已核可 profile 之間的整批切換走 A、其餘走 B），再讀那一條的步驟；政策表與各平台落實方式各自獨立成節 |
 | `docs/pilot/pilot-log.md` | 歷史紀錄，除非要查典故否則不必讀 |
 | `docs/handbook/07-workflows.md` | 八條固定 workflow 的索引。要查某條流程「什麼時候啟動、規則本體在哪」時讀該條那一節即可 |
 | `skills/foundry-init/SKILL.md` | 只在導入全新專案時讀 |

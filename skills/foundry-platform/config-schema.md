@@ -105,20 +105,49 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 規則本體在 foundry-protocol 第 8 節「供應商維度」（`M4`～`M6`）；本段只定義欄位。流程與盤點腳本見 `skills/foundry-model-routing/SKILL.md`。
 
 **這一段管的是「哪一家的模型」，不是「工單放在哪」**——後者是頂層的 `devtools_platform`。兩條軸互相獨立，別混。
+**它也不管「用多強的模型」**：model 代號與 effort 屬 protocol 第 8 節的模型層，本段一個字都不宣告（刻意留的缺口見本節末）。
+
+本段的形狀是**命名 profile ＋ 一個 `active` 指標**（MYL-128，依 MYL-125 計畫修訂 2 的 D1／D2）：
+一份設定檔可以登記多套配置，但**任何時刻只有一套生效**。這麼做是為了讓「額度耗盡切過去、額度恢復切回來」
+變成在使用者已核可的選項之間選一個，而不是每次重新決定一次——`M6` 第 1 級常設授權的前提就是這個形狀。
+
+下表 `<名>` 代表任一 profile 名。
 
 | 欄位 | 型別 | 必填 | 說明 |
 | --- | --- | --- | --- |
-| `model_routing.default_provider` | 字串 | ✅（有本段時） | 未於 `roles` 指定的角色一律用這家。值為供應商 id，須存在於 `tools/model-routing/probe_providers.py` 的登記表。 |
-| `model_routing.roles` | 物件 | ─ | 角色 → 供應商 id 的覆寫。鍵用標準角色名（同 `role:*` label 的後綴，如 `developer`、`code-reviewer`）。 |
-| `model_routing.review_provider_distinct` | 布林 | ─（預設 `true`） | 是否強制 `M4`（實作與審查異廠）。設 `false` 等於放棄本段的主要目的，需在對應工單留言記錄理由。 |
+| `model_routing.active` | 字串 | ✅（有本段時） | 目前生效的 profile 名，須是 `profiles` 的鍵之一。**全段只有這一欄** agent 動得了（`M6` 第 1 級），其餘欄位一律使用者專屬。 |
+| `model_routing.profiles` | 物件 | ✅（有本段時） | profile 名 → profile 物件，至少一個。名字形狀 `[a-z][a-z0-9-]*`、全段唯一，且要說得出「什麼情況下用它」（`codex-emergency`、`normal-mixed`），不要 `profile-1`——切換當下讀名字的人沒有時間去比對內容。 |
+| `model_routing.profiles.<名>.default_provider` | 字串 | ✅（每個 profile） | 該 profile 下未於 `roles` 指定的角色一律用這家。值為供應商 id，須存在於 `tools/model-routing/probe_providers.py` 的登記表。 |
+| `model_routing.profiles.<名>.roles` | 物件 | ─ | 角色 → 供應商 id 的覆寫。鍵用標準角色名（同 `role:*` label 的後綴、同 `org.yml` 的 `id`，如 `developer`、`code-reviewer`），且**必須存在於 `.foundry/org.yml`**。 |
+| `model_routing.profiles.<名>.review_provider_distinct` | 布林 | ─（預設 `true`） | 本 profile 內是否強制 `M4`（實作與審查異廠）。設 `false` 等於放棄本段的主要目的，需在對應工單留言記錄理由。 |
+| `model_routing.profiles.<名>.emergency` | 布林 | ─（預設 `false`） | 標記本 profile 是**應急收容用**、不是常態配置。唯一的語意效果是「只有標了它的 profile 掛得上 `waives_m4`」；它不改變任何自動行為，是寫給讀的人和對帳輸出看的。 |
+| `model_routing.profiles.<名>.waives_m4` | 布林 | ─（預設 `false`） | 本 profile 明文豁免 `M4`，允許 `developer` 與 `code-reviewer` 同一家。**只允許掛在 `emergency: true` 的 profile 上，且必須同時有非空的 `waiver_reason`**。 |
+| `model_routing.profiles.<名>.waiver_reason` | 字串 | ✅（`waives_m4: true` 時） | 豁免理由，**且必須寫明改回的條件**（`M5`(d)：臨時值不寫改回條件就會變成新預設）。非空字串，空白字元不算數。 |
 
-寫入者：**使用者，或 `foundry-model-routing` 在使用者核可該次指派之後**（`M6`：供應商切換屬公司層設定變更，agent 不得自行決定）。與本檔其他段落同規則——agent 不得未經核可直接改。
+寫入者分兩半，跟著 `M6` 的兩級走：
+
+- **`active` 一欄**：使用者，或 agent 依 `M6` **第 1 級**在已登記的 profile 之間切換時自行更新（要留執行單與逐角色回查證據）。
+- **其餘全段**：使用者，或經使用者核可的計畫（`M6` **第 2 級**）。agent 不得自行增刪 profile，也不得改任何 profile 的內容——包括「只改一個角色」。
 
 合法性（違反時同下方總則，整檔拒用）：
 
+- `active` 不是 `profiles` 的鍵之一 → 非法。**不得**退回「就用第一個 profile」之類的猜測：猜錯的那一次，全隊會跑在一套沒有人選過的配置上，而每一份輸出看起來都正常。
+- `profiles` 為空，或某個 profile 缺 `default_provider` → 缺必填，非法。
 - `default_provider` 或 `roles` 的值不在供應商登記表 → 非法。**不得**自動 fallback 到別家：靜默換一家跑，產出風格會變而沒有人知道為什麼。
-- `review_provider_distinct` 為 `true`（或省略）卻把 `developer` 與 `code-reviewer` 指到同一家 → 非法。這是設定檔自相矛盾，可機械判定，不留給執行期才發現。
+- `roles` 的鍵不在 `.foundry/org.yml` 的 `roles[].id` 裡 → 非法。指到一個組織裡沒有的角色，那一列永遠不會被套用，而設定檔看起來完全正常。
+- `review_provider_distinct` 為 `true`（或省略）卻把 `developer` 與 `code-reviewer` 指到同一家，**而該 profile 沒有 `waives_m4: true`** → 非法。這是設定檔自相矛盾，可機械判定，不留給執行期才發現。
+- `waives_m4: true` 而該 profile 沒有 `emergency: true`，或 `waiver_reason` 缺席／為空 → 非法。**這一條要擋的不是打錯字，是把應急豁免當成一般選項用**：豁免只在「知道自己在應急、而且寫得出什麼時候結束」的前提下才成立，兩個條件少一個它就只是一句免責聲明。
 - 指定的供應商在本機不可用（盤點腳本回報未安裝／未登入）→ **不是設定檔非法**，是環境問題：停下並依 `M5` 發卡，不要改設定遷就環境。
+
+⚠️ **非 active 的 profile 一樣要通過上面每一條。** 它存在的理由就是「隨時可以切過去」——
+等切過去那一刻才發現它非法，正好卡在最不能停下來的時候（額度牆下）。
+
+**本段刻意不宣告的一件事（已知缺口，MYL-128 登記在此）**：profile 只說「哪一家」，不說 **model 代號與 effort**。
+那兩項是 protocol 第 8 節的模型層（層級 × 角色），與供應商正交，寫進來就會多一份會漂的模型表。
+代價是**套用工具需要一張「模型層 × 供應商 → model 代號」的對照表，而那張表目前不存在**——
+第 8 節的附註只列了 claude 側的代號。⇒ 只改 `adapterType` 而不改 `adapterConfig.model`，
+會得到「codex 的 adapter 配 claude 的型號」這種組合。這個缺口歸實作單（MYL-125 計畫的 C2）處理，
+本段只負責把它寫在明處，**不在這裡偷偷補一張表**。
 
 ## `docs`
 
@@ -175,7 +204,7 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 | `foundry` | 變更 | 相容性 |
 | --- | --- | --- |
 | `1` | 初版（MYL-9）。其後 `mirror_platform`（MYL-39）、`model_routing`（MYL-36）、`docs`（MYL-39／52）三段陸續加入，皆為選填且缺席＝關閉 ⇒ 相容變更，版本號不動。 | — |
-| `2` | **`platform` → `devtools_platform`**，另加選填的 `ai_platform`（MYL-82，依 MYL-61 卡 `00ded0b2` Q1）。 | **不相容** |
+| `2` | **`platform` → `devtools_platform`**，另加選填的 `ai_platform`（MYL-82，依 MYL-61 卡 `00ded0b2` Q1）。其後 `model_routing` 段由「扁平三欄」改寫為「命名 profile ＋ `active` 指標」（MYL-128）⇒ 相容變更，版本號不動，判準見表下第三段。 | **不相容** |
 
 `2` 為什麼是不相容變更：改的是**必填欄位的名字**。依上方「合法性總則」，未知欄位忽略並警告、
 缺必填欄位整檔視為非法——所以一份 `foundry: 1` 的舊設定檔拿到新讀取者面前，`platform` 會被當成未知欄位丟掉，
@@ -185,6 +214,12 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 反向也一樣：`foundry: 2` 的設定檔給只認得 `1` 的舊讀取者，同樣缺必填欄位。**沒有相容層、也刻意不寫相容層**——
 本 repo 是全世界唯一一份 `foundry` 設定檔，寫一個沒有使用者的遷移路徑只會多一份要跟著維護的分支邏輯。
 真的出現外部專案時，遷移動作是三行 `sed`，成本遠低於長期揹著雙欄位並存。
+
+`model_routing` 改形狀（MYL-128）為什麼**不**遞增版本號：判準與 `1` 那一列同源——看的是**有沒有既有設定檔因此變成非法**，
+不是「欄位長得像不像以前」。改的當下，世界上兩份 `foundry` 設定檔一份（`.foundry/config.yml`）根本沒有這一段、
+另一份（`config.example.yml`）只有註解形式，**沒有任何檔案因為這次改動變非法**，而整段仍是選填且缺席＝關閉。
+⚠️ **這條理由的射程僅限「改的當下沒有使用者」**：日後再動這一段時，只要世上已經有設定檔在用它，
+就落回上面那條「全有全無的失效 ⇒ 必須遞增版本號」。不要把本次當成「`model_routing` 可以隨便改」的前例。
 
 新增的 `ai_platform` 本身是選填、缺席＝未宣告，**單獨看屬相容變更**；它跟著本次一起發，是因為
 正名的目的就是把兩條軸分開，只改名不給第二條軸一個落點，等於把同一件事做一半。
