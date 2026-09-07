@@ -171,6 +171,7 @@ def agents_by_role(client, org):
 def assert_registered_current_adapters(client, targets, agents):
     """L5：未知既有 adapter 不作為首次寫入的試驗對象。"""
     registered = {provider["adapter_type"] for provider in providers.PROVIDERS}
+    current_agents = {}
     for target in targets:
         agent = agents.get(target["role"])
         if not agent:
@@ -182,6 +183,8 @@ def assert_registered_current_adapters(client, targets, agents):
                 f"需人工確認：角色 {target['role']} 的 adapterType "
                 f"{current_adapter!r} 不在 probe_providers 登記表，停止套用"
             )
+        current_agents[target["role"]] = current
+    return current_agents
 
 
 def differs(actual, target):
@@ -195,6 +198,29 @@ def differs(actual, target):
             config.get("modelReasoningEffort"),
         ),
     ]
+
+
+def readable_adapter_config(actual, role):
+    """拒絕把 API 權限遮蔽的空設定誤當成平台實況。"""
+    if actual.get("adapterConfig") == {}:
+        raise ValueError(
+            f"無法讀取角色 {role} 的完整 adapterConfig（權限遮蔽）；"
+            "需要可讀全體 agent 設定的身分，停止對帳，未將遮蔽值列為平台漂移"
+        )
+
+
+def markdown_value(value):
+    if value is None:
+        return "—"
+    return str(value).replace("|", "\\|")
+
+
+def print_waiver(profile_name, profile):
+    if profile.get("waives_m4"):
+        print(f"- active profile：`{profile_name}`；M4 waiver：`true`")
+        print(f"- waiver_reason：{profile.get('waiver_reason', '')}")
+    else:
+        print(f"- active profile：`{profile_name}`；M4 waiver：`false`")
 
 
 def command_list(config):
@@ -211,16 +237,19 @@ def command_list(config):
 
 
 def command_check(client, config, org):
-    _, profile, _ = active_profile(config)
+    profile_name, profile, _ = active_profile(config)
     targets = targets_for_profile(profile, org)
     agents = agents_by_role(client, org)
     differences = []
+    print("## 模型路由對帳")
+    print_waiver(profile_name, profile)
     for target in targets:
         agent = agents.get(target["role"])
         if not agent:
             differences.append((target["role"], "agent", "已宣告", "平台找不到"))
             continue
         actual = client.get(f"/api/agents/{agent['id']}")
+        readable_adapter_config(actual, target["role"])
         for field, declared, live in differs(actual, target):
             if declared != live:
                 differences.append((target["role"], field, declared, live))
@@ -252,10 +281,12 @@ def is_ceo(me):
 
 
 def ensure_ready(targets, probe_all=providers.probe_all):
-    ready = set(providers.ready_ids(probe_all()))
+    results = probe_all()
+    ready = set(providers.ready_ids(results))
     missing = sorted({target["provider"] for target in targets} - ready)
     if missing:
         raise ValueError(f"目標 profile 的供應商不可用：{'、'.join(missing)}。\n{M5_GUIDANCE}")
+    return results
 
 
 def update_active_config(path, profile_name):
@@ -272,7 +303,36 @@ def update_active_config(path, profile_name):
     config_path.write_text(text[: matched.start(1)] + rewritten + text[matched.end(1) :], encoding="utf-8")
 
 
-def command_apply(client, profile_name, config_path, profiles, org, probe_all=providers.probe_all):
+def print_transition(targets, current_agents):
+    print("## 逐角色現值 → 目標值")
+    print("| 角色 | 欄位 | 現值 | 目標值 |")
+    print("| --- | --- | --- | --- |")
+    for target in targets:
+        current = current_agents[target["role"]]
+        for field, target_value, current_value in differs(current, target):
+            print(
+                f"| {target['role']} | {field} | `{markdown_value(current_value)}` "
+                f"| `{markdown_value(target_value)}` |"
+            )
+
+
+def print_verification(role, actual, target):
+    print(f"### 回查：{role}")
+    print("| 欄位 | 目標值 | 回查值 | 結果 |")
+    print("| --- | --- | --- | --- |")
+    mismatches = []
+    for field, expected, live in differs(actual, target):
+        ok = expected == live
+        print(
+            f"| {field} | `{markdown_value(expected)}` | `{markdown_value(live)}` "
+            f"| {'✅' if ok else '❌'} |"
+        )
+        if not ok:
+            mismatches.append((field, expected, live))
+    return mismatches
+
+
+def command_apply(client, profile_name, config_path, profiles, org, issue, probe_all=providers.probe_all):
     if profile_name not in profiles:
         raise ValueError(f"未登記的 profile：{profile_name}")
     me = client.get("/api/agents/me")
@@ -280,25 +340,42 @@ def command_apply(client, profile_name, config_path, profiles, org, probe_all=pr
         raise ValueError(CONFIGURE_AGENTS_ERROR)
     previous_active = active_profile(load_yaml(config_path))[0]
     targets = targets_for_profile(profiles[profile_name], org)
-    ensure_ready(targets, probe_all=probe_all)
+    probe_results = ensure_ready(targets, probe_all=probe_all)
     agents = agents_by_role(client, org)
     # 所有未知 adapter 都在第一筆 PATCH 前收掉，不能邊套邊發現。
-    assert_registered_current_adapters(client, targets, agents)
+    current_agents = assert_registered_current_adapters(client, targets, agents)
+
+    # 在第一筆 PATCH 前印出：後續任一寫入或回查失敗時，仍有可貼回工單的回退方式。
+    rollback = (
+        "python3 tools/model-routing/apply_profile.py "
+        f"--profile {previous_active} --apply --issue {issue}"
+    )
+    print("# 模型 profile 套用執行報告")
+    print(f"- 工單：{issue}")
+    print("- 授權：M6 第 1 級；依 MYL-125 計畫修訂 2 的已核可 profile 切換")
+    print(f"- active：`{previous_active}` → `{profile_name}`")
+    print_waiver(profile_name, profiles[profile_name])
+    print("## 供應商盤點（原始輸出）")
+    print(providers.render_text(probe_results))
+    print_transition(targets, current_agents)
+    print("## 回退")
+    print(f"回退指令：{rollback}")
+    print("## 逐角色回查")
 
     for target in targets:
         agent = agents[target["role"]]
         client.patch(f"/api/agents/{agent['id']}", patch_body(target))
         actual = client.get(f"/api/agents/{agent['id']}")
-        mismatches = [item for item in differs(actual, target) if item[1] != item[2]]
+        readable_adapter_config(actual, target["role"])
+        mismatches = print_verification(target["role"], actual, target)
         if mismatches:
             field, declared, live = mismatches[0]
             raise ValueError(
                 f"回查不符，停止於 {target['role']}：{field} 宣告={declared!r} 實況={live!r}"
             )
-        print(f"✅ {target['role']} 已套用並回查")
 
     update_active_config(config_path, profile_name)
-    print(f"回退指令：python3 tools/model-routing/apply_profile.py --profile {previous_active} --apply")
+    print("\n✅ 全部角色已套用、逐格回查，並已更新 model_routing.active")
     return 0
 
 
@@ -310,6 +387,7 @@ def parse_args(argv):
     action.add_argument("--dry-run", action="store_true")
     action.add_argument("--apply", action="store_true")
     parser.add_argument("--profile")
+    parser.add_argument("--issue", help="--apply 的稽核報告所屬工單，例如 MYL-129")
     parser.add_argument("--config", default=".foundry/config.yml", help=argparse.SUPPRESS)
     parser.add_argument("--org-config", default=".foundry/org.yml", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
@@ -323,13 +401,17 @@ def run(args, client=None, probe_all=providers.probe_all):
     if args.dry_run or args.apply:
         if not args.profile:
             raise ValueError("--dry-run／--apply 必須搭配 --profile <名>")
+    if args.apply and not args.issue:
+        raise ValueError("--apply 必須搭配 --issue MYL-nnn，供執行報告與回退指令稽核")
     _, _, profiles = active_profile(config)
     client = client or PaperclipClient()
     if args.check:
         return command_check(client, config, org)
     if args.dry_run:
         return command_dry_run(client, args.profile, profiles, org)
-    return command_apply(client, args.profile, args.config, profiles, org, probe_all=probe_all)
+    return command_apply(
+        client, args.profile, args.config, profiles, org, args.issue, probe_all=probe_all
+    )
 
 
 def main(argv=None):
