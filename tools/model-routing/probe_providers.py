@@ -45,6 +45,17 @@ from pathlib import Path
 #   - `codex_local` ⇒ `modelReasoningEffort`（`codex-local/src/server/execute.ts`）
 # 其餘各家沒有實證來源 ⇒ 填 `None`，取鍵時停在「需人工確認」，**不猜**（`L5`）。
 #
+# `smoke_argv` 是「拿一組 (model, effort) 真的打一次那家 CLI」的指令形狀，
+# `apply_profile.py --smoke` 用它（MYL-136）。佔位符三個：`{model}`／`{effort}`／`{prompt}`。
+# 同樣是實證出來的，不是照文件抄的：
+#   - `codex` ⇒ `codex exec -c model=… -c model_reasoning_effort=…`（MYL-133 實跑：合法值
+#     回 exit 0、非法值由**伺服器**回 400 且 exit 非零；CLI 自己對 effort 零驗證，見 `L31`）
+#   - `claude` ⇒ `claude -p --model … --effort …`（2026-09-08 `claude --help` 實測有
+#     `--effort <level>`；claude-local adapter 推的也是 `--effort`）
+# codex 那組刻意帶 `--sandbox read-only`：smoke 是探針不是工作階段，不該有能力改到任何
+# 東西；`--skip-git-repo-check` 則是讓它在非 repo 的目錄也跑得起來。
+# 其餘各家沒有實證來源 ⇒ 填 `None`，`--smoke` 停在「需人工確認」，不猜（`L5`）。
+#
 # 新增一家供應商：在此加一列即可，其餘程式碼不動。
 PROVIDERS = (
     {
@@ -55,6 +66,9 @@ PROVIDERS = (
         "cred_source": "實測",
         "adapter_type": "claude_local",
         "effort_key": "effort",
+        "smoke_argv": (
+            "claude", "-p", "--model", "{model}", "--effort", "{effort}", "{prompt}",
+        ),
     },
     {
         "id": "codex",
@@ -64,6 +78,10 @@ PROVIDERS = (
         "cred_source": "實測",
         "adapter_type": "codex_local",
         "effort_key": "modelReasoningEffort",
+        "smoke_argv": (
+            "codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check",
+            "-c", "model={model}", "-c", "model_reasoning_effort={effort}", "{prompt}",
+        ),
     },
     {
         "id": "gemini",
@@ -73,6 +91,7 @@ PROVIDERS = (
         "cred_source": "推定",
         "adapter_type": "gemini_local",
         "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
+        "smoke_argv": None,  # 未實證，--smoke 停下等人工確認（同上）
     },
     {
         "id": "cursor",
@@ -82,6 +101,7 @@ PROVIDERS = (
         "cred_source": "推定",
         "adapter_type": "cursor_cloud",
         "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
+        "smoke_argv": None,  # 未實證，--smoke 停下等人工確認（同上）
     },
     {
         "id": "opencode",
@@ -91,6 +111,7 @@ PROVIDERS = (
         "cred_source": "推定",
         "adapter_type": "opencode_local",
         "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
+        "smoke_argv": None,  # 未實證，--smoke 停下等人工確認（同上）
     },
     {
         "id": "grok",
@@ -100,6 +121,7 @@ PROVIDERS = (
         "cred_source": "未知",
         "adapter_type": "grok_local",
         "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
+        "smoke_argv": None,  # 未實證，--smoke 停下等人工確認（同上）
     },
     {
         "id": "kimi",
@@ -109,6 +131,7 @@ PROVIDERS = (
         "cred_source": "未知",
         "adapter_type": "kimi_local",
         "effort_key": None,  # 未實證，取鍵時停下等人工確認（AC 7／L5）
+        "smoke_argv": None,  # 未實證，--smoke 停下等人工確認（同上）
     },
 )
 

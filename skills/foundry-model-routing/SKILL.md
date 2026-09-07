@@ -128,6 +128,16 @@ python3 tools/model-routing/apply_profile.py --profile <名> --apply --issue MYL
 python3 tools/model-routing/apply_profile.py --profile <名> --apply --create-issue --parent MYL-nnn
 ```
 
+套用完到被改動的 agent 真正跑起來之前，錯的值是**沉默**的（心跳關掉的 agent 可以沉默好幾天）。
+要當場問供應商收不收，加 `--smoke`；`--apply` 收尾會印一行帶著實際寫入值的指令，複製即可單獨重跑：
+
+```bash
+python3 tools/model-routing/apply_profile.py --smoke --target claude:claude-opus-5:max
+```
+
+它是 **opt-in**（每組花一次供應商額度，`H3`），且只驗「供應商收不收這些值」——
+**不驗**平台把 config 寫對了沒有，那是 `--check` 的職責。兩者互補、互不取代。
+
 三件先寫在明處的事：
 
 - **`--parent` 是必填**，工具不會替自己宣告頂層單：新開的單一律掛得到樹上（protocol
@@ -270,7 +280,7 @@ curl -s -X PATCH -H "Authorization: Bearer $PAPERCLIP_API_KEY" -H "Content-Type:
 | --- | --- |
 | `SKILL.md`（本文） | 兩條路徑的分界與各自的步驟、路由政策、各平台落實方式 |
 | `tools/model-routing/probe_providers.py` | 步驟 2.1 的盤點腳本（供應商登記表也在這裡） |
-| `tools/model-routing/apply_profile.py` | 路徑 A 的工具：`--list`／`--check`／`--dry-run`／`--apply`／`--create-issue`（步驟 2.1～2.4） |
+| `tools/model-routing/apply_profile.py` | 路徑 A 的工具：`--list`／`--check`／`--dry-run`／`--apply`／`--create-issue`／`--smoke`（步驟 2.1～2.4） |
 | `templates/switch-execution-issue.md` | 步驟 2.4 那張切換執行單的描述模板（由 `--create-issue` 機械填寫，不手填） |
 | `skills/foundry-protocol/SKILL.md` 第 8 節 | 規則本體：`M4`／`M5`／`M6` ＋供應商切換權限分級表 |
 | `skills/foundry-platform/config-schema.md` | `model_routing` 段的欄位定義（profile 結構、`active`、waiver 三欄） |

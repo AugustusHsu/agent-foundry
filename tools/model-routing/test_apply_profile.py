@@ -4,6 +4,7 @@ import contextlib
 import copy
 import io
 import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -867,6 +868,292 @@ class SwitchExecutionIssueTest(unittest.TestCase):
         _, body = ap.load_switch_template(TEMPLATE)
         self.assertNotIn("這一份不是給人手填的", body)
         self.assertTrue(body.startswith("**Inputs**"))
+
+
+class SmokeTest(unittest.TestCase):
+    """MYL-136：opt-in 的 `--smoke`。
+
+    全部以替身進行，**一次供應商額度都不花**：要不要真的跑一次 smoke 屬 `H3`，
+    是使用者的決定，不是測試的。
+    """
+
+    #: 三名角色、兩組相異三元組（medium 兩名共用一組、high 一組）。
+    #: 這張表存在的理由是讓「打幾次」這件事有鑑別力：角色數 3、`MODEL_TARGETS` 六格、
+    #: 相異三元組 2——三個數字互不相同，斷言 2 就同時排除了「按角色打」與「整張表打」。
+    ORG_3 = {
+        "roles": [
+            {"id": "developer", "model_tier": "medium", "title": "Developer"},
+            {"id": "code-reviewer", "model_tier": "high", "title": "Code Reviewer"},
+            {"id": "qa-engineer", "model_tier": "medium", "title": "QA Engineer"},
+        ]
+    }
+
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tempdir.name)
+        self.config_path = self.root / "config.yml"
+        self.org_path = self.root / "org.yml"
+        config = copy.deepcopy(CONFIG)
+        config["model_routing"]["active"] = "claude-only"
+        self.config_path.write_text(ap.yaml.safe_dump(config, allow_unicode=True), encoding="utf-8")
+        self.org_path.write_text(ap.yaml.safe_dump(self.ORG_3, allow_unicode=True), encoding="utf-8")
+        self.profiles = config["model_routing"]["profiles"]
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def args(self, *extra):
+        return ap.parse_args([
+            *extra,
+            "--config", str(self.config_path), "--org-config", str(self.org_path),
+            "--template", str(TEMPLATE),
+        ])
+
+    def spy(self, result=lambda argv: (0, "ok")):
+        """記下每一次 CLI 呼叫的替身。回傳 `(替身, 呼叫清單)`。
+
+        `result` 收 argv、回 `(exit code, 原文)`，讓「只有某一組被拒」寫得出來。
+        """
+        calls = []
+
+        def run_smoke(argv, timeout=None):
+            calls.append(list(argv))
+            return result(argv)
+
+        return run_smoke, calls
+
+    # ── AC 1：`--help` 寫得出邊界 ────────────────────────────────────────────
+    def test_help_lists_smoke_and_states_the_boundary_against_check(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+            ap.parse_args(["--help"])
+        # argparse 會依終端寬度換行，而中文長句會被 textwrap 從中間切開；比對前先把
+        # 所有空白壓掉，斷言才不會隨 `COLUMNS` 忽紅忽綠。
+        compact = re.sub(r"\s+", "", output.getvalue())
+        self.assertIn("--smoke", compact)
+        self.assertIn("值域、model代號、額度", compact)
+        self.assertIn("不驗", compact)
+        self.assertIn("`--check`的職責", compact)
+        self.assertIn("opt-in", compact)
+
+    # ── AC 2：不帶 `--smoke` ⇒ 零供應商呼叫 ─────────────────────────────────
+    def test_apply_without_smoke_calls_no_provider_at_all(self):
+        run_smoke, calls = self.spy()
+        client = FakeClient()
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = ap.run(self.args("--apply", "--profile", "claude-only",
+                                      "--issue", "MYL-129"),
+                            client=client, probe_all=ready_probe, run_smoke=run_smoke)
+        self.assertEqual(result, ap.EXIT_OK)
+        self.assertEqual(calls, [], "沒開 --smoke 卻打了供應商 ⇒ 在使用者沒開口的地方花錢")
+
+    # ── AC 3：只打這次實際寫入的相異三元組 ───────────────────────────────────
+    def test_smoke_runs_once_per_distinct_triple_not_per_agent_nor_per_table_cell(self):
+        run_smoke, calls = self.spy()
+        client = FakeClient()
+        org = ap.load_yaml(self.org_path)
+        targets = ap.targets_for_profile(self.profiles["claude-only"], org)
+        cells = sum(len(tiers) for tiers in ap.MODEL_TARGETS.values())
+        self.assertEqual(len(targets), 3)
+        self.assertEqual(cells, 6)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = ap.run(self.args("--apply", "--smoke", "--profile", "claude-only",
+                                      "--issue", "MYL-129"),
+                            client=client, probe_all=ready_probe, run_smoke=run_smoke)
+
+        self.assertEqual(result, ap.EXIT_OK)
+        self.assertEqual(len(calls), 2, "打的次數要是相異三元組數，不是角色數也不是整張表")
+        self.assertNotEqual(len(calls), len(targets))
+        self.assertNotEqual(len(calls), cells)
+        # 打出去的是**實際寫入的值**：兩組各自帶得出自己的 model 與 effort。
+        flattened = [" ".join(argv) for argv in calls]
+        self.assertTrue(any("claude-opus-5" in line and "max" in line for line in flattened))
+        self.assertTrue(any("claude-opus-5" in line and "high" in line for line in flattened))
+
+    def test_smoke_argv_uses_each_cli_s_own_flags(self):
+        """argv 形狀的期望值來自**CLI 自己**，不是從工具反推。
+
+        來源：`claude --help` 2026-09-08 實測有 `--effort <level>`／`--model`；
+        codex 那組是 MYL-133 實跑過的 `-c model=…  -c model_reasoning_effort=…`。
+        登記表被改成別的形狀時這條要紅——這是它存在的唯一理由。
+        """
+        self.assertEqual(
+            ap.smoke_argv_for("claude", "claude-opus-5", "max", prompt="ping"),
+            ["claude", "-p", "--model", "claude-opus-5", "--effort", "max", "ping"],
+        )
+        self.assertEqual(
+            ap.smoke_argv_for("codex", "gpt-5.6-sol", "xhigh", prompt="ping"),
+            ["codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check",
+             "-c", "model=gpt-5.6-sol", "-c", "model_reasoning_effort=xhigh", "ping"],
+        )
+
+    # ── AC 4：反例——任一組被拒 ⇒ 整體非零、點得出是哪一組、帶得出原文 ─────────
+    def test_a_rejected_triple_exits_non_zero_naming_the_triple_and_quoting_the_provider(self):
+        """走完整的 `main()`，驗的是 **exit code** 而不是函式回傳值。
+
+        刻意走單獨 `--smoke` 那條路：它不讀設定、不碰平台，所以這條測試連
+        `PAPERCLIP_*` 都不需要，也不會因為這台機器有沒有登入某家 CLI 而忽紅忽綠。
+        替身下在 `subprocess.run`，因此 `default_run_smoke` 本身也一起被驗到。
+        """
+        rejection = (
+            "ERROR: 400 invalid_enum_value: model_reasoning_effort must be one of "
+            "none|minimal|low|medium|high|xhigh"
+        )
+
+        def fake_subprocess_run(argv, **kwargs):
+            failed = "model_reasoning_effort=max" in argv
+            return subprocess.CompletedProcess(
+                argv, 1 if failed else 0, stdout="", stderr=rejection if failed else "ok")
+
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(ap.subprocess, "run", fake_subprocess_run), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = ap.main([
+                "--smoke",
+                "--target", "claude:claude-opus-5:high",
+                "--target", "codex:gpt-5.5:max",
+            ])
+        printed = out.getvalue()
+        # (i) 整體非零，而且與「不一致」分得開。
+        self.assertNotEqual(code, ap.EXIT_OK)
+        self.assertEqual(code, ap.EXIT_SMOKE_FAILED)
+        # (ii) 點得出是哪一組——而且沒有把過關的那組也說成失敗。
+        self.assertIn("codex:gpt-5.5:max", printed)
+        self.assertIn("✅ `claude:claude-opus-5:high`", printed)
+        self.assertIn("❌ `codex:gpt-5.5:max`", printed)
+        # (iii) 帶得出供應商原文。
+        self.assertIn("invalid_enum_value", printed)
+
+    def test_a_rejected_triple_after_apply_still_leaves_the_audit_trail(self):
+        """平台已經改完了，這時把稽核報告吞掉才是真的危險：改了卻沒有證據。"""
+        def reject_max(argv):
+            return (1, "quota exhausted") if "max" in argv else (0, "ok")
+
+        run_smoke, calls = self.spy(reject_max)
+        client = FakeClient()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = ap.run(self.args("--apply", "--smoke", "--profile", "claude-only",
+                                      "--issue", "MYL-129"),
+                            client=client, probe_all=ready_probe, run_smoke=run_smoke)
+        self.assertEqual(result, ap.EXIT_SMOKE_FAILED)
+        self.assertEqual(len(calls), 2)
+        comments = [body for path, body, _ in client.posts if path.endswith("/comments")]
+        self.assertEqual(len(comments), 1, "smoke 失敗不得吞掉 M6 第 1 級的稽核報告")
+        self.assertIn("quota exhausted", comments[0]["body"])
+        self.assertIn("claude:claude-opus-5:max", comments[0]["body"])
+
+    def test_every_failing_group_is_reported_not_just_the_first(self):
+        """第一組就中止會遮住後面壞掉的組——修完一個又撞一個，每輪再花一次額度。"""
+        run_smoke, calls = self.spy(lambda argv: (1, "boom"))
+        emitted = []
+        failures = ap.report_smoke(
+            [("claude", "m1", "max"), ("codex", "m2", "high")],
+            run_smoke=run_smoke, emit=emitted.append,
+        )
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(failures), 2)
+        self.assertIn("❌ smoke 有 2 組被拒", "\n".join(emitted))
+
+    # ── AC 5：`--apply` 收尾那行可貼上執行的指令 ──────────────────────────────
+    def test_apply_prints_a_pasteable_smoke_command_carrying_the_values_written(self):
+        client = FakeClient()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            ap.run(self.args("--apply", "--profile", "claude-only", "--issue", "MYL-129"),
+                   client=client, probe_all=ready_probe)
+        expected = (
+            "python3 tools/model-routing/apply_profile.py --smoke "
+            "--target claude:claude-opus-5:high --target claude:claude-opus-5:max"
+        )
+        self.assertIn(expected, output.getvalue())
+        # 那一行也要進稽核報告：下一個人是從工單看這次切了什麼的。
+        comments = [body for path, body, _ in client.posts if path.endswith("/comments")]
+        self.assertIn(expected, comments[0]["body"])
+        # 沒跑 smoke 時要說出「為什麼不預設跑」，不然讀的人會以為工具漏做。
+        self.assertIn("`H3`", output.getvalue())
+
+    def test_the_printed_command_actually_parses_back_into_the_same_triples(self):
+        """收尾那行不是給人看的裝飾：貼回去要真的跑得起來，且對象一模一樣。"""
+        triples = [("claude", "claude-opus-5", "max"), ("codex", "gpt-5.6-sol", "high")]
+        command = ap.smoke_command(triples)
+        argv = command.split()[2:]  # 去掉 `python3 <script>`
+        run_smoke, calls = self.spy()
+        with mock.patch.object(ap, "PaperclipClient", side_effect=AssertionError("不該建 client")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(ap.run(ap.parse_args(argv), run_smoke=run_smoke), ap.EXIT_OK)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([call[0] for call in calls], ["claude", "codex"])
+        self.assertIn("claude-opus-5", calls[0])
+        self.assertIn("model=gpt-5.6-sol", calls[1])
+
+    # ── 花錢之前先停下 ──────────────────────────────────────────────────────
+    def test_an_unproven_provider_stops_before_a_single_call_is_made(self):
+        """argv 全部先組完再開跑：第 2 組組不出來時，第 1 組的錢不該已經花掉了。"""
+        run_smoke, calls = self.spy()
+        unproven = [p["id"] for p in pp.PROVIDERS if not p.get("smoke_argv")]
+        self.assertTrue(unproven, "登記表已無未實證 smoke 形狀的供應商，這條反例失去對象")
+        with self.assertRaisesRegex(ValueError, "需人工確認"):
+            ap.run_smoke_triples(
+                [("claude", "claude-opus-5", "max"), (unproven[0], "x", "high")],
+                run_smoke=run_smoke, emit=lambda _line: None,
+            )
+        self.assertEqual(calls, [])
+        with self.assertRaisesRegex(ValueError, "不在 probe_providers 登記表"):
+            ap.smoke_argv_for("nosuchprovider", "m", "high")
+
+    def test_standalone_smoke_neither_reads_nor_writes_the_platform(self):
+        run_smoke, calls = self.spy()
+        with mock.patch.object(ap, "PaperclipClient", side_effect=AssertionError("不該建 client")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            result = ap.run(ap.parse_args(["--smoke", "--target", "claude:claude-opus-5:max"]),
+                            run_smoke=run_smoke)
+        self.assertEqual(result, ap.EXIT_OK)
+        self.assertEqual(len(calls), 1)
+
+    def test_timeout_and_missing_cli_are_failures_not_green_lights(self):
+        """問不出結果 ≠ 通過。這兩種都得算失敗，否則 smoke 會在最沉默的時候放行。"""
+        with mock.patch.object(ap.subprocess, "run",
+                               side_effect=subprocess.TimeoutExpired("claude", 1)):
+            code, output = ap.default_run_smoke(["claude"], timeout=1)
+        self.assertNotEqual(code, 0)
+        self.assertIn("逾時", output)
+
+        with mock.patch.object(ap.subprocess, "run", side_effect=FileNotFoundError()):
+            code, output = ap.default_run_smoke(["claude"])
+        self.assertNotEqual(code, 0)
+        self.assertIn("PATH", output)
+
+    # ── 旗標組合 ────────────────────────────────────────────────────────────
+    def test_flag_combinations_that_would_spend_money_ambiguously_are_refused(self):
+        cases = [
+            (["--check", "--smoke"], "只搭配 --apply"),
+            (["--smoke"], "至少要帶一個 --target"),
+            (["--apply", "--profile", "claude-only", "--issue", "MYL-129", "--smoke",
+              "--target", "claude:m:high"], "不吃 --target"),
+            (["--check", "--target", "claude:m:high"], "--target 只搭配 --smoke"),
+        ]
+        for argv, fragment in cases:
+            with self.subTest(argv=argv):
+                run_smoke, calls = self.spy()
+                with self.assertRaises(ValueError) as caught:
+                    ap.run(self.args(*argv), client=FakeClient(), probe_all=ready_probe,
+                           run_smoke=run_smoke)
+                self.assertIn(fragment, str(caught.exception))
+                self.assertEqual(calls, [], "被拒的組合不得已經花掉一次額度")
+
+    def test_no_verb_at_all_is_a_usage_error_with_argparse_s_own_exit_code(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+            ap.parse_args(["--profile", "claude-only"])
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_malformed_target_is_rejected_rather_than_guessed(self):
+        for spec in ("claude:claude-opus-5", "claude::max", "claude:m:e:x", ""):
+            with self.subTest(spec=spec), self.assertRaisesRegex(ValueError, "provider:model:effort"):
+                ap.parse_target(spec)
+        self.assertEqual(ap.parse_target("claude:claude-opus-5:max"),
+                         ("claude", "claude-opus-5", "max"))
 
 
 def ap_upstream_line(description):
