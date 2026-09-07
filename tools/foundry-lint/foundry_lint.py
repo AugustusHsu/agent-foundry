@@ -7,6 +7,7 @@ exit code：0＝通過、1＝不通過、2＝執行／使用錯誤。
 """
 
 import argparse
+import ast
 import inspect
 import json
 import os
@@ -2173,12 +2174,29 @@ class MirrorIssue:
     status: str = ""    # project 的 Status 選項名；空字串＝沒掛進 project
 
 
+#: 區塊純量的起頭：`|`／`>` 加上可選的 chomping 指示符（`-`／`+`）。
+#: **刻意不吃明確縮排指示符**（`|2`）——本 repo 沒有用到，而認得它卻不照它縮排
+#: 只會讀出一個「看起來對」的錯值；認不得時退回原本的純量路徑，至少是顯性的怪值。
+BLOCK_SCALAR_RE = re.compile(r"^(?P<style>[|>])[-+]?$")
+
+
 def parse_config(text: str) -> dict:
     """把 `.foundry/config.yml` 讀成巢狀 dict。**刻意只支援本檔用得到的子集**。
 
-    支援：`鍵: 純量`、`鍵:`（開一層巢狀）、`#` 註解、值兩側的引號。
-    不支援：陣列、多行字串、錨點、流式寫法。踩到不支援的寫法時該鍵被忽略，
+    支援：`鍵: 純量`、`鍵:`（開一層巢狀）、`#` 註解、值兩側的引號，以及
+    **區塊純量**（`|`／`>` 及其 `-`／`+` 變體）。
+    不支援：陣列、錨點、流式寫法。踩到不支援的寫法時該鍵被忽略，
     而不是拋例外——這個 parser 的用途只有「取出幾個已知欄位」，不是驗整份設定檔。
+
+    區塊純量是 MYL-130 補的，理由不是「順手多支援一種寫法」，而是**不補就會讀錯**：
+    在此之前 `waiver_reason: >-` 會被讀成字面值 `">-"`（一個非空字串！），於是
+    `model-routing-sync` 想擋的「掛了 `waives_m4` 卻沒寫理由」永遠擋不住——理由欄
+    是空的也照樣非空。更糟的是續行被當成同層的鍵：`waiver_reason` 底下那句
+    「2026-09-07 14:41」裡的冒號，讓 `claude-only` profile 憑空多出一個
+    `27125d26，2026-09-07 14` 欄位。兩個症狀都是靜默的。
+
+    折疊語意刻意只做到「夠判斷空與非空」：`>` 併行、`|` 保行，
+    但 `-`／`+` 的收尾換行差異一律以 strip 收掉。本檔沒有任何一項檢查在意尾端換行。
 
     為什麼不用 PyYAML：`.github/workflows/foundry-lint.yml` 明寫 foundry-lint
     只用標準函式庫，讓閘門在任何環境都跑得起來。為了讀三個欄位引入依賴，
@@ -2186,7 +2204,11 @@ def parse_config(text: str) -> dict:
     """
     root: dict = {}
     stack = [(-1, root)]
-    for raw in text.splitlines():
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        raw = lines[i]
+        i += 1
         line = raw.split("#", 1)[0].rstrip() if not raw.lstrip().startswith("#") else ""
         if not line.strip():
             continue
@@ -2200,7 +2222,29 @@ def parse_config(text: str) -> dict:
         if not stack:
             stack = [(-1, root)]
         parent = stack[-1][1]
-        if value:
+        block = BLOCK_SCALAR_RE.match(value)
+        if block:
+            # 區塊本體＝後續所有縮排比本行深的行（空行也算本體的一部分，不作為終止條件）。
+            # `#` 在區塊本體裡是字面字元，不是註解——所以這裡刻意不剝註解。
+            body = []
+            while i < len(lines):
+                nxt = lines[i]
+                if nxt.strip() and len(nxt) - len(nxt.lstrip(" ")) <= indent:
+                    break
+                body.append(nxt)
+                i += 1
+            if block.group("style") == ">":
+                joined = " ".join(ln.strip() for ln in body)
+            else:
+                # `|` 保行，所以縮排得照 YAML 的規矩剝掉「本體的共同縮排」——
+                # 由第一個非空行決定，而不是逐行 lstrip：逐行剝會把本體裡
+                # 刻意的階層縮排一起弄平，而保行區塊用的就是那個階層。
+                first = next((ln for ln in body if ln.strip()), "")
+                strip_n = len(first) - len(first.lstrip(" "))
+                joined = "\n".join(ln[strip_n:] if ln[:strip_n].isspace() else ln.lstrip(" ")
+                                   for ln in body)
+            parent[key] = joined.strip()
+        elif value:
             parent[key] = value
         else:
             child: dict = {}
@@ -3029,6 +3073,239 @@ def check_pm_issue_fields(root: Path) -> SelfcheckResult:
     return res
 
 
+# ── `model-routing-sync`：`model_routing` 段的內部自洽性（MYL-130，MYL-125 的 C3）──
+#: 供應商 id 的值域來源。**不 import 這個模組、改用 `ast` 靜態取值**：foundry-lint
+#: 跑在 pre-commit 裡，import 一個平行工具等於把它的 import 副作用也綁進閘門。
+PROVIDERS_REL = "tools/model-routing/probe_providers.py"
+PROVIDERS_SYMBOL = "PROVIDERS"
+#: `model_routing` 段的合法欄位，權威在 `config-schema.md` 的同名節。
+#: 認得的鍵寫成白名單而不是「檢查幾個已知欄位」——多打一個 `waiver_resaon`
+#: 在後者底下會靜靜地變成「沒寫理由」以外的第三種狀態：既不擋、也沒生效。
+MR_PROFILE_FIELDS = frozenset({
+    "default_provider", "roles", "review_provider_distinct", "emergency",
+    "waives_m4", "waiver_reason",
+})
+#: 布林欄位。值只認 `true`／`false` 兩個字面——`yes`／`True` 一律報錯而不是猜，
+#: 猜錯的方向永遠是「當成 false」，也就是靜靜地把一項豁免或一道強制取消掉。
+MR_BOOL_FIELDS = ("review_provider_distinct", "emergency", "waives_m4")
+#: `M4` 拘束的那兩個角色，以 `.foundry/org.yml` 的 `roles[].id` 表示。
+MR_IMPL_ROLE = "developer"
+MR_REVIEW_ROLE = "code-reviewer"
+#: profile 名的形狀（同 config-schema「名字形狀 `[a-z][a-z0-9-]*`」）。
+MR_PROFILE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+
+
+def provider_ids(text: str) -> list:
+    """`probe_providers.py` 的 `PROVIDERS` 登記表裡的 `id`，依原順序。
+
+    用 `ast` 而不是正規表達式：`id` 這兩個字母在那份檔案裡到處都是，
+    regex 版本會把註解和別的 dict 一起撈進來，於是值域悄悄變大——
+    而值域一變大，本檢查(c) 就開始放行它本來該擋的東西。
+
+    取不到（符號不在、不是常值序列）時**回空 list，由呼叫端報錯**，
+    不要退回一份寫死的值域：那份寫死的會漂，而漂掉的那天沒有人會收到通知。
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == PROVIDERS_SYMBOL
+                   for t in node.targets):
+            continue
+        if not isinstance(node.value, (ast.Tuple, ast.List)):
+            return []
+        ids = []
+        for item in node.value.elts:
+            if not isinstance(item, ast.Dict):
+                continue
+            for k, v in zip(item.keys, item.values):
+                if (isinstance(k, ast.Constant) and k.value == "id"
+                        and isinstance(v, ast.Constant) and isinstance(v.value, str)):
+                    ids.append(v.value)
+        return ids
+    return []
+
+
+def audit_model_routing(routing: dict, role_ids, providers) -> list:
+    """`model_routing` 段對照 `org.yml` 角色與供應商登記表，回傳失敗訊息。
+
+    合法性逐條照 `config-schema.md`「`model_routing`」一節末的清單，**每個 profile
+    都驗，不只 active 那個**——非 active 的 profile 存在的理由就是「隨時可以切過去」，
+    等切過去那一刻才發現它非法，正好卡在最不能停下來的時候（額度牆下）。
+    """
+    failures = []
+    role_ids, providers = set(role_ids), set(providers)
+    profiles = routing.get("profiles")
+    active = routing.get("active")
+
+    if not isinstance(profiles, dict) or not profiles:
+        failures.append(
+            f"{CONFIG_REL} 的 `model_routing.profiles` 缺席或為空——"
+            "有 `model_routing` 段就代表路由已啟用，至少要有一個 profile"
+        )
+        profiles = {}
+    if not active:
+        failures.append(
+            f"{CONFIG_REL} 的 `model_routing.active` 缺席——"
+            "有本段時它必填，指出目前生效的是哪一個 profile"
+        )
+    elif profiles and active not in profiles:
+        failures.append(
+            f"{CONFIG_REL} 的 `model_routing.active` 是 `{active}`，"
+            f"但 `profiles` 裡沒有這個鍵（有的是 {'、'.join(sorted(profiles))}）"
+            "——不得退回「就用第一個 profile」之類的猜測：猜錯的那一次，"
+            "全隊會跑在一套沒有人選過的配置上，而每一份輸出看起來都正常"
+        )
+
+    for name, profile in sorted(profiles.items()):
+        at = f"{CONFIG_REL} 的 profile `{name}`"
+        if not isinstance(profile, dict):
+            failures.append(f"{at} 不是一個物件——每個 profile 底下至少要有 `default_provider`")
+            continue
+        if not MR_PROFILE_NAME_RE.match(name):
+            failures.append(
+                f"{at} 的名字不合形狀 `[a-z][a-z0-9-]*`，"
+                "且名字要說得出「什麼情況下用它」（`codex-emergency`、`normal-mixed`）"
+            )
+        for field_name in sorted(set(profile) - MR_PROFILE_FIELDS):
+            failures.append(
+                f"{at} 有不認得的欄位 `{field_name}`——"
+                f"合法欄位見 config-schema「model_routing」一節（{'、'.join(sorted(MR_PROFILE_FIELDS))}）"
+            )
+        bools = {}
+        for field_name in MR_BOOL_FIELDS:
+            raw = profile.get(field_name)
+            if raw is None:
+                continue
+            if raw not in ("true", "false"):
+                failures.append(
+                    f"{at} 的 `{field_name}` 是 `{raw}`，布林欄位只認 `true`／`false`"
+                )
+            bools[field_name] = raw == "true"
+
+        default_provider = profile.get("default_provider")
+        if not default_provider or isinstance(default_provider, dict):
+            failures.append(f"{at} 缺必填欄位 `default_provider`")
+        elif default_provider not in providers:
+            failures.append(
+                f"{at} 的 `default_provider` 是 `{default_provider}`，"
+                f"不在 {PROVIDERS_REL} 的登記表裡（登記的是 {'、'.join(sorted(providers))}）"
+                "——不得自動 fallback 到別家：靜默換一家跑，產出風格會變而沒有人知道為什麼"
+            )
+
+        roles = profile.get("roles") or {}
+        if not isinstance(roles, dict):
+            failures.append(f"{at} 的 `roles` 不是「角色 → 供應商 id」的映射")
+            roles = {}
+        for role, provider in sorted(roles.items()):
+            if role not in role_ids:
+                failures.append(
+                    f"{at} 的 `roles` 指到 `{role}`，但 {ORG_REL} 的 `roles[].id` 裡沒有這個角色"
+                    "——那一列永遠不會被套用，而設定檔看起來完全正常"
+                )
+            if isinstance(provider, dict) or provider not in providers:
+                failures.append(
+                    f"{at} 把 `{role}` 指到 `{provider}`，"
+                    f"不在 {PROVIDERS_REL} 的登記表裡（登記的是 {'、'.join(sorted(providers))}）"
+                )
+
+        waives_m4 = bools.get("waives_m4", False)
+        if waives_m4:
+            if not bools.get("emergency", False):
+                failures.append(
+                    f"{at} 掛了 `waives_m4: true` 卻沒有 `emergency: true`——"
+                    "豁免只在「知道自己在應急」的前提下才成立，"
+                    "掛在常態 profile 上就只是把應急豁免當成一般選項用"
+                )
+            reason = profile.get("waiver_reason")
+            if isinstance(reason, dict) or not (reason or "").strip():
+                failures.append(
+                    f"{at} 掛了 `waives_m4: true` 卻沒有非空的 `waiver_reason`——"
+                    "理由必須寫明改回的條件（`M5`(d)：臨時值不寫改回條件就會變成新預設）"
+                )
+
+        # `M4`：實作與審查異廠。兩個角色都要在 org.yml 上真的存在本條才有對象——
+        # 組織裡沒有 Code Reviewer 時談不上「與審查同廠」，那是 org-sync 的事。
+        if {MR_IMPL_ROLE, MR_REVIEW_ROLE} <= role_ids and default_provider:
+            impl = roles.get(MR_IMPL_ROLE, default_provider)
+            review = roles.get(MR_REVIEW_ROLE, default_provider)
+            enforced = bools.get("review_provider_distinct", True)
+            if enforced and impl == review and not waives_m4:
+                failures.append(
+                    f"{at} 把 `{MR_IMPL_ROLE}` 與 `{MR_REVIEW_ROLE}` 都指到 `{impl}`"
+                    "（未在 `roles` 覆寫的那個吃 `default_provider`），"
+                    "而本 profile 沒有 `waives_m4: true` ⇒ 與 `M4` 自相矛盾。"
+                    "要嘛換一家、要嘛補上 `emergency` + `waives_m4` + `waiver_reason` 三件"
+                )
+    return failures
+
+
+def check_model_routing_sync(root: Path) -> SelfcheckResult:
+    """`.foundry/config.yml` 的 `model_routing` 段要與 `org.yml`、供應商登記表自洽。
+
+    **本項綠不代表平台對得上。** 它只驗 repo 內宣告的自洽性——同 `org-sync` 那條
+    刻意界線：`model_routing` 是規則層的**應然**宣告，不是平台狀態的鏡子。
+    平台對帳歸 `tools/model-routing/apply_profile.py --check`，那個要 API 金鑰，
+    進不了 pre-commit。**不要在這裡「補上」一個比對平台的檢查**，也不要把本項的
+    ✅ 讀成「每個 agent 的 adapter 都已經是 active profile 說的那一家」。
+
+    驗的是四件事（清單權威在 `config-schema.md`「`model_routing`」一節末）：
+    `active` 指得到 profile、`roles` 的鍵在 `org.yml` 上存在、供應商 id 在
+    `probe_providers.py` 的登記表裡、以及 `M4`（實作與審查異廠）成立或有合法 waiver。
+
+    **整段缺席＝路由未啟用**，是預設狀態不是設定缺漏，本項印 ✅ 並在摘要說明。
+    """
+    res = SelfcheckResult("model-routing-sync",
+                          "模型路由宣告自洽（不含平台對帳）")
+    config_path = root / CONFIG_REL
+    if not config_path.exists():
+        res.failures.append(f"{CONFIG_REL} 不存在——本專案的平台與關卡設定缺席")
+        return res
+    routing = parse_config(read_text(config_path)).get("model_routing")
+    if routing is None:
+        res.summary += "（`model_routing` 段缺席＝路由未啟用，全隊用執行環境預設供應商）"
+        return res
+    if not isinstance(routing, dict):
+        res.failures.append(f"{CONFIG_REL} 的 `model_routing` 不是一個物件")
+        return res
+
+    org_path = root / ORG_REL
+    if not org_path.exists():
+        res.failures.append(
+            f"{ORG_REL} 不存在——`roles` 的鍵要比對它，缺了它角色名就等於沒驗"
+        )
+        return res
+    try:
+        role_ids = [r.get("id") for r in (parse_org(read_text(org_path)).get("roles") or [])]
+    except LintError as exc:
+        res.failures.append(str(exc))
+        return res
+
+    providers_path = root / PROVIDERS_REL
+    if not providers_path.exists():
+        res.failures.append(
+            f"{PROVIDERS_REL} 不存在——供應商 id 的值域缺席，本項無從判定。"
+            "啟用了路由就必須有這份登記表（foundry-init 的複製清單含 `tools/model-routing/`）"
+        )
+        return res
+    providers = provider_ids(read_text(providers_path))
+    if not providers:
+        res.failures.append(
+            f"{PROVIDERS_REL} 取不到 `{PROVIDERS_SYMBOL}` 登記表的 `id`——"
+            "值域取不到時停下報錯，不退回寫死的一份（寫死的會漂，而漂掉沒人會收到通知）"
+        )
+        return res
+
+    res.failures.extend(audit_model_routing(routing, role_ids, providers))
+    res.summary += (f"（active `{routing.get('active')}`、"
+                    f"{len(routing.get('profiles') or {})} 個 profile、"
+                    f"{len(providers)} 家登記供應商；平台對帳歸 `apply_profile.py --check`）")
+    return res
+
+
 # ── `init-copy-list`：Makefile 引用的 tools/ ↔ foundry-init 複製清單（MYL-86）──
 INIT_SKILL_REL = "skills/foundry-init/SKILL.md"
 MAKEFILE_REL = "Makefile"
@@ -3172,6 +3449,7 @@ SELFCHECK_LABELS = {
     "table-shape": "表格形狀",
     "config-schema": "設定欄位",
     "org-sync": "組織宣告",
+    "model-routing-sync": "模型路由宣告",
     "handbook-stamp": "手冊戳記",
     "init-copy-list": "init 複製清單",
     "selfcheck-names": "自檢名稱清單",
@@ -3324,7 +3602,8 @@ def check_selfcheck_names(root: Path) -> SelfcheckResult:
 SELFCHECKS = (check_entry_sync, check_nav_sync, check_handbook_anchors, check_rule_ids,
               check_rule_marks, check_big_files, check_internal_links,
               check_version_shape, check_table_shape, check_config_schema,
-              check_org_sync, check_handbook_stamp, check_init_copy_list,
+              check_org_sync, check_model_routing_sync,
+              check_handbook_stamp, check_init_copy_list,
               check_selfcheck_names, check_mirror_recon,
               check_issue_authors, check_pm_issue_fields)
 

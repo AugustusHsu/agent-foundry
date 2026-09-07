@@ -142,6 +142,12 @@ Paperclip agent）。把喚醒面搬過去，工單就叫不動人；不搬，�
 ⚠️ **非 active 的 profile 一樣要通過上面每一條。** 它存在的理由就是「隨時可以切過去」——
 等切過去那一刻才發現它非法，正好卡在最不能停下來的時候（額度牆下）。
 
+上面這份清單有機械後盾：`--selfcheck` 的 **`model-routing-sync`**（MYL-130）逐條驗，
+角色名比對 `.foundry/org.yml`、供應商 id 比對 `probe_providers.py` 的登記表。
+⚠️ **它只驗這份設定檔內部的自洽性，不連平台**（同 `org-sync` 那條刻意界線）——
+本項綠**不代表**每個 agent 的 adapter 已經是 active profile 說的那一家；
+平台對帳要 API 金鑰、進不了 pre-commit，歸 `tools/model-routing/apply_profile.py --check`。
+
 **本段刻意不宣告的一件事（已知缺口，MYL-128 登記在此）**：profile 只說「哪一家」，不說 **model 代號與 effort**。
 那兩項是 protocol 第 8 節的模型層（層級 × 角色），與供應商正交，寫進來就會多一份會漂的模型表。
 代價是**套用工具需要一張「模型層 × 供應商 → model 代號」的對照表，而那張表目前不存在**——
