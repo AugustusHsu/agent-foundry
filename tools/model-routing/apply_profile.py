@@ -49,6 +49,36 @@ M5_GUIDANCE = (
 )
 CONFIGURE_AGENTS_ERROR = "本動詞需要 configure_agents，全公司只有 CEO 持有"
 
+# ── 三種結束狀態（`--check` 的第三態，AC 2）─────────────────────────────────
+#
+# 「讀不到」和「不一致」是兩件事，混成同一個 exit code 的代價很具體：呼叫端（人或
+# CI）分不出「平台漂移了、去修」與「這把金鑰看不到、換個身分再看」。2 留給 argparse
+# 的用法錯誤，所以第三態用 3。
+EXIT_OK = 0
+EXIT_DRIFT = 1
+EXIT_UNVERIFIABLE = 3
+
+#: 讀不到 `adapterConfig` 時要印的成因與替代路徑。
+#:
+#: ⚠️ 工具的判準是**看得到的訊號**（回傳的 `adapterConfig` 是空 dict），不是權限鍵。
+#: 這是刻意的：授權模型會隨 server build 換（實測跑在 :3100 的
+#: `@paperclipai/server` 2026.831.1 走 `access.decide({action:"agent_config:read"})`
+#: → `decideWithAgentConfigReadGrant()`，`permissionForAction()` 對該 action 回
+#: `null`，根本不走 permissionKey 那條路），拿權限鍵當判準會在下一次 build 靜默失效。
+UNVERIFIABLE_GUIDANCE = (
+    "成因：平台對「不是自己」的 agent 回的是 HTTP 200，但把 adapterConfig 靜默清成 "
+    "`{}`——不是 403，所以看起來像「這個 agent 真的沒設定」。實測的觸發條件是呼叫者"
+    "沒有 `agents:configure`（Product Manager／Developer／Code Reviewer 的金鑰都會踩到）。\n"
+    "替代路徑：用 CEO 或使用者的 board 金鑰重跑（CEO 自 2026-09-02 持有 "
+    "`agents:configure`，逐名實測讀得到完整值）；只想看將送出的內容則跑 `--dry-run`，"
+    "那條路徑不需要讀得到現況。\n"
+    "⚠️ 本次不列出逐格差異：讀不到不等於不一致，把遮蔽值當實況會是整片假警報。"
+)
+
+
+class UnverifiableError(RuntimeError):
+    """讀不到平台實況。與「實況和宣告不一致」分開，才對得上不同的 exit code。"""
+
 # ── C4（MYL-131）：切換執行單 ────────────────────────────────────────────────
 # M6 第 1 級的常設授權不是白給的，義務是「留下執行單與逐角色回查證據」。以下這一段
 # 就是那份義務的機械落點：報告貼回既有工單（--issue），或另開一張切換執行單（--create-issue）。
@@ -160,6 +190,33 @@ def provider_by_id():
     return {provider["id"]: provider for provider in providers.PROVIDERS}
 
 
+def effort_key_for(adapter_type):
+    """adapterType → 該 adapter **真正消費**的 effort 鍵名。全檔只有這一處。
+
+    組 PATCH body、`--check` 逐格比對、`--apply` 回查三處都走這裡。理由不是省行數，
+    是回查的保護力：回查若讀的是「自己剛寫進去的那個鍵」，寫錯鍵時回查照樣相符，
+    保護力歸零——2026-09-07 實測，工具兩側都寫死 codex 那個鍵名，而九名 agent 全是
+    `claude_local`（讀的是另一個鍵），12 項測試有 10 項照樣綠。
+
+    鍵名本身**一律從登記表取，本檔不留任何字面拷貝**（`test_apply_profile` 有一條
+    機械檢查會擋下第二處）。登記表沒寫的 adapterType 一律停下（`L5`）：猜一個鍵寫下去
+    不會報錯，只會靜默不生效。
+    """
+    for provider in providers.PROVIDERS:
+        if provider["adapter_type"] != adapter_type:
+            continue
+        key = provider.get("effort_key")
+        if key:
+            return key
+        raise ValueError(
+            f"需人工確認：登記表沒有實證 {adapter_type} 消費哪一個 effort 鍵，"
+            "不猜、停止套用（在 probe_providers.PROVIDERS 補上 effort_key 才繼續）"
+        )
+    raise ValueError(
+        f"需人工確認：adapterType {adapter_type!r} 不在 probe_providers 登記表，停止套用"
+    )
+
+
 def role_definitions(org):
     return {role["id"]: role for role in org.get("roles", [])}
 
@@ -193,25 +250,36 @@ def targets_for_profile(profile, org):
             model, effort = MODEL_TARGETS[provider_id][tier]
         except KeyError as error:
             raise ValueError(f"沒有 {provider_id}／{tier} 的 model 與 effort 對照") from error
+        adapter_type = registry[provider_id]["adapter_type"]
+        # 這裡就取一次鍵，是為了讓「登記表沒寫 effort_key」在第一筆 PATCH 之前就炸掉，
+        # 而不是套到一半才發現某一家不知道該寫哪個鍵。
+        effort_key_for(adapter_type)
         targets.append(
             {
                 "role": role_id,
                 "provider": provider_id,
-                "adapterType": registry[provider_id]["adapter_type"],
+                "adapterType": adapter_type,
                 "model": model,
-                "modelReasoningEffort": effort,
+                # 刻意叫 `effort` 而不是任何一家的鍵名：目標值是語意，鍵名是 adapter 細節。
+                "effort_value": effort,
             }
         )
     return targets
 
 
 def patch_body(target):
-    """L4：只送兩個允許欄位，且 adapterConfig 不攜帶 instructions*。"""
+    """L4：只送兩個允許欄位，且 adapterConfig 不攜帶 instructions*。
+
+    ⚠️ 不用 `replaceAdapterConfig: true` 去清舊的死鍵：既有 config 帶 instructions
+    bundle 鍵而 body 沒帶時，該旗標會觸發 `assertCanManageInstructionsPath`
+    （`agents.ts:1883-1891`），那就是 `L4` 的 403。同 adapterType 走預設的合併語意即可，
+    殘留的死鍵無害——沒有 adapter 會讀它。
+    """
     return {
         "adapterType": target["adapterType"],
         "adapterConfig": {
             "model": target["model"],
-            "modelReasoningEffort": target["modelReasoningEffort"],
+            effort_key_for(target["adapterType"]): target["effort_value"],
         },
     }
 
@@ -244,8 +312,14 @@ def agents_by_role(client, org):
     return indexed
 
 
-def assert_registered_current_adapters(client, targets, agents):
-    """L5：未知既有 adapter 不作為首次寫入的試驗對象。"""
+def assert_registered_current_adapters(client, targets, agents, *, precheck_readback=False):
+    """套用前的一次性 GET：`L5` 未知 adapter 不作為首次寫入的試驗對象，順帶做 AC 14 預檢。
+
+    `precheck_readback=True` 時，這一趟同時是「回查能力預檢」：拿到被遮蔽的空
+    `adapterConfig` 就地停下。時機是關鍵——這整個迴圈跑在**第一筆 PATCH 之前**，
+    所以「這把金鑰回查不成立」會在還沒改任何東西時說出來，而不是套完第 1 個角色、
+    回查必然失敗、然後停在一個改到一半的狀態（正是 AC 10 要防的形狀）。
+    """
     registered = {provider["adapter_type"] for provider in providers.PROVIDERS}
     current_agents = {}
     for target in targets:
@@ -259,29 +333,48 @@ def assert_registered_current_adapters(client, targets, agents):
                 f"需人工確認：角色 {target['role']} 的 adapterType "
                 f"{current_adapter!r} 不在 probe_providers 登記表，停止套用"
             )
+        if precheck_readback:
+            assert_config_readable(
+                current, target["role"],
+                phase="`--apply` 預檢中止（一筆 PATCH 都還沒送出）",
+            )
         current_agents[target["role"]] = current
     return current_agents
 
 
 def differs(actual, target):
+    """逐格比對，回 `(欄位, 宣告值, 實況值)`。
+
+    effort 那一格兩側取的鍵可以不一樣，而且必須不一樣：宣告值掛在**目標** adapter 的
+    鍵上，實況值要從**現況** adapter 真正消費的鍵讀。換型的那一格若兩側都用目標鍵，
+    現況 adapter 的舊 effort 會被讀成 `None`——看起來像「沒設定」，其實是讀錯欄位。
+    """
     config = actual.get("adapterConfig") or {}
+    declared_key = effort_key_for(target["adapterType"])
+    live_adapter = actual.get("adapterType")
+    try:
+        live_key = declared_key if live_adapter == target["adapterType"] else effort_key_for(live_adapter)
+    except ValueError:
+        # 現況是登記表外的 adapter：`--apply` 早已在 AC 7 停下，這裡只會發生在 `--check`。
+        # 讀目標鍵，於是那一格報不符——比靜默把它算成相符誠實。
+        live_key = declared_key
     return [
-        ("adapterType", target["adapterType"], actual.get("adapterType")),
+        ("adapterType", target["adapterType"], live_adapter),
         ("adapterConfig.model", target["model"], config.get("model")),
-        (
-            "adapterConfig.modelReasoningEffort",
-            target["modelReasoningEffort"],
-            config.get("modelReasoningEffort"),
-        ),
+        (f"adapterConfig.{declared_key}", target["effort_value"], config.get(live_key)),
     ]
 
 
-def readable_adapter_config(actual, role):
-    """拒絕把 API 權限遮蔽的空設定誤當成平台實況。"""
+def assert_config_readable(actual, role, *, phase):
+    """拒絕把 API 權限遮蔽的空設定誤當成平台實況（AC 2 第三態、AC 14 預檢）。
+
+    判準是**回傳值的形狀**（`adapterConfig == {}`），不是呼叫者持有哪個權限鍵——理由
+    見 `UNVERIFIABLE_GUIDANCE` 的註解。
+    """
     if actual.get("adapterConfig") == {}:
-        raise ValueError(
-            f"無法讀取角色 {role} 的完整 adapterConfig（權限遮蔽）；"
-            "需要可讀全體 agent 設定的身分，停止對帳，未將遮蔽值列為平台漂移"
+        raise UnverifiableError(
+            f"{phase}：讀不到角色 {role} 的 adapterConfig（平台回 200 但內容被清空），"
+            f"無法回查平台實況。\n{UNVERIFIABLE_GUIDANCE}"
         )
 
 
@@ -325,18 +418,18 @@ def command_check(client, config, org):
             differences.append((target["role"], "agent", "已宣告", "平台找不到"))
             continue
         actual = client.get(f"/api/agents/{agent['id']}")
-        readable_adapter_config(actual, target["role"])
+        assert_config_readable(actual, target["role"], phase="`--check` 對帳中止")
         for field, declared, live in differs(actual, target):
             if declared != live:
                 differences.append((target["role"], field, declared, live))
     if not differences:
         print("✅ 平台實況與 active profile 一致")
-        return 0
+        return EXIT_OK
     print("❌ 平台實況與 active profile 不一致：")
     print("| 角色 | 欄位 | 宣告值 | 實況值 |\n| --- | --- | --- | --- |")
     for role, field, declared, live in differences:
-        print(f"| {role} | {field} | `{declared}` | `{live}` |")
-    return 1
+        print(f"| {role} | {field} | `{markdown_value(declared)}` | `{markdown_value(live)}` |")
+    return EXIT_DRIFT
 
 
 def command_dry_run(client, profile_name, profiles, org):
@@ -366,15 +459,23 @@ def ensure_ready(targets, probe_all=providers.probe_all):
 
 
 def update_active_config(path, profile_name):
-    """M6 第 1 級唯一允許的 repo 設定寫入：只換 active 指標。"""
+    """M6 第 1 級唯一允許的 repo 設定寫入：只換 active 指標。
+
+    判準是**正規表示式有沒有配到那一行**，不是「改完之後內容有沒有變」。差別在套用
+    「已經是 active 的那個 profile」時：`active:` 那行找得到、只是替換結果與原文相同。
+    拿「內容沒變」當失敗，就會在一次完全成功的冪等重跑之後，帶著「設定檔壞了」的訊息
+    非零 exit——而這個函式跑在**所有 PATCH 送完並逐格回查通過之後**，平台其實已經寫
+    進去了，只是成功那一行永遠印不出來。
+    """
     config_path = Path(path)
     text = config_path.read_text(encoding="utf-8")
     section = re.compile(r"(?ms)^(model_routing:\n.*?)(?=^\S|\Z)")
     matched = section.search(text)
     if not matched:
         raise ValueError("找不到 model_routing 段，拒絕改寫 active")
-    rewritten = re.sub(r"(?m)^(  active:)\s*[^\n]*$", rf"\1 {profile_name}", matched.group(1), count=1)
-    if rewritten == matched.group(1):
+    rewritten, replaced = re.subn(
+        r"(?m)^(  active:)\s*[^\n]*$", rf"\1 {profile_name}", matched.group(1), count=1)
+    if not replaced:
         raise ValueError("找不到 model_routing.active，拒絕改寫")
     config_path.write_text(text[: matched.start(1)] + rewritten + text[matched.end(1) :], encoding="utf-8")
 
@@ -645,8 +746,10 @@ def command_apply(client, profile_name, config_path, profiles, org, issue=None,
     targets = targets_for_profile(profiles[profile_name], org)
     probe_results = ensure_ready(targets, probe_all=probe_all)
     agents = agents_by_role(client, org)
-    # 所有未知 adapter 都在第一筆 PATCH 前收掉，不能邊套邊發現。
-    current_agents = assert_registered_current_adapters(client, targets, agents)
+    # 所有未知 adapter 都在第一筆 PATCH 前收掉，不能邊套邊發現；AC 14 的回查能力預檢
+    # 搭同一趟 GET，理由見該函式 docstring。
+    current_agents = assert_registered_current_adapters(
+        client, targets, agents, precheck_readback=True)
 
     # 在第一筆 PATCH 前印出：後續任一寫入或回查失敗時，仍有可貼回工單的回退方式。
     rollback = rollback_command(previous_active, issue=issue, parent=parent)
@@ -662,7 +765,7 @@ def command_apply(client, profile_name, config_path, profiles, org, issue=None,
         agent = agents[target["role"]]
         client.patch(f"/api/agents/{agent['id']}", patch_body(target))
         actual = client.get(f"/api/agents/{agent['id']}")
-        readable_adapter_config(actual, target["role"])
+        assert_config_readable(actual, target["role"], phase="`--apply` 回查中止")
         mismatches = print_verification(target["role"], actual, target, emit=report.emit)
         if mismatches:
             field, declared, live = mismatches[0]
@@ -806,9 +909,13 @@ def run(args, client=None, probe_all=providers.probe_all, now=None):
 def main(argv=None):
     try:
         return run(parse_args(argv if argv is not None else sys.argv[1:]))
+    except UnverifiableError as error:
+        # 第三態要有自己的 exit code，呼叫端才分得出「去修平台」與「換個身分再看」。
+        print(f"❓ 無法驗證：{error}", file=sys.stderr)
+        return EXIT_UNVERIFIABLE
     except (ApiError, ValueError) as error:
         print(f"錯誤：{error}", file=sys.stderr)
-        return 1
+        return EXIT_DRIFT
 
 
 if __name__ == "__main__":
