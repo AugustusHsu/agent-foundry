@@ -30,20 +30,9 @@ import probe_providers as providers
 # 這是 C2 補上的「模型層 × 供應商」落點。供應商到 adapterType 不在這裡，
 # 必須從 probe_providers.PROVIDERS 取得，避免兩份 adapter 登記表漂移。
 #
-# high 層的 effort 值 `"max"` 兩邊都已查證合法，**不要改成 `"xhigh"`**（MYL-133）：
-#   - codex：codex-cli 0.149.1 實跑 `codex exec -c model="gpt-5.6-sol"
-#     -c model_reasoning_effort="max"` 成功（session header 回報 `reasoning effort: max`，
-#     exit 0）；`codex debug models` 列出 gpt-5.6-sol 的 supported_reasoning_levels
-#     含 `max`。同一路徑送不合法值是伺服器回 400
-#     `[ReasoningEffortParam] [reasoning.effort] [invalid_enum_value] ... Supported
-#     values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'`——
-#     會炸、不會靜默降級。
-#     ⚠️ `codex-local/src/index.ts:27` 自述的 `minimal|low|medium|high|xhigh` 已過時
-#     （漏 `none` 與 `max`），別拿那行當值域權威。
-#   - claude：`claude-local/src/index.ts:20` 的 `low|medium|high` 同樣是過時散文——UI 是
-#     自由字串、server 不驗，而平台此刻正以 `effort: max` 跑 high 層三名且運作正常。
-# 值域刻意不做機械驗證（值域屬供應商伺服器、隨模型而異，本地副本必然重蹈上面兩行散文的
-# 覆轍），理由與代價寫在 MYL-133 工單留言。
+# 這張表 high 層的 effort 用 `"max"`，**不要改成 `"xhigh"`**（MYL-133 已查證兩邊皆合法）。
+# effort 值域的權威歸屬、查證方式，以及「為什麼這裡刻意不做機械驗證」，
+# 見 docs/standards/known-drift.md 的 L31——那是唯一一份，不要在這裡再抄一次。
 MODEL_TARGETS = {
     "claude": {
         "high": ("claude-opus-5", "max"),
