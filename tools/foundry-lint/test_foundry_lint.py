@@ -2774,6 +2774,34 @@ class ModelRoutingSyncTest(RepoCopyTestCase):
     def test_a_反向_active_指回存在的_profile_轉綠(self):
         self.assertGreen(active="normal-mixed")
 
+    def _active_block(self, block):
+        """`active` 底下掛一個區塊——`render` 只寫得出純量，這裡直接組設定檔。"""
+        self.write(".foundry/org.yml", self.ORG)
+        self.write("tools/model-routing/probe_providers.py", self.PROVIDERS)
+        self.write(".foundry/config.yml",
+                   "foundry: 2\nmodel_routing:\n" + block + "  profiles:\n"
+                   "    normal-mixed:\n"
+                   "      default_provider: claude\n"
+                   "      roles:\n"
+                   "        developer: claude\n"
+                   "        code-reviewer: codex\n")
+        return foundry_lint.check_model_routing_sync(self.root)
+
+    def test_a_active_寫成區塊時回一條可讀_failure_而不是拋例外(self):
+        """守衛缺席時這裡拋 `TypeError`（`dict in dict`），而 `run_selfcheck`
+        沒有逐項例外隔離 ⇒ 整份 `--selfcheck` 以 traceback 中止，排在本項後面
+        的自檢一項都不跑。設定寫錯一格不該讓所有閘門一起失效（MYL-130 CR #1）。
+        """
+        res = self._active_block("  active:\n    normal-mixed: true\n")
+        self.assertFalse(res.passed, "應該擋下卻放行了")
+        self.assertTrue(any("`model_routing.active` 是一個區塊" in f for f in res.failures),
+                        f"擋是擋下了，但理由不是那一格：{res.failures}")
+
+    def test_a_反向_active_改回純量後轉綠(self):
+        """證明紅的是「寫成區塊」那一格，不是這條路徑上任何設定都會紅。"""
+        res = self._active_block("  active: normal-mixed\n")
+        self.assertTrue(res.passed, res.failures)
+
     # ── 反例 (b)：`roles` 的鍵不在 `org.yml` ─────────────────────────────
     def test_b_角色名不在_org_yml_擋下(self):
         bad = dict(self.BASE, roles={"develper": "claude", "code-reviewer": "codex"})

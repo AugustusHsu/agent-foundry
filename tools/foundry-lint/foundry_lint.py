@@ -3147,7 +3147,17 @@ def audit_model_routing(routing: dict, role_ids, providers) -> list:
             "有 `model_routing` 段就代表路由已啟用，至少要有一個 profile"
         )
         profiles = {}
-    if not active:
+    if isinstance(active, dict):
+        # 這條擺在成員判定之前：`active` 寫成區塊時 `active not in profiles`
+        # 是 `dict in dict`，拋 `TypeError` 而不是回 False。`run_selfcheck`
+        # 沒有逐項例外隔離，那個 traceback 會讓**整份 `--selfcheck` 中止**，
+        # 排在本項後面的自檢一項都不跑——設定寫錯一格，換來的是所有閘門一起失效。
+        failures.append(
+            f"{CONFIG_REL} 的 `model_routing.active` 是一個區塊——"
+            "它要填的是「目前生效的是哪一個 profile」，值只能是單一 profile 的鍵"
+            "（`active: normal-mixed`），不是一份 profile 的內容"
+        )
+    elif not active:
         failures.append(
             f"{CONFIG_REL} 的 `model_routing.active` 缺席——"
             "有本段時它必填，指出目前生效的是哪一個 profile"
