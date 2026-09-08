@@ -12,10 +12,13 @@
 #    與平台的對帳歸承接建置的那張工單，不是 `org-sync` 的事。
 #    本檔宣告的角色已於 2026-09-06（MYL-79）全數在平台上建置並逐格對帳：**除下方 ⚠️
 #    那一處刻意保留的例外**（Frontend Verifier 的 `canAssignTasks`）外，其餘逐格一致。
-#    ⚠️ **MYL-115 之後有一格是「平台有、本檔沒有」：Scrum Master。** 使用者於 MYL-96
-#    裁定該角色退場（`pause` ＋ `leave`），規範側先落地、平台側只有使用者按得動，
-#    排在後續工單。那是**預期狀態**，不是漏同步，更不適用 protocol `O1` 第 2 種情形的
-#    「補登記」——查得到的那條裁定正好是要它退場的。**不要把它加回本檔。**
+#    ✅ **Scrum Master 的退場已於 2026-09-08 00:22 由使用者在平台側執行完成**（MYL-139
+#    訂正本段）。MYL-115 之後曾有一格是「平台有、本檔沒有」，那段預期的不一致**已經結束**：
+#    SM 現為 `status = terminated`，已不在 `GET /api/companies/{cid}/agents` 的名冊上。
+#    **訂正**：本段原寫退場方式是「`pause` ＋ `leave`」，**兩半都是錯的**——實際是 `pause` ＋
+#    `terminate`，而 `terminate` **不可逆**（源碼鏈見 docs/standards/known-drift.md `L35`）。
+#    **仍然不要把 Scrum Master 加回本檔**：不適用 protocol `O1` 第 2 種情形的「補登記」，
+#    查得到的那條裁定正好是要它退場的。
 #    （⚠️ 這句的「只剩一項」與 `skills/foundry-platform/adapters/paperclip.md`
 #    「`provision_team` → 步驟 0：對帳」那張表底下那句「唯一剩下的那一項差異」
 #    **指的不是同一項**，兩者不矛盾——它們數的是兩張不同的對帳表：
