@@ -1,0 +1,1045 @@
+
+<!doctype html>
+<html lang="zh-TW" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Foundry — 跑在 Paperclip 上的 AI 開發團隊規範與手冊">
+      
+      
+      
+        <link rel="canonical" href="https://augustushsu.github.io/agent-foundry/v1.0.0.0/06-org-structure/">
+      
+      
+        <link rel="prev" href="../05-troubleshooting/">
+      
+      
+        <link rel="next" href="../07-workflows/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>6. 團隊是怎麼編制的？ - Foundry Handbook</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-orange" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#6" class="md-skip">
+          跳轉到
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="頁首">
+    <a href=".." title="Foundry Handbook" class="md-header__button md-logo" aria-label="Foundry Handbook" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Foundry Handbook
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              6. 團隊是怎麼編制的？
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-orange" data-md-color-accent="deep-orange"  aria-label="切換至深色模式"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="切換至深色模式" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-orange" data-md-color-accent="deep-orange"  aria-label="切換至淺色模式"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="切換至淺色模式" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="搜尋" placeholder="搜尋" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="搜尋">
+        
+        <button type="reset" class="md-search__icon md-icon" title="清除" aria-label="清除" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            正在初始化搜尋引擎
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/AugustusHsu/agent-foundry" title="前往倉庫" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AugustusHsu/agent-foundry
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="導覽列" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Foundry Handbook" class="md-nav__button md-logo" aria-label="Foundry Handbook" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Foundry Handbook
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/AugustusHsu/agent-foundry" title="前往倉庫" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    AugustusHsu/agent-foundry
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    手冊首頁
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../01-first-run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. 第一次使用走查
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../02-commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. 我該下什麼指令？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../03-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. 流程會怎麼跑？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../04-decision-points/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. 我要在哪幾個點做決定？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../05-troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    5. 故障排除
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    6. 團隊是怎麼編制的？
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    6. 團隊是怎麼編制的？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="目錄">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目錄
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        組織圖
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        這對你有什麼影響
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        哪些決定會回到你手上
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#product-manager-pm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Product Manager 是做什麼的？跟以前說的「不加 PM」是不是矛盾？
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Product Manager 是做什麼的？跟以前說的「不加 PM」是不是矛盾？">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        「只有三個人能開單」是查出來的，不是擋下來的
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第三條：agent 開的單都要掛得到樹上
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#blocker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        想讓一張單先停著？要加 blocker，不能只用講的
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scrum-master" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scrum Master 去哪了
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        規範落後現況時怎麼辦
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        結構與平台設定的對應
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="結構與平台設定的對應">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        角色還沒建出來的那段期間，誰拍板
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../07-workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    7. 團隊有哪些固定 workflow？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../08-cross-platform/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    8. 怎麼把這套流程帶到其他專案？
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="目錄">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      目錄
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        組織圖
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        這對你有什麼影響
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        哪些決定會回到你手上
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#product-manager-pm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Product Manager 是做什麼的？跟以前說的「不加 PM」是不是矛盾？
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Product Manager 是做什麼的？跟以前說的「不加 PM」是不是矛盾？">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        「只有三個人能開單」是查出來的，不是擋下來的
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        第三條：agent 開的單都要掛得到樹上
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#blocker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        想讓一張單先停著？要加 blocker，不能只用講的
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scrum-master" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scrum Master 去哪了
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        規範落後現況時怎麼辦
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        結構與平台設定的對應
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="結構與平台設定的對應">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        角色還沒建出來的那段期間，誰拍板
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="6">6. 團隊是怎麼編制的？<a class="headerlink" href="#6" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>最後對照 protocol <code>316f06e</code>（2026-09-06）</p>
+<p>本章記錄 MYL-12 討論、MYL-14 落地、MYL-61／MYL-73 改寫、MYL-96／MYL-115 重整的組織結構決議。規則本體在 <a href="https://github.com/AugustusHsu/agent-foundry/blob/main/skills/foundry-protocol/SKILL.md"><code>skills/foundry-protocol/SKILL.md</code></a> 第 9 節；本章解釋它對你（使用者）的意義。</p>
+</blockquote>
+<h2 id="_1">組織圖<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>你（使用者）
+└── CEO ─────────────────── 你唯一的對口
+    └── Product Manager ─── 開單中樞：單由它開、由它派
+        ├── Product Analyst（需求）
+        ├── Frontend Verifier（前端驗證）
+        └── Tech Lead（技術）
+            ├── Developer
+            ├── Code Reviewer
+            └── QA Engineer
+</code></pre></div>
+<ul>
+<li><strong>CEO 只直轄 Product Manager 一個。</strong> CEO 維持薄：它讀報告、做決定、對你發卡，不讀原始材料。</li>
+<li><strong>Product Analyst、Frontend Verifier、Tech Lead 掛在 Product Manager 下。</strong></li>
+<li><strong>開發三角（Developer、Code Reviewer、QA Engineer）掛在 Tech Lead 下</strong>，位置沒變。</li>
+<li><strong>Frontend Verifier 不在開發三角內</strong>。理由：它要驗的東西橫跨 Developer 的實作與 QA Engineer 的測試計畫，掛在其中任一邊就變成那一邊的自我驗證。它是你在 MYL-37 裁定建的，MYL-73 補寫進規範（過程見下面「規範落後現況時怎麼辦」），MYL-115 從 CEO 底下改掛 Product Manager。</li>
+</ul>
+<h2 id="_2">這對你有什麼影響<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>你的對口不變</strong>：一律對 CEO 說話（見<a href="../02-commands/">第 2 章</a>），不需要理解內部匯報線。</li>
+<li><strong>技術爭議不會吵到你面前</strong>：Developer 與 Code Reviewer 對瑕疵判定有異議、實作發現設計缺漏，這類技術面爭議由 Tech Lead 裁定收斂；只有涉及需求取捨、優先序、花錢、對外的問題才會以互動卡的形式升到你這裡（清單見<a href="../04-decision-points/">第 4 章</a>）。</li>
+<li><strong>匯報線 ≠ 流程鏈</strong>：<a href="../03-workflow/">第 3 章</a>的交接順序（需求→設計→工單→實作→審查→測試）照舊，不因組織結構改變。Product Manager 拆單交棒給 Developer，走的是流程鏈；Developer 的匯報對象仍是 Tech Lead。</li>
+</ol>
+<h2 id="_3">哪些決定會回到你手上<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<p>長期只有三類（MYL-12 你的裁定）：</p>
+<ol>
+<li><strong>錢與權限</strong>——任何會產生費用或變更權限的動作，含常設授權的給予、擴大、收回。</li>
+<li><strong>對外動作</strong>——push main／force-push／tag、新開公開資源、發布、公開任何東西（protocol 第 9 節分級表的 P3 級）。你已透過 MYL-23 核可把 P1（例行推送）與 P2（手冊公開鏡像同步）改為常設授權自動執行——<strong>P1 的判準是「這次推送有沒有讓新的東西變成公開」，不是 repo 本身公開與否</strong>（MYL-59；這個 repo 現在是 public，但推一條工作分支不會多公開任何東西）；跨平台專案中，分支 push＋開 PR 依 <code>.foundry/config.yml</code> 下放 Tech Lead（MYL-9）。</li>
+<li><strong>產品方向</strong>——需求內容、範圍取捨、優先序。</li>
+</ol>
+<p>常規流程中，這三類決定的執行形式就是<a href="../04-decision-points/">第 4 章</a>的三個關卡（A 規格、B 方案、C 對外／不可逆）。其餘決定都有明文的拍板者：技術選型歸 Tech Lead、<strong>拆單方式／依賴鏈／AC 修改歸 Product Manager</strong>、派工歸 Product Manager、審查結論歸 Code Reviewer、<strong>缺陷成因工單判定歸 Tech Lead</strong>、技術爭議歸 Tech Lead 裁定、分支 push＋開 PR 歸 Tech Lead（跨平台專案）。完整的「誰拍板、裁不了怎麼升級」矩陣在 <a href="https://github.com/AugustusHsu/agent-foundry/blob/main/skills/foundry-protocol/SKILL.md"><code>foundry-protocol</code> 第 9 節</a>。如果你被問到矩陣內已授權的決定，可以直接回「這由 {角色} 依規範決定」，把決定推回去。</p>
+<h2 id="product-manager-pm">Product Manager 是做什麼的？跟以前說的「不加 PM」是不是矛盾？<a class="headerlink" href="#product-manager-pm" title="Permanent link">&para;</a></h2>
+<p>不矛盾，但要說清楚是哪一半改了。「加 PM」不是一件事而是三件：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>stream owner</th>
+<th>彙整型（Delivery Manager）</th>
+<th>開單中樞（現在這一個）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>解什麼問題</td>
+<td>流太多，CEO 的時間被跨流協調吃掉</td>
+<td>CEO 的 context 被原始材料占滿</td>
+<td>調度沒有下放：開單者近半是 CEO</td>
+</tr>
+<tr>
+<td>幾個</td>
+<td>每條 feature 流各一個</td>
+<td>全公司一個</td>
+<td>全公司一個</td>
+</tr>
+<tr>
+<td>現況</td>
+<td><strong>還沒觸發</strong>，不預先建置</td>
+<td>已被開單中樞吸收</td>
+<td><strong>現行</strong>（你在 MYL-96 核可卡上選的）</td>
+</tr>
+</tbody>
+</table>
+<p>你在 MYL-61 的裁定卡上寫過「PM 是彙整型、<strong>現階段不加管理層</strong>」。MYL-96 改的是後面那半句，不是前面那半句：</p>
+<ul>
+<li><strong>仍然有效</strong>：PM 不是 stream owner。stream owner 的觸發條件沒有改——(1) 同時有 ≥2 條獨立 feature 流在進行；(2) CEO 的時間主要花在跨流協調。這兩項現在都還不成立，真的觸發時 CEO 會開單提案、發卡請你裁定。</li>
+<li><strong>已被取代</strong>：「不加管理層」。實查顯示彙整型 PM 上線之後，開單者仍有近半是 CEO、而 PM 一張單都沒開過——「把 PM 加進來」沒有變成「把 PM 放到中間」。所以這次把它放到中間。</li>
+</ul>
+<p><strong>實際差別</strong>：以前別的角色想開單就自己開；現在<strong>要開單先找 Product Manager</strong>，由它判斷後自己開、自己指派。拆單方式、依賴鏈、工單 AC 修改也一併歸它（原本歸 Scrum Master）。彙整報告那一段沒有取消，只是不再是它唯一的工作。它<strong>不做</strong>需求取捨、不裁技術爭議、也不直接對你發卡——要問你的事一律經 CEO。</p>
+<h3 id="_4">「只有三個人能開單」是查出來的，不是擋下來的<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h3>
+<p>開單者的白名單是<strong>你、CEO、Product Manager</strong> 三者（你在 MYL-96 的卡上選的）。有一件事值得你知道，因為它決定了你看到的是什麼：</p>
+<ul>
+<li><strong>平台上關不掉任何 agent 的開單權</strong>——實查它的權限開關裡沒有任何一把管得到「開單」。所以這條規則沒有閘門，違規的單<strong>開得出來</strong>；<code>make check</code> 的 <code>開單者白名單</code> 那一項是在事後把它報給你看。</li>
+<li><strong>開出來之後也改不了作者</strong>——平台沒有這個操作。所以處置不是刪單，是把那張單交回 Product Manager 覆核，由它判要不要退回。<strong>覆核完成後，覆核者要在那張單留一則以 <code>I1-覆核完成：</code> 起頭的留言</strong>寫明判了什麼，<code>make check</code> 讀到它就不再報那一張。這一步聽起來像形式，但少了它整條規則會反過來咬人：作者改不了，紅字就永遠在，而這項檢查跑在每一次 commit 之前——一張違規的單會擋住<strong>每個人</strong>的每一次 commit，最後只會逼人把整項關掉。標記只認<strong>覆核者</strong>留的（Product Manager，或你自己）：讓違規的那位自己留一則，就等於自己特赦自己。標記也不會把違規抹掉——留言和作者欄都還在單上，消掉的只是那條紅字。</li>
+<li><strong>平台自己開的單不算違規</strong>（例如它自動開的生產力審查單，那種單沒有作者）。規則裡明文寫了收容，不會拿它來吵你。</li>
+<li>規則生效前開的舊單不回溯：2026-09-06 當下有 37 張是別的角色開的，那些改不了，硬要算會變成永遠修不掉的紅字。</li>
+</ul>
+<p>另外一項是給 Product Manager 自己的：<strong>它開的每一張單，四個欄位在開單當下就要齊</strong>——指派給誰、掛在哪張母單底下、被誰擋住、驗收標準。這條的來源是你說的「開單要足夠詳盡明確、盡量避免多次來回」：少一欄，接單的人第一輪就得回頭問一次。<code>make check</code> 的 <code>開單必備欄位</code> 會盯著這幾格。</p>
+<p>「被誰擋住」那一格有<strong>兩種寫法都算數</strong>（其他三格都是「有填就過」）：依賴欄填得出來就填；填不出來的時候，在描述裡寫一行 <code>**上游**：前置 MYL-97 已於 2026-09-05 結案，本單可獨立開工</code>——要寫得出單號。會有第二種寫法，是因為這一格真正要回答的是「這張單從哪來、為什麼現在可以做」，而依賴欄回答的是「誰做完我才會醒」。多數時候是同一件事，但有兩種很常見的情況不是：前置在開單那一刻就已經做完了，或者上游根本是母單（那不能填，見下一段）。兩件事先說清楚：<strong>掛在哪張母單底下不能拿來抵這一格</strong>（它本來就是必填的，拿它抵等於這一格永遠算過），而那一行<strong>寫了什麼機械看不懂</strong>——它只認得「有沒有寫出單號」，寫一句空話它擋不住。</p>
+<p>原本還有第五格「擋住誰」，2026-09-07 拿掉了：那一欄開單的人<strong>填不動</strong>——依賴在平台上是一條邊、兩個看法，能寫的只有「被擋的那張單自己去填誰擋著它」。所以要讓一張單有下游，得等後來的單來填。取而代之的是一句沒有機械後盾的要求：開單當下已經知道要接著做的事，就把單一起開出來。</p>
+<p>同一項檢查還多看一格反過來的：<strong>母單不可以同時被填成「擋住自己的單」</strong>。平台不擋這件事，但兩邊會互等——母單等子單做完才結、子單等母單結了才醒——結果是一張<strong>再也不會被叫醒的單</strong>。單面上看起來欄位還是齊的，所以只能靠檢查報出來。</p>
+<h3 id="agent">第三條：agent 開的單都要掛得到樹上<a class="headerlink" href="#agent" title="Permanent link">&para;</a></h3>
+<p>2026-09-07 加的（<code>make check</code> 的 <code>上位單</code> 那一項）。<strong>這一條只管 agent 開的單，你自己開的一張都不會被動到</strong>——這是你在 MYL-96 卡上定的。理由不是「你的單特別」，是<strong>你是從系統外面開單的，你的單就是這棵樹的根</strong>：要求它們掛到別的單底下，等於要求每個新目標都得先屬於某個舊目標。</p>
+<p>會有這條，是因為沒有母單的單<strong>不會報錯、也擋不住任何人，它只是從工作線上消失</strong>：看板按樹展開的時候它不在任何一條線底下，母單結案時沒有人會回頭看它，於是它既沒被做完、也沒被撤掉。這批單是這樣積出來的——<strong>沒有哪一張是有人決定讓它飄著，是每一張都少填了一格</strong>。</p>
+<p>之前積下來的 <strong>29 張已經在 2026-09-07 補掛完畢</strong>，每一張改成什麼、憑什麼，都逐張記在 <code>docs/standards/issue-parent-backfill.md</code>（那份不是規範，是給你事後查帳用的）。補的時候有一件事值得你知道：<strong>29 張裡沒有一張是真正無所歸屬的</strong>，每一張都在自己的描述裡指名了來源單——其中 15 張還是 CEO 開的。這說明 agent 開單基本上都是在對系統裡既有的東西作反應（某張單的審查意見、某次結案的溢出、實作時發現的缺陷），而那個「既有的東西」永遠是一張既有的單。</p>
+<p>規則仍然留了一個例外：真的掛不到任何一張單底下（它是一整條新工作線的起點），在描述裡寫一行 <code>**頂層單**：&lt;為什麼&gt;</code>，檢查讀到就放它過。<strong>但這個例外預期是空的</strong>——今天一張都沒有用到它。所以如果你在哪張單上看到這一行，那是值得問一句的訊號，不是常規寫法。</p>
+<p><strong>這個訊號不用你自己去翻單</strong>：有誰用了這條例外，<code>make check</code> 會在「上位單」那一行的結尾把<strong>張數和單號</strong>印出來——放它過，但不讓它靜悄悄地過。之所以要這一格，是因為例外寫在<strong>描述</strong>裡，而描述誰都改得動、包括開單的 agent 自己；不印出來的話，一張單只要自己補一行「頂層單：因為我不想掛」就能讓紅字消失，而且沒有任何人會知道。上面那條「開單者」的收斂標記不同——它寫在留言、平台擋得住冒名，所以不需要這一格。</p>
+<p>還有一點與上面那條「開單者」不同，值得對照著看：<strong>母單這一格是改得動的</strong>（補掛 29 張就是這麼做的），所以違規的正解是<strong>把母單補上</strong>，不像作者那格改不掉、只能靠覆核標記收斂。也因此規則裡特別寫了一句：<strong>不要為了讓檢查變綠，把單掛到不相干的母單底下</strong>——那是把樹弄髒來換一個綠燈，而樹正是這條規則要保護的東西。</p>
+<h2 id="blocker">想讓一張單先停著？要加 blocker，不能只用講的<a class="headerlink" href="#blocker" title="Permanent link">&para;</a></h2>
+<p>這一條是 2026-09-06 用一次實際的意外換來的，寫在這裡是因為<strong>它需要你配合一個動作</strong>。</p>
+<p>那天你交代「MYL-61 先處理完再動其他的」，agent 也照做了——但那張單在平台上的狀態一直是「進行中」，沒有任何東西擋著它。結果平台自己開的一張子單結案時，觸發了「子單全完成」事件，把它叫醒跑了一整輪，事後才有人發現它本來不該跑。</p>
+<p><strong>留言擋得住 agent 自己往下走，擋不住平台把它叫醒</strong>——而叫醒它的那個事件不來自任何人的動作。所以規範現在明訂（protocol <code>O5</code>）：要讓一張單暫時不往下走，就替它加一個 blocker（在看板上設一條「被某張單擋住」的依賴關係），不是靠留言紀律。你只要交代一句話就好，把它落成 blocker 是 agent 的事；但如果你在看板上看到一張「說好要停、狀態卻還在跑」的單，那就是這一條沒有被執行，可以直接指出來。</p>
+<p>反過來也一樣：<strong>解除暫停是拿掉 blocker，不是宣布解除</strong>。而且理由消失時要先查還有沒有別的理由撐著——同一張單常常被不只一件事擋著。</p>
+<h2 id="scrum-master">Scrum Master 去哪了<a class="headerlink" href="#scrum-master" title="Permanent link">&para;</a></h2>
+<p><strong>它退場了，2026-09-08 完成。</strong> MYL-96 裁定把它的工作併進 Product Manager（拆單、依賴鏈、AC 修改）與 Tech Lead（缺陷成因工單判定）。規範這一側（組織圖、決策權矩陣、<code>.foundry/org.yml</code>）先落地，平台那一側由你在 <strong>2026-09-08 00:22</strong> 按完。所以曾經有一段時間平台上查得到一個組織圖裡沒有的 Scrum Master——<strong>那一段已經結束</strong>，現在兩側一致：agent 名冊上是 8 名，沒有 Scrum Master。</p>
+<p>⚠️ <strong>這一節原本寫錯了一件事，值得你知道，因為它關係到你下次按哪顆鈕。</strong> 舊版說退場方式是 <code>pause</code> ＋ <code>leave</code>、「兩個動作都可以一鍵還原」——兩半都不對：</p>
+<ul>
+<li>實際按的是 <code>pause</code> ＋ <strong><code>Terminate</code></strong>，而 <strong><code>Terminate</code> 不可逆</strong>。被 terminate 的 agent 再也 resume 不回來（伺服器會直接拒絕），它的 API key 也在那一刻全部作廢。</li>
+<li>面板上那顆名字看起來就是退場的 <strong><code>Leave agent</code></strong>，其實<strong>完全不動 agent</strong>——它只把那個 agent 從<strong>你自己的</strong>側邊欄收起來，agent 照樣在名冊上、照樣會被喚醒。</li>
+</ul>
+<p><strong>所以下次要讓一個角色退場</strong>：想留退路就只按 <code>pause</code>（隨時 resume 得回來）；<code>Terminate</code> 按下去沒有回頭路，只有你按得動，agent 不會也不該替你按。技術細節與源碼依據在 <code>docs/standards/known-drift.md</code> 的 <code>L35</code>。</p>
+<h2 id="_5">規範落後現況時怎麼辦<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<p>這一節是 MYL-61 盤點時撞到的實例，寫下來是因為它會再發生。</p>
+<p>Frontend Verifier 是你在 MYL-37 裁定建的，平台上一直都在，但規範與手冊裡<strong>一次都沒提過它</strong>。而第 9 節原本寫著「規範是權威來源，兩者不一致時以規範為準」——照字面辦，結論會變成「把 Frontend Verifier 從平台移除」，等於在沒有任何裁定的情況下推翻你的裁定。</p>
+<p>所以 MYL-73 把那條拆成兩個方向：</p>
+<ul>
+<li><strong>規範有、平台沒有</strong> → 去把平台補上。</li>
+<li><strong>平台有、規範沒有</strong> → <strong>補寫進規範</strong>，不是把它從平台拿掉。查得到當初的裁定來源（工單／互動卡）就直接補登記；<strong>查不到來源才發卡問你</strong>。</li>
+</ul>
+<p>上一節的 Scrum Master 看起來像第二種，其實不是：查得到的那條裁定正好是要它退場的，所以它是「規範先行、平台後跟」，規範這邊不用補。</p>
+<h2 id="_6">結構與平台設定的對應<a class="headerlink" href="#_6" title="Permanent link">&para;</a></h2>
+<p>Paperclip 上各 agent 的 <code>reportsTo</code>（匯報對象）設定是上面組織圖的映射。<strong>PM 曾經只存在於規範裡，2026-09-06 已在平台上建置完成</strong>，並在同日依 MYL-96 正名為 Product Manager；各角色<strong>除下述一處刻意保留的例外外，其餘逐格一致</strong>，是逐格核對過的（讀平台的實際權限與掛載，不是看設定面板的開關，那兩者會給出相反的答案）。</p>
+<p>那一處例外是 Frontend Verifier 的「可否指派工單」：平台上這個旗標解出來是<strong>開的</strong>，而規範沒有給它派工權。之所以留著，是因為關掉它的那支 API 是單向門——開過再關並不會回到原狀。至於「那誰能把它真正清乾淨」，這件事其實由兩半組成，而兩半的把握程度不一樣，所以分開講：<strong>agent 這一側動不了，是實測過的</strong>——MYL-79 審查期間以 agent 身分試過三支會動到成員權限的 API（改權限、改角色與授權、讀成員清單），三支全部被擋下來，一律回 403；<strong>「在面板上動得了」那一半，目前仍是推論</strong>——沒有人真的示範過，而且它只有你驗得到（要有你的面板身分才試得了），所以在你實際試過之前，那是目前最合理的猜測，不是已經確認的事實。實際影響是零：這個旗標本來就不是平台層的閘門（誰能派工是規則層的自律邊界），所以規範說了不算數的事，平台開著也不會有人去做。<strong>你在 MYL-79 決定不處理它，這是知情下的保留，不是漏同步。</strong> 其餘不一致仍依上一節的兩個方向處理。</p>
+<h3 id="_7">角色還沒建出來的那段期間，誰拍板<a class="headerlink" href="#_7" title="Permanent link">&para;</a></h3>
+<p>規範先寫、平台後建，中間隔著幾張單——那段時間差本身是預期的。真正麻煩的是<strong>決策權矩陣裡那一格的人還不存在</strong>：矩陣說「派工由 PM 拍板」，但 PM 還沒建，於是每一次交棒都落進一個沒有主人的格子。MYL-73 期間就發生過一次，當時是執行者臨時自己裁定、寫在留言裡，下一棒讀不到。</p>
+<p>所以補了一條通則：<strong>拍板者尚未建置時，由他的匯報對象暫代</strong>，並在矩陣那一格註明暫代者與終止條件——承接建置的工單一結案就把註記撤掉。暫代<strong>不擴權</strong>：暫代的人只能在原本的判準內決定，不能順手改寫那一格的判準或升級路徑。</p>
+<p>這條寫成通則而不是「PM 的個案」，是因為個案寫法在 PM 建出來的當下就作廢了，而下一次任何角色先寫進規範、後建置時，同樣會撞到這一格。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  回到頂端
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "\u5df2\u8907\u88fd", "clipboard.copy": "\u8907\u88fd", "search.result.more.one": "\u6b64\u9801\u5c1a\u6709 1 \u500b\u7b26\u5408\u7684\u9805\u76ee", "search.result.more.other": "\u6b64\u9801\u5c1a\u6709 # \u500b\u7b26\u5408\u7684\u9805\u76ee", "search.result.none": "\u6c92\u6709\u7b26\u5408\u7684\u9805\u76ee", "search.result.one": "\u627e\u5230 1 \u500b\u7b26\u5408\u7684\u9805\u76ee", "search.result.other": "\u627e\u5230 # \u500b\u7b26\u5408\u7684\u9805\u76ee", "search.result.placeholder": "\u6253\u5b57\u9032\u884c\u641c\u5c0b", "search.result.term.missing": "\u7f3a\u5c11\u5b57\u8a5e", "select.version": "\u9078\u64c7\u7248\u672c"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
